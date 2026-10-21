@@ -1,3 +1,4 @@
+import * as periods from '../../../shared/periods.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -7,7 +8,7 @@ import * as graph from '../../../shared/graph.js';
 import * as localization from '../src/localization.js';
 let Card;
 vm.runInNewContext(readFileSync(new URL('../src/dynamic-energy-price-card.js', import.meta.url),'utf8').replace(/^import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];\s*/gm,''), {
- ...graph, ...utils, ...localization, Date: class extends Date { constructor(...args) { super(...(args.length ? args : ['2026-10-11T21:00:30+02:00'])); } static now() { return Date.parse('2026-10-11T21:00:30+02:00'); } }, Intl, URLSearchParams, console,
+ ...periods,...graph, ...utils, ...localization, Date: class extends Date { constructor(...args) { super(...(args.length ? args : ['2026-10-11T21:00:30+02:00'])); } static now() { return Date.parse('2026-10-11T21:00:30+02:00'); } }, Intl, URLSearchParams, console, setTimeout, clearTimeout,
  HTMLElement: class {attachShadow(){this.shadowRoot = {querySelector:()=>null,querySelectorAll:()=>[]};}},
  customElements:{get:()=>undefined,define:(_,c)=>Card=c}, window:{addEventListener(){},removeEventListener(){}},
 });
@@ -46,6 +47,19 @@ test('pending history cannot restore an overlay after source disappears',async()
  c._hass={states:{'sensor.energy':energy},callApi:()=>new Promise(r=>resolve=r)};
  c._ensureConsumption(base,base+3600000,15);delete c._hass.states['sensor.energy'];
  c._ensureConsumption(base,base+3600000,15);resolve([history]);await tick();assert.equal(c._consumption.status,'source');
+});
+test('a short synchronized window keeps the original price cadence and skips inverted consumption history',()=>{
+ const prices=Array.from({length:48},(_,i)=>({start_time:new Date(base+i*900000).toISOString(),price_per_kwh:.2}));
+ const card=make({sync_timeframe:true,show_consumption:true,consumption_entity:'sensor.energy',export_entity:'sensor.export',graph_mode:'both'});
+ let historyCalls=0;
+ card._hass={language:'en',config:{time_zone:'Europe/Amsterdam'},states:{'sensor.price':{attributes:{data:prices}},'sensor.export':{attributes:{data:prices}},'sensor.energy':energy},callApi:()=>{historyCalls++;return Promise.resolve([]);}};
+ const start=base+10*3600000+20*60000,end=start+5*60000;
+ card._sharedTimeframe={group:'default',offset:1,end,range:{start,end}};
+ card._render();
+ assert.equal(card._chart.intervalMs,900000);
+ assert.equal(card._chart.timeline.length,1);
+ assert.equal(card._consumption.status,'empty');
+ assert.equal(historyCalls,0);
 });
 test('render adds independent kWh scale and measured line in every tariff mode while optional-off preserves geometry',()=>{
  const c=make({show_consumption:true,consumption_entity:'sensor.energy',export_entity:'sensor.export'});
