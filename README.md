@@ -102,6 +102,8 @@ All seven cards support vertical sizing in the Home Assistant Sections view. Ope
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branches, pull requests, testing and releases. `develop` is the integration branch; `main` is the stable release base. AI assistants must also read [AGENTS.md](AGENTS.md).
+
 Requires Node.js 20+, npm and Python 3. No npm dependencies need to be installed.
 
 Run from the repository root:
