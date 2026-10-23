@@ -1,0 +1,99 @@
+name: Draft release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable collection version, e.g. v0.1.0'
+        required: true
+        type: string
+      dry_run:
+        description: 'Validate everything without creating a draft release'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eleven-cards-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_SHA: ${{ github.sha }}
+    steps:
+      - name: Only release from main
+        run: test "$GITHUB_REF" = refs/heads/main
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Validate version and refuse existing releases or tags
+        shell: bash
+        run: |
+          node scripts/release-version.mjs "$VERSION"
+          gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[].tag_name' > "$RUNNER_TEMP/release-tags"
+          if grep -Fxq -- "$VERSION" "$RUNNER_TEMP/release-tags"; then
+            echo "Release already exists: $VERSION" >&2
+            exit 1
+          fi
+          gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/$VERSION" --jq '.[].ref' > "$RUNNER_TEMP/git-tags"
+          if grep -Fxq -- "refs/tags/$VERSION" "$RUNNER_TEMP/git-tags"; then
+            echo "Tag already exists: $VERSION" >&2
+            exit 1
+          fi
+      - name: Build, test and check exact selected commit
+        run: |
+          npm test
+          npm run check
+          git diff --exit-code -- dist cards/*/dist
+          git diff --check
+      - name: Install browser smoke test dependencies
+        run: |
+          python -m pip install playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Browser smoke test
+        run: python tests/browser-smoke.py
+      - name: Record release provenance
+        run: |
+          printf 'Version: %s\nCommit: %s\n' "$VERSION" "$RELEASE_SHA" > release-provenance.txt
+          sha256sum dist/eleven-cards.js >> release-provenance.txt
+          cat release-provenance.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Create draft only (never publish)
+        if: ${{ !inputs.dry_run }}
+        run: |
+          gh release create "$VERSION" dist/eleven-cards.js release-provenance.txt \
+            --target "$RELEASE_SHA" --title "Eleven Cards $VERSION" \
+            --generate-notes --draft --latest=false
+      - name: Verify draft and asset
+        if: ${{ !inputs.dry_run }}
+        run: |
+          gh release view "$VERSION" --json isDraft,isPrerelease,tagName,targetCommitish,assets > "$RUNNER_TEMP/release.json"
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {readFileSync, statSync} from 'node:fs';
+          const release = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/release.json`, 'utf8'));
+          assert.equal(release.isDraft, true);
+          assert.equal(release.isPrerelease, false);
+          assert.equal(release.tagName, process.env.VERSION);
+          assert.equal(release.targetCommitish, process.env.RELEASE_SHA);
+          const asset = release.assets.find(asset => asset.name === 'eleven-cards.js');
+          assert.ok(asset, 'HACS bundle must be attached');
+          assert.equal(asset.size, statSync('dist/eleven-cards.js').size);
+          JS
