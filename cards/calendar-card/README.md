@@ -52,3 +52,7 @@ The calendar has its own day and month navigation. Graph timeframe synchronizati
 In a Home Assistant Sections view, resize the card vertically in the Layout tab. The heading and legend remain above a scrollable event area. All three views support the chosen height; masonry dashboards use the card's content estimate.
 
 For a local browser preview with generated appointments, open [the test page](qa/index.html). For a test card in Home Assistant, build the separate test collection with `node scripts/build-test.mjs`, register the generated module and add `custom:eleven-calendar-card-test`. The test page uses fictional data; the installed card reads your selected Home Assistant entities.
+
+## Compact compatibility
+
+The visual editor now uses the same Compact layout switch in Appearance as Car, Weather and Energy. YAML accepts compact: true/false as well as the existing density: compact/expanded. An explicit compact value takes precedence on input; the editor saves the established density key to avoid conflicting persisted settings. Compact reduces event density while retaining the same 16 px outer padding as the other cards.
