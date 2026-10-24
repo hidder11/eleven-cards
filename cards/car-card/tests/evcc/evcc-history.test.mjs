@@ -17,6 +17,32 @@ test('power history converts watts, anchors the window and preserves unavailable
  assert.equal(evccHistoryPoints([[row(0,'0')]],'sensor.power','kW',start,end)[0].value,0);
 });
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+test('delayed Recorder reconnect uses the live session and retries until history catches up',async()=>{
+ const now=Date.now(),changed=now-120000,old=now-7200000,id='binary_sensor.connected';
+ const row=(time,state)=>({entity_id:id,state,last_changed:new Date(time).toISOString()});
+ let rows=[row(old,'on')],discoveries=0;const starts=[];
+ const card=host(()=>Promise.resolve([]));card._activeTab='session';
+ card._hass.states[id]={state:'on',last_changed:new Date(changed).toISOString()};
+ card._hass.callApi=async(method,url)=>{
+  if(url.includes(id)){discoveries++;return [rows];}
+  starts.push(Date.parse(decodeURIComponent(url.split('history/period/')[1].split('?')[0])));return [];
+ };
+ card._syncHistory();await flush();
+ assert.equal(starts[0],changed);assert.equal(card._historySession,null);
+ rows=[row(old,'on'),row(changed-1000,'off'),row(changed,'on')];
+ card._historyRequestedAt=0;card._syncHistory();await flush();
+ assert.equal(discoveries,2);assert.equal(starts[1],changed);assert.equal(card._historySession.start,changed);
+ card._historyRequestedAt=0;card._syncHistory();await flush();assert.equal(discoveries,2,'confirmed session may be cached');
+});
+
+test('a provisional session from empty Recorder data is rediscovered',async()=>{
+ const changed=Date.now()-120000,id='binary_sensor.connected';let discoveries=0;
+ const card=host(()=>Promise.resolve([]));card._activeTab='session';
+ card._hass.states[id]={state:'on',last_changed:new Date(changed).toISOString()};
+ card._hass.callApi=async(method,url)=>{if(url.includes(id))discoveries++;return [];};
+ card._syncHistory();await flush();assert.equal(card._historyRange.start,changed);assert.equal(card._historySession,null);
+ card._historyRequestedAt=0;card._syncHistory();await flush();assert.equal(discoveries,2);
+});
 const host=callApi=>Object.assign({isConnected:true,_offline:()=>false,_config:{show_session:true},_activeTab:'controls',_entities:{power:'sensor.power',connected:'binary_sensor.connected'},_hass:{states:{'sensor.power':{attributes:{unit_of_measurement:'kW'}}},callApi:(method,url)=>url.includes('binary_sensor.connected')?Promise.resolve([[{entity_id:'binary_sensor.connected',state:'on',last_changed:new Date(Date.now()-7200000).toISOString()}]]):callApi(method,url)},_render(){}},evccHistoryMethods);
 test('history is lazy, deduplicates pending requests and throttles settled requests',async()=>{
  let calls=0,complete;const card=host(()=>{calls++;return new Promise(resolve=>complete=resolve);});
@@ -48,7 +74,7 @@ test('power request spans the entire connection, not the latest hour',async()=>{
 test('a new connection discards pending power history from the previous session',async()=>{
  const pending=[],card=host(()=>new Promise(resolve=>pending.push(resolve)));card._activeTab='session';
  card._syncHistory();await flush();
- card._hass.states['binary_sensor.connected']={state:'on',last_changed:new Date().toISOString()};
+ card._hass.states['binary_sensor.connected']={state:'on',last_changed:new Date(Date.now()-2000).toISOString()};
  card._syncHistory();await flush();
  assert.equal(pending.length,2);
  const point=value=>[[{entity_id:'sensor.power',state:String(value),last_changed:new Date(Date.now()-1000).toISOString()}]];

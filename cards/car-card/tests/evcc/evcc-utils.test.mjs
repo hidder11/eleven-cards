@@ -34,6 +34,21 @@ test('missing and unavailable readings stay distinct from a measured zero', () =
 
 const state = (value, unit) => ({state: String(value), attributes: {unit_of_measurement: unit}});
 const entry = (entity_id, key, extra = {}) => ({entity_id, unique_id: 'evcc_intg.' + key, platform: 'evcc_intg', config_entry_id: 'installation1', ...extra});
+test('registry ownership prevents conventional fallback across installations', () => {
+ const power='sensor.renamed_power',mode='select.evcc_driveway_mode',soc='sensor.evcc_driveway_vehicle_soc';
+ const registry=[entry(power,'evcc_driveway_charge_power',{config_entry_id:'installation2'}),entry(mode,'evcc_driveway_mode'),entry(soc,'evcc_driveway_vehicle_soc')];
+ const hass={states:{[power]:state(7,'kW'),[mode]:state('pv'),[soc]:state(50,'%')}};
+ assert.deepEqual(resolveEvccEntities({entity:power},hass,registry),{power});
+ registry.push(entry('select.renamed_mode','evcc_driveway_mode',{config_entry_id:'installation2'}));
+ hass.states['select.renamed_mode']=state('pv');
+ assert.equal(resolveEvccEntities({entity:power},hass,registry).mode,'select.renamed_mode');
+ assert.equal(resolveEvccEntities({entity:power,entities:{soc}},hass,registry).soc,soc);
+ registry.push(entry('select.duplicate_mode','evcc_driveway_mode',{config_entry_id:'installation2'}));
+ hass.states['select.duplicate_mode']=state('pv');
+ assert.equal(resolveEvccEntities({entity:power},hass,registry).mode,undefined,'ambiguous keys cannot fall back');
+ registry[0].config_entry_id=undefined;
+ assert.equal(resolveEvccEntities({entity:power},hass,registry).mode,undefined,'unknown anchor ownership cannot resolve another installation');
+});
 test('stable ha-evcc keys resolve renamed entities without mixing loadpoints or installations', () => {
  const registry = [entry('sensor.renamed_power', 'evcc_driveway_charge_power'), entry('sensor.renamed_soc', 'evcc_driveway_vehicle_soc'), entry('sensor.garage_soc', 'evcc_garage_vehicle_soc'), entry('sensor.second_soc', 'evcc_driveway_vehicle_soc', {config_entry_id: 'installation2'}), entry('sensor.effective_limit', 'evcc_driveway_effective_limit_soc'), entry('number.configured_limit', 'evcc_driveway_limit_soc')];
  const hass = {states: Object.fromEntries(registry.map(item => [item.entity_id, state(40, '%')]))};
@@ -50,6 +65,7 @@ test('default entity ids work without registry access and manual overrides take 
  const resolved = resolveEvccEntities(config, hass);
  assert.equal(resolved.soc, 'sensor.my_car'); assert.equal(resolved.mode, 'select.evcc_driveway_mode');
  assert.equal(resolved.range, undefined);
+ assert.deepEqual(resolveEvccEntities(config,hass,[],{allowFallback:false}),{soc:'sensor.my_car',power:config.entity},'pending registry discovery must not guess controls');
  assert.equal(resolveEvccEntities({entity: 'sensor.unrelated'}, hass).soc, undefined);
  assert.throws(() => normalizeEvccConfig({image_entity: 'sensor.car'}), /image_entity/);
  assert.throws(() => normalizeEvccConfig({entities: {soc: '<script>'}}), /soc/);

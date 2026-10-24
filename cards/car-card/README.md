@@ -46,6 +46,8 @@ tabs:
 
 `default_tab: session` opens the session tab initially (other choices: `controls`, `technical`). The editor only offers visible tabs. If the configured default is hidden or has no data, the card falls back to an available tab. Sensor updates preserve the tab chosen manually.
 
+Automatic EVCC discovery waits for the entity registry and keeps matches within the selected sensor's integration installation. Unresolved or ambiguous fields remain hidden; explicit entity overrides take precedence. Conventional entity names are used only when registry data is unavailable. The configured default tab is retained during discovery unless you choose another tab. Provisional session windows based on the live connection timestamp retry Recorder discovery until its history catches up.
+
 The standalone EVCC card has been removed. Migrate old `custom:eleven-evcc-card` YAML to `custom:eleven-car-card`, add `evcc_enabled: true` and keep its entity mappings and other options. EVCC integration is now provided only through Car. Remove any standalone EVCC resource from the dashboard resources and load the current collection or Car module. Its internal engine, synthetic QA fixtures and regression tests live in this card's src/evcc, qa/evcc and tests/evcc directories.
 
 Choose any Home Assistant entity for each field. Labels default to its friendly name, values retain units, numeric values use the frontend language, and clicking a value opens entity details. Missing or unavailable entities show a dash; zero remains visible.

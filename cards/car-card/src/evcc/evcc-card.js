@@ -43,8 +43,8 @@ export class EvccCard extends HTMLElement {
   this._hass = hass;
   const connection = hass?.connection ?? hass?.callWS;
   if (connection && connection !== this._connection) {
-   this._cancelMode(); this._cancelSolar(); this._resetHistory(); this._connection = connection; this._registry = [];
-   loadEvccRegistry(hass).then(registry => { if (this._connection === connection) { this._registry = registry; this._render(); } });
+   this._cancelMode(); this._cancelSolar(); this._resetHistory(); this._connection = connection; this._registry = []; this._registryLoading = true;
+   loadEvccRegistry(hass).then(registry => { if (this._connection === connection) { this._registry = registry; this._registryLoading = false; this._render(); } });
   }
   if (this._pendingMode && hass.states?.[this._pendingMode.entity]?.state === this._pendingMode.option) this._cancelMode();
   if (this._pendingSolar && evccPercent(hass.states?.[this._pendingSolar.entity]) === this._pendingSolar.value) this._cancelSolar();
@@ -110,7 +110,8 @@ export class EvccCard extends HTMLElement {
  _tabsMarkup(dutch) {
   const items = this._tabItems(dutch);
   if (!items.length) return '';
-  if (!items.some(item => item.value === this._activeTab)) this._activeTab = items[0].value;
+  // Keep the requested tab while uiTabs displays a temporary fallback.
+  if (!this._registryLoading && !items.some(item => item.value === this._activeTab)) this._activeTab = items[0].value;
   if(items.length===1)return `<section class="evcc-tabs evcc-panel" aria-label="${uiEscape(items[0].label)}">${items[0].content}</section>`;
   return uiTabs({id: 'evcc', label: dutch ? 'Laadinformatie' : 'Charging information', items, selected: this._activeTab, className: 'evcc-tabs', panelClassName: 'evcc-panel'});
  }
@@ -140,7 +141,7 @@ export class EvccCard extends HTMLElement {
   const hass = this._hass, states = hass.states ?? {}, dutch = evccDutch(hass), config = this._config;
   this._ensureClock();
   const previousSolar = this._entities?.solar_share, previousPower = this._entities?.power;
-  this._entities = resolveEvccEntities(config, hass, this._registry);
+  this._entities = resolveEvccEntities(config, hass, this._registry, {allowFallback: !this._registryLoading});
   if (previousPower !== this._entities.power) this._resetHistory();
   if (this._historyKey && this._historyKey !== `${this._entities.power}|${states[this._entities.power]?.attributes?.unit_of_measurement}`) this._resetHistory();
   const now = Date.now(), view = evccChargingView(this._entities, states, {offline: this._offline(), dutch, now});
@@ -150,7 +151,7 @@ export class EvccCard extends HTMLElement {
    if (!offline && evccSolarRange(states[this._entities.solar_share])) return;
    this._cancelSolar();
   }
-  const signature = JSON.stringify([view.title, hass.themes?.darkMode, Math.floor(now / 30000), this._historyRevision, config, this._entities, Object.values(this._entities).map(id => states[id]), states[config.image_entity], hass.locale?.language ?? hass.language, hass.config?.time_zone, offline, this._actionVersion, this._pendingMode, this._actionError, this._solarVersion, this._pendingSolar, this._solarError, typeof hass.callService === 'function', this._extraSignature?.()]);
+  const signature = JSON.stringify([view, this._registryLoading, hass.themes?.darkMode, Math.floor(now / 30000), this._historyRevision, config, this._entities, Object.values(this._entities).map(id => states[id]), states[config.image_entity], hass.locale?.language ?? hass.language, hass.config?.time_zone, offline, this._actionVersion, this._pendingMode, this._actionError, this._solarVersion, this._pendingSolar, this._solarError, typeof hass.callService === 'function', this._extraSignature?.()]);
   if (signature === this._signature) return;
   this._signature = signature;
   const scrollTop = this.shadowRoot.querySelector('.content')?.scrollTop ?? 0;

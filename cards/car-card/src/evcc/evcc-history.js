@@ -70,10 +70,16 @@ export const evccHistoryMethods = {
     const changed = Date.parse(connected?.last_changed);
     // Recorder can lag behind the current connection state. Do not cache a
     // previous session as the new one, or extend an unplugged session to now.
-    if (['on','true'].includes(connected?.state) && session && !session.active) session = null;
+    let recorderCurrent = true;
+    if (['on','true'].includes(connected?.state) && session && (!session.active || changed > session.start)) { session = null; recorderCurrent = false; }
+    if (!session) recorderCurrent = false;
     if (!session && ['on','true'].includes(connected?.state) && changed > 0 && changed < now) session = {start: changed, end: now, active: true};
-    if (['off','false'].includes(connected?.state) && session?.active) session = changed > session.start && changed <= now ? {...session, end: changed, active: false} : null;
-    this._historySession = session;
+    if (['off','false'].includes(connected?.state) && session?.active) {
+     session = changed > session.start && changed <= now ? {...session, end: changed, active: false} : null;
+     recorderCurrent = false;
+    }
+    // Provisional live-state windows must retry Recorder discovery.
+    this._historySession = recorderCurrent ? session : null;
    }
    if (!session) return {points: [], range: null};
    const start = session.start, end = session.active ? now : session.end;

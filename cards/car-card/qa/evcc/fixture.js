@@ -7,13 +7,13 @@ const values = {
  charge_remaining_energy: qaState(11.2, 'kWh'), session_price: qaState(2.38, '€'), session_price_per_kwh: qaState(.192, '€/kWh'),
  session_solar_percentage: qaState(78, '%'), charge_duration: qaState(7200, 's'), charge_current: qaState(10.3, 'A'),
  solar_share: qaState(60, '%', {min:0,max:100,step:10}),
- phases_active: qaState(3), vehicle_limit_soc: qaState(90, '%'), enabled: qaState('on'), smart_cost_active: qaState('off'),
+ phases_active: qaState(3), vehicle_limit_soc: qaState(90, '%'), enabled: qaState('on'), smart_cost_active: qaState('off'), plan_active: qaState('off'),
  pv_action_value: qaState('inactive'),
  session_co2_per_kwh: qaState(43, 'g/kWh'),
 };
 const registry = [], states = {};
 for (const [key, value] of Object.entries(values)) {
- const domain = ['connected', 'charging', 'enabled', 'smart_cost_active'].includes(key) ? 'binary_sensor' : ['mode', 'vehicle_name'].includes(key) ? 'select' : key === 'solar_share' ? 'number' : 'sensor';
+ const domain = ['connected', 'charging', 'enabled', 'smart_cost_active', 'plan_active'].includes(key) ? 'binary_sensor' : ['mode', 'vehicle_name'].includes(key) ? 'select' : key === 'solar_share' ? 'number' : 'sensor';
  const id = key === 'charge_power' ? 'sensor.renamed_evcc_power' : `${domain}.evcc_driveway_${key}`;
  states[id] = value;
  registry.push({entity_id: id, unique_id: `evcc_intg.evcc_driveway_${key}`, platform: 'evcc_intg', config_entry_id: 'synthetic'});

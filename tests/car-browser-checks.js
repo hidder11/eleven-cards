@@ -181,5 +181,47 @@ async function carChecks(){
  editor.shadowRoot.querySelector('[data-action=tab-remove]').click();check('editor removes selected tab',changed.custom_tabs.length===1&&changed.custom_tabs[0].title==='Onderhoud');
  editor.shadowRoot.querySelector('[data-action=row-remove]').click();check('editor removes selected entity',changed.custom_tabs[0].entities.length===1&&changed.custom_tabs[0].entities[0].entity==='sensor.range');
  car.remove();check('removal clears clock and actions',!car._clockTimer&&!car._pendingMode&&!car._pendingSolar);
+ for(const defaultTab of ['controls','technical'])for(const manual of [false,true]){
+  const card=document.createElement('eleven-car-card');
+  let complete;
+  const connection={},registry=new Promise(resolve=>complete=resolve);
+  const states={
+   'sensor.evcc_review_charge_power':{state:'0',attributes:{unit_of_measurement:'kW'}},
+   'select.renamed_review_mode':{state:'pv',attributes:{options:['off','pv']}},
+   'binary_sensor.renamed_review_connected':{state:'on'},
+  };
+  card.setConfig({evcc_enabled:true,entity:'sensor.evcc_review_charge_power',default_tab:defaultTab,custom_tabs:[{id:'custom-review',title:'Extra',entities:[]}]});
+  document.body.append(card);
+  try{
+   card.hass={states,connection,callWS:()=>registry};
+   check('pending registry retains '+defaultTab+manual,card._activeTab===defaultTab);
+   if(manual)card.shadowRoot.querySelector('[data-ui-tab=session]').click();
+   complete([
+    ['sensor.evcc_review_charge_power','charge_power'],
+    ['select.renamed_review_mode','mode'],
+    ['binary_sensor.renamed_review_connected','connected'],
+   ].map(([entity_id,key])=>({entity_id,unique_id:'evcc_intg.evcc_review_'+key,platform:'evcc_intg',config_entry_id:'review'})));
+   await new Promise(resolve=>setTimeout(resolve,0));
+   check('registry resolves default or manual tab '+defaultTab+manual,card._activeTab===(manual?'session':defaultTab)&&card.shadowRoot.querySelector('[role=tab][aria-selected=true]').dataset.uiTab===card._activeTab);
+  }finally{card.remove();}
+ }
+ const countdown=document.createElement('eleven-car-card'),originalNow=Date.now;
+ const base=Math.floor(originalNow()/30000)*30000+1000;
+ try{
+  Date.now=()=>base;
+  countdown.setConfig({evcc_enabled:true,entity:'sensor.review_power',entities:{connected:'binary_sensor.review_connected',charging:'binary_sensor.review_charging',mode:'select.review_mode',pv_action:'sensor.review_action',pv_remaining:'sensor.review_deadline'}});
+  document.body.append(countdown);
+  countdown.hass={language:'en',states:{
+   'sensor.review_power':{state:'0',attributes:{unit_of_measurement:'kW'}},
+   'binary_sensor.review_connected':{state:'on'},'binary_sensor.review_charging':{state:'off'},
+   'select.review_mode':{state:'pv'},'sensor.review_action':{state:'enable'},
+   'sensor.review_deadline':{state:new Date(base+65000).toISOString(),attributes:{device_class:'timestamp'}},
+  }};
+  check('countdown starts at displayed seconds',countdown.shadowRoot.textContent.includes('Starts in 1:05'));
+  for(const [elapsed,text] of [[1000,'1:04'],[10000,'0:55'],[65000,null]]){
+   Date.now=()=>base+elapsed;countdown._render();
+   check('clock tick updates countdown '+elapsed,text?countdown.shadowRoot.textContent.includes('Starts in '+text):!countdown.shadowRoot.textContent.includes('Starts in'));
+  }
+ }finally{Date.now=originalNow;countdown.remove();}
  return reports;
 }

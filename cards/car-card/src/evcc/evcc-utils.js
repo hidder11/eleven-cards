@@ -77,7 +77,7 @@ export function evccLoadpoints(hass, registry = []) {
  return [...ids].filter(id => id.startsWith('sensor.') && hass?.states?.[id]).sort();
 }
 
-export function resolveEvccEntities(config, hass, registry = []) {
+export function resolveEvccEntities(config, hass, registry = [], {allowFallback = true} = {}) {
  const states = hass?.states ?? {}, anchor = registry.find(entry => entry.entity_id === config.entity);
  const objectId = registryKey(anchor) ?? config.entity?.split('.')[1];
  const prefix = objectId?.endsWith('_charge_power') ? objectId.slice(0, -'_charge_power'.length) : null;
@@ -87,10 +87,11 @@ export function resolveEvccEntities(config, hass, registry = []) {
   if (!prefix) continue;
   for (const suffix of EVCC_KEYS[field]) {
    for (const domain of [definition[2]].flat()) {
-    const matches = registry.filter(entry => !entry.disabled_by && registryKey(entry) === `${prefix}_${suffix}` && entry.entity_id.startsWith(domain + '.') && (!anchor?.config_entry_id || entry.config_entry_id === anchor.config_entry_id));
+    const matches = registry.filter(entry => !entry.disabled_by && registryKey(entry) === `${prefix}_${suffix}` && entry.entity_id.startsWith(domain + '.') && anchor?.config_entry_id && entry.config_entry_id === anchor.config_entry_id);
     // Do not resolve an ambiguous registry key or fall back to another device.
     if (matches.length > 1) continue;
-    const id = matches[0]?.entity_id ?? `${domain}.${prefix}_${suffix}`;
+    // Registry data must establish ownership before a conventional ID is used.
+    const id = matches[0]?.entity_id ?? (allowFallback && !registry.length ? `${domain}.${prefix}_${suffix}` : null);
     if (states[id]) { result[field] = id; break; }
    }
    if (result[field]) break;

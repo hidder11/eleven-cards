@@ -470,7 +470,7 @@ function evccLoadpoints(hass, registry = []) {
  return [...ids].filter(id => id.startsWith('sensor.') && hass?.states?.[id]).sort();
 }
 
-function resolveEvccEntities(config, hass, registry = []) {
+function resolveEvccEntities(config, hass, registry = [], {allowFallback = true} = {}) {
  const states = hass?.states ?? {}, anchor = registry.find(entry => entry.entity_id === config.entity);
  const objectId = registryKey(anchor) ?? config.entity?.split('.')[1];
  const prefix = objectId?.endsWith('_charge_power') ? objectId.slice(0, -'_charge_power'.length) : null;
@@ -480,10 +480,11 @@ function resolveEvccEntities(config, hass, registry = []) {
   if (!prefix) continue;
   for (const suffix of EVCC_KEYS[field]) {
    for (const domain of [definition[2]].flat()) {
-    const matches = registry.filter(entry => !entry.disabled_by && registryKey(entry) === `${prefix}_${suffix}` && entry.entity_id.startsWith(domain + '.') && (!anchor?.config_entry_id || entry.config_entry_id === anchor.config_entry_id));
+    const matches = registry.filter(entry => !entry.disabled_by && registryKey(entry) === `${prefix}_${suffix}` && entry.entity_id.startsWith(domain + '.') && anchor?.config_entry_id && entry.config_entry_id === anchor.config_entry_id);
     // Do not resolve an ambiguous registry key or fall back to another device.
     if (matches.length > 1) continue;
-    const id = matches[0]?.entity_id ?? `${domain}.${prefix}_${suffix}`;
+    // Registry data must establish ownership before a conventional ID is used.
+    const id = matches[0]?.entity_id ?? (allowFallback && !registry.length ? `${domain}.${prefix}_${suffix}` : null);
     if (states[id]) { result[field] = id; break; }
    }
    if (result[field]) break;
@@ -730,10 +731,16 @@ const evccHistoryMethods = {
     const changed = Date.parse(connected?.last_changed);
     // Recorder can lag behind the current connection state. Do not cache a
     // previous session as the new one, or extend an unplugged session to now.
-    if (['on','true'].includes(connected?.state) && session && !session.active) session = null;
+    let recorderCurrent = true;
+    if (['on','true'].includes(connected?.state) && session && (!session.active || changed > session.start)) { session = null; recorderCurrent = false; }
+    if (!session) recorderCurrent = false;
     if (!session && ['on','true'].includes(connected?.state) && changed > 0 && changed < now) session = {start: changed, end: now, active: true};
-    if (['off','false'].includes(connected?.state) && session?.active) session = changed > session.start && changed <= now ? {...session, end: changed, active: false} : null;
-    this._historySession = session;
+    if (['off','false'].includes(connected?.state) && session?.active) {
+     session = changed > session.start && changed <= now ? {...session, end: changed, active: false} : null;
+     recorderCurrent = false;
+    }
+    // Provisional live-state windows must retry Recorder discovery.
+    this._historySession = recorderCurrent ? session : null;
    }
    if (!session) return {points: [], range: null};
    const start = session.start, end = session.active ? now : session.end;
@@ -1040,8 +1047,8 @@ class EvccCard extends HTMLElement {
   this._hass = hass;
   const connection = hass?.connection ?? hass?.callWS;
   if (connection && connection !== this._connection) {
-   this._cancelMode(); this._cancelSolar(); this._resetHistory(); this._connection = connection; this._registry = [];
-   loadEvccRegistry(hass).then(registry => { if (this._connection === connection) { this._registry = registry; this._render(); } });
+   this._cancelMode(); this._cancelSolar(); this._resetHistory(); this._connection = connection; this._registry = []; this._registryLoading = true;
+   loadEvccRegistry(hass).then(registry => { if (this._connection === connection) { this._registry = registry; this._registryLoading = false; this._render(); } });
   }
   if (this._pendingMode && hass.states?.[this._pendingMode.entity]?.state === this._pendingMode.option) this._cancelMode();
   if (this._pendingSolar && evccPercent(hass.states?.[this._pendingSolar.entity]) === this._pendingSolar.value) this._cancelSolar();
@@ -1107,7 +1114,8 @@ class EvccCard extends HTMLElement {
  _tabsMarkup(dutch) {
   const items = this._tabItems(dutch);
   if (!items.length) return '';
-  if (!items.some(item => item.value === this._activeTab)) this._activeTab = items[0].value;
+  // Keep the requested tab while uiTabs displays a temporary fallback.
+  if (!this._registryLoading && !items.some(item => item.value === this._activeTab)) this._activeTab = items[0].value;
   if(items.length===1)return `<section class="evcc-tabs evcc-panel" aria-label="${uiEscape(items[0].label)}">${items[0].content}</section>`;
   return uiTabs({id: 'evcc', label: dutch ? 'Laadinformatie' : 'Charging information', items, selected: this._activeTab, className: 'evcc-tabs', panelClassName: 'evcc-panel'});
  }
@@ -1137,7 +1145,7 @@ class EvccCard extends HTMLElement {
   const hass = this._hass, states = hass.states ?? {}, dutch = evccDutch(hass), config = this._config;
   this._ensureClock();
   const previousSolar = this._entities?.solar_share, previousPower = this._entities?.power;
-  this._entities = resolveEvccEntities(config, hass, this._registry);
+  this._entities = resolveEvccEntities(config, hass, this._registry, {allowFallback: !this._registryLoading});
   if (previousPower !== this._entities.power) this._resetHistory();
   if (this._historyKey && this._historyKey !== `${this._entities.power}|${states[this._entities.power]?.attributes?.unit_of_measurement}`) this._resetHistory();
   const now = Date.now(), view = evccChargingView(this._entities, states, {offline: this._offline(), dutch, now});
@@ -1147,7 +1155,7 @@ class EvccCard extends HTMLElement {
    if (!offline && evccSolarRange(states[this._entities.solar_share])) return;
    this._cancelSolar();
   }
-  const signature = JSON.stringify([view.title, hass.themes?.darkMode, Math.floor(now / 30000), this._historyRevision, config, this._entities, Object.values(this._entities).map(id => states[id]), states[config.image_entity], hass.locale?.language ?? hass.language, hass.config?.time_zone, offline, this._actionVersion, this._pendingMode, this._actionError, this._solarVersion, this._pendingSolar, this._solarError, typeof hass.callService === 'function', this._extraSignature?.()]);
+  const signature = JSON.stringify([view, this._registryLoading, hass.themes?.darkMode, Math.floor(now / 30000), this._historyRevision, config, this._entities, Object.values(this._entities).map(id => states[id]), states[config.image_entity], hass.locale?.language ?? hass.language, hass.config?.time_zone, offline, this._actionVersion, this._pendingMode, this._actionError, this._solarVersion, this._pendingSolar, this._solarError, typeof hass.callService === 'function', this._extraSignature?.()]);
   if (signature === this._signature) return;
   this._signature = signature;
   const scrollTop = this.shadowRoot.querySelector('.content')?.scrollTop ?? 0;
