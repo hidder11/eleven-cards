@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+﻿import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, readdirSync} from 'node:fs';
 import vm from 'node:vm';
@@ -22,9 +22,10 @@ test('HACS collection download registers all cards without imports or duplicate 
   }});
   vm.runInContext(bundle, context);
   vm.runInContext(bundle, context);
-  assert.deepEqual([...registry.keys()].sort(), ['eleven-bar-chart', 'eleven-calendar-card', 'eleven-dynamic-energy-price-card', 'eleven-heatmap-card', 'eleven-history-graph-card', 'eleven-overview-card', 'eleven-timeline-card']);
-  assert.equal(window.customCards.length, 7);
-  for (const type of ['eleven-heatmap-card', 'eleven-calendar-card']) {
+  assert.deepEqual([...registry.keys()].sort(), ['eleven-bar-chart', 'eleven-calendar-card', 'eleven-car-card', 'eleven-dynamic-energy-price-card', 'eleven-energy-flow-card', 'eleven-heatmap-card', 'eleven-history-graph-card', 'eleven-overview-card', 'eleven-timeline-card', 'eleven-weather-card']);
+  assert.equal(window.customCards.length, 10);
+  assert.ok(!registry.has('eleven-evcc-card')&&!registry.has('eleven-climate-card'),'removed card types are not registered');
+  for (const type of ['eleven-car-card', 'eleven-heatmap-card', 'eleven-calendar-card', 'eleven-weather-card']) {
     const pickerEntry = window.customCards.find(card => card.type === type);
     assert.match(pickerEntry?.name ?? '', /\(beta\)/i, `${type} should be marked beta in the card picker`);
     assert.equal(pickerEntry.preview, true);
@@ -38,10 +39,10 @@ test('collection can overlap existing standalone modules safely during migration
       get: name => registry.get(name),
       define: (name, card) => { assert.ok(!registry.has(name)); registry.set(name, card); },
     }});
-    const paths = ['cards/calendar-card/dist/eleven-calendar-card.js', 'cards/heatmap-card/dist/eleven-heatmap-card.js', 'cards/bar-chart/dist/eleven-bar-chart.js', 'cards/overview-card/dist/eleven-overview-card.js', 'cards/dynamic-energy-price-card/dist/eleven-dynamic-energy-price-card.js', 'cards/history-graph-card/dist/eleven-history-graph-card.js', 'cards/timeline-card/dist/eleven-timeline-card.js'];
+    const paths = ['cards/energy-flow-card/dist/eleven-energy-flow-card.js', 'cards/car-card/dist/eleven-car-card.js', 'cards/weather-card/dist/eleven-weather-card.js', 'cards/calendar-card/dist/eleven-calendar-card.js', 'cards/heatmap-card/dist/eleven-heatmap-card.js', 'cards/bar-chart/dist/eleven-bar-chart.js', 'cards/overview-card/dist/eleven-overview-card.js', 'cards/dynamic-energy-price-card/dist/eleven-dynamic-energy-price-card.js', 'cards/history-graph-card/dist/eleven-history-graph-card.js', 'cards/timeline-card/dist/eleven-timeline-card.js'];
     paths[collectionFirst ? 'unshift' : 'push']('dist/eleven-cards.js');
     for (const path of paths) vm.runInContext(readFileSync(new URL(path, root), 'utf8'), context);
-    assert.equal(registry.size, 7);
-    assert.equal(window.customCards.length, 7);
+    assert.equal(registry.size, 10);
+    assert.equal(window.customCards.length, 10);
   }
 });
