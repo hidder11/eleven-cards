@@ -1,5 +1,5 @@
 import {timeframeSyncConfig,connectTimeframeSync,disconnectTimeframeSync} from '../../../shared/periods.js';
-import {validateConfig,loadHistorySeries,historyUrl,decodeHistory,seriesMetadata,graphAxes,valueAt,numericState,stepPath,gradientColor,aggregateSeries,displayPoints,connectGapPoints,editorConfig,cardConfig,seriesAppearance,updateSeriesRow,removeSeriesRow,lineStyleSources} from './history-utils.js';
+import {validateConfig,loadHistorySeries,historyEntityIds,historyUrl,decodeHistory,seriesMetadata,graphAxes,valueAt,numericState,stepPath,gradientColor,aggregateSeries,displayPoints,connectGapPoints,editorConfig,cardConfig,seriesAppearance,updateSeriesRow,removeSeriesRow,lineStyleSources} from './history-utils.js';
 import {language,text,number,time,escapeHtml,frontendHass} from './localization.js';
 import {ELF_FLIGHT_MS,elevenDay,isElevenMinute,elevenMarkup,elevenStyles} from './eleven.js';
 import {registerElfPreview,unregisterElfPreview} from './library.js';
@@ -65,7 +65,7 @@ export class HistoryGraphEditor extends HTMLElement {
     };
    }
    entry.dataset.index=index;
-   const name=row.name||this._hass.states?.[row.entity]?.attributes?.friendly_name||row.entity||label('new_sensor');
+   const name=row.name||[row.entity,...(row.sum_entities??[])].filter(Boolean).map(id=>this._hass.states?.[id]?.attributes?.friendly_name||id).join(' + ')||label('new_sensor');
    entry.querySelector('.sensor-name').textContent=name;
    const cssColor=c=>Array.isArray(c)?`rgb(${c.join(',')})`:c;
    entry.querySelector('.swatch').style.background=row.color_mode==='gradient'&&row.gradient_stops.length?`linear-gradient(to right,${row.gradient_stops.map(s=>cssColor(s.color)).join(',')})`:cssColor(row.color);
@@ -126,6 +126,7 @@ export class HistoryGraphCard extends HTMLElement {
   const gradients={object:{multiple:true,label_field:'value',fields:{value:{get label(){return label('stop_value');},required:true,selector:{number:{step:'any',mode:'box'}}},color:{get label(){return label('stop_color');},required:true,selector:{color_rgb:{}}}}}};
   return this._formContract([
    {name:'entity',required:true,selector:{entity:{domain:'sensor'}}},
+   {name:'sum_entities',selector:{entity:{domain:'sensor',multiple:true}}},
    {name:'name',selector:{text:{}}},
    {name:'visible',default:true,selector:{boolean:{}}},
    {type:'expandable',name:'series_line',get title(){return label('series_line');},flatten:true,expanded:true,schema:[
@@ -204,11 +205,16 @@ export class HistoryGraphCard extends HTMLElement {
   this._visibility??=new Map();this._visibility.set(id,!this._isSeriesVisible(index));this._hideTooltip();this._render();
   queueMicrotask(()=>this.shadowRoot.querySelector?.(`button[data-series="${id}"]`)?.focus({preventScroll:true}));
  }
- setConfig(config){let validated;try{validated=validateConfig(config);}catch(error){throw new Error(text(error.message==='y_step'?'y_step_error':error.message==='y_step_count'?'y_step_count':error.message?.startsWith('line_style_source')?'line_style_source_error':'config',language(this._hass??frontendHass())));}
+ setConfig(config){let validated;try{validated=validateConfig(config);}catch(error){throw new Error(text(error.message==='sum_entities'?'sum_entities_error':error.message==='y_step'?'y_step_error':error.message==='y_step_count'?'y_step_count':error.message?.startsWith('line_style_source')?'line_style_source_error':'config',language(this._hass??frontendHass())));}
   const previous=this._config,visibility=this._visibility;
   this._visibility=new Map(validated.entities.map(id=>{const initial=validated.series_options.find(s=>s.entity===id)?.visible??true,old=previous?.series_options.find(s=>s.entity===id)?.visible??true;return [id,initial===old&&visibility?.has(id)?visibility.get(id):initial];}));
   SharedGraph.clearHover(this);this._config={...validated,...timeframeSyncConfig(validated)};this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._generation++;this._inFlight=false;this._series=[];this._rawSeries=null;this._viewport=null;resetGraphPeriod(this);this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);this._timer=null;connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
- set hass(hass){this._hass=hass;if(!this._config)return;let signature;try{const meta=seriesMetadata(hass,this._config.entities);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?hass.states?.[s.id]?.state:null)]);}catch(e){signature=e.message;}
+ set hass(hass){this._hass=hass;if(!this._config)return;
+  const summed=this._config.series_options.some(s=>s.sum_entities?.length);
+  const context=summed?JSON.stringify([hass.config?.time_zone,historyEntityIds(this._config).map(id=>{const s=hass.states?.[id];return [id,!!s,s?.attributes?.unit_of_measurement??''];})]):null;
+  if(summed&&this._sumContext!==undefined&&context!==this._sumContext){this._generation++;this._inFlight=false;this._started=false;this._rawSeries=null;this._series=[];this._lastLoad=null;this._status='loading';clearTimeout(this._timer);}
+  this._sumContext=context;
+  let signature;try{const meta=seriesMetadata(hass,this._config.entities,this._config.series_options);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?hass.states?.[s.id]?.state:null)]);}catch(e){signature=e.message;}
   if(signature!==this._signature){this._signature=signature;this._render();}
   this._updateGraphTheme();
   if(this._connected&&!this._started)this._refresh();
@@ -232,14 +238,14 @@ export class HistoryGraphCard extends HTMLElement {
   const {start,end}=graphPeriodRange(this);const config={...this._config,hours_to_show:(end-start)/3600000},hass=this._hass;
   this._status='loading';this._render();let timeout;
   try{
-   seriesMetadata(hass,config.entities);
+   seriesMetadata(hass,config.entities,config.series_options);
    const response=await Promise.race([loadHistorySeries(hass,config,start,end),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(new Error('timeout')),15000);timeout.unref?.();})]);
    if(generation!==this._generation||!this._connected)return;
-   seriesMetadata(this._hass,config.entities);
+   seriesMetadata(this._hass,config.entities,config.series_options);
    this._series=response;this._rawSeries=this._series;this._start=start;this._end=end;
    this._loadFailed=false;this._lastLoad={at:Date.now(),start,end,sources:response.map(s=>({id:s.id,source:s.source??'history',empty:!s.points.some(p=>p.v!==null)}))};
    this._status=this._series.some(s=>s.points.some(p=>p.v!==null))?'ready':'empty';this._refreshFailures=0;
-  }catch(e){if(generation!==this._generation||!this._connected)return;this._refreshFailures=(this._refreshFailures??0)+1;this._loadFailed=true;this._status=['missing','unit','statistics_config','statistics_unavailable'].includes(e.message)?e.message:'error';this._series=[];}
+  }catch(e){if(generation!==this._generation||!this._connected)return;this._refreshFailures=(this._refreshFailures??0)+1;this._loadFailed=true;this._status=['missing','unit','sum_unit','sum_statistics','statistics_config','statistics_unavailable'].includes(e.message)?e.message:'error';this._series=[];}
   finally{clearTimeout(timeout);if(generation===this._generation&&this._connected){this._inFlight=false;this._render();this._timer=setTimeout(()=>this._refresh(),retryDelay(this._refreshFailures??0,REFRESH_MS));this._timer.unref?.();}}
  }
  _getGraphAxes(series,meta,visible){return graphAxes(series,meta,this._config,this._start,this._end,visible);}
@@ -261,7 +267,7 @@ export class HistoryGraphCard extends HTMLElement {
   if(!this._config)return;captureChartInsights(this);const lang=language(this._hass);this._lang=lang;this._zone=this._hass?.config?.time_zone;
   let meta;try{meta=seriesMetadata(this._hass??{},this._config.entities,this._config.series_options);}catch(e){if(this._hass)this._status=e.message;}
   const title=this._config.title??this._defaultTitle(lang);let content='';
-  if(this._status!=='ready'||!meta){content=`<div class="state" role="status">${escapeHtml(text(this._status,lang))}${['error','unit','missing','statistics_config','statistics_unavailable'].includes(this._status)?`<button class="retry">${text('retry',lang)}</button>`:''}</div>`;}
+  if(this._status!=='ready'||!meta){content=`<div class="state" role="status">${escapeHtml(text(this._status,lang))}${['error','unit','sum_unit','sum_statistics','missing','statistics_config','statistics_unavailable'].includes(this._status)?`<button class="retry">${text('retry',lang)}</button>`:''}</div>`;}
   else{
    this._rawSeries??=this._series;
    const key=JSON.stringify([this._start,this._end,this._zone,this._config.aggregation_period,this._config.aggregation_method]);
@@ -318,7 +324,7 @@ export class HistoryGraphCard extends HTMLElement {
   card.style.setProperty('--history-grid-color',dark?'#3a3b45':'#e1e3e8');
   card.style.setProperty('--history-grid-zero-color',dark?'#626571':'#b8bbc4');
  }
- _historyUrl(){const range=graphPeriodRange(this),ready=this._status==='ready';const end=this._viewport?.[1]??(ready?this._end:range.end)??range.end,start=this._viewport?.[0]??(ready?this._start:range.start)??range.start;return `/history?entity_id=${encodeURIComponent(this._config.entities.join(','))}&start_date=${encodeURIComponent(new Date(start).toISOString())}&end_date=${encodeURIComponent(new Date(end).toISOString())}`;}
+ _historyUrl(){const range=graphPeriodRange(this),ready=this._status==='ready';const end=this._viewport?.[1]??(ready?this._end:range.end)??range.end,start=this._viewport?.[0]??(ready?this._start:range.start)??range.start;return `/history?entity_id=${encodeURIComponent(historyEntityIds(this._config).join(','))}&start_date=${encodeURIComponent(new Date(start).toISOString())}&end_date=${encodeURIComponent(new Date(end).toISOString())}`;}
  _setPeriod(hours){return chooseGraphPeriod(this,String(hours));}
  _navigate(direction){return moveGraphPeriod(this,direction);}
  _reloadPeriod(){this._generation++;this._inFlight=false;this._viewport=null;this._hideTooltip();clearTimeout(this._timer);this._status='loading';this._refreshFailures=0;this._render();return this._refresh();}

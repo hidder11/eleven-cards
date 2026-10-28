@@ -130,6 +130,28 @@ y_step: 5
 
 The card never substitutes another value for a manual step. More than **200 ticks**, overflowing ranges or indistinguishable tick values produce an actionable Y-axis error: increase the step or narrow the bounds. With automatic bounds, this check runs after history loads because the data determines the range. Small axis values retain decimal precision instead of rounding to zero; very small values use scientific notation.
 
+### Add sensors into one total
+
+In a sensor entry, **Add sensors / Sensoren optellen** selects up to seven additional sensors. Their values are added to that entry's primary sensor, producing one line (or one bar series in Bar Chart), not extra series. Set **Custom name** to label the total; otherwise contributor names are joined with ` + `. Existing appearance, gradients, fill, visibility, hover and summaries apply to the total. No Home Assistant helper or template sensor is created.
+
+```yaml
+type: custom:eleven-history-graph-card
+entities:
+  - sensor.kitchen_power
+series_options:
+  - entity: sensor.kitchen_power
+    name: Total power
+    sum_entities:
+      - sensor.office_power
+      - sensor.living_room_power
+```
+
+Use `custom:eleven-bar-chart` for the same total as bars. Contributors must have exactly the same unit; W and kW are not converted automatically. Do not include the primary sensor again. Additional contributors need not be listed in top-level `entities`. They are direct sensor references, not references to other displayed sums. Listing one separately is allowed; avoid stacking that separate series with its total unless intentional.
+
+Values align on recorded timestamps using held readings, not array positions. If any contributor is missing or unavailable, the total is missing for that interval; zero and negative totals remain valid. Raw readings are added before aggregation, so minimum/maximum and time-weighted averages describe the total over common valid coverage. Bars may summarize the known part of a period and mark incomplete coverage in information, as with ordinary sensors. The History link includes all contributors.
+
+Compatible statistics means or counter changes are added per matching period, retaining missing-bin gaps and without aggregating summaries twice. Minimum/maximum of a total cannot be recovered by adding individual extrema: Automatic uses raw history for the card; forced Statistics shows an actionable error. If a sum would mix statistics and raw data, Automatic refetches the card as raw history so interval changes are never added to raw counters. Raw Delta remains end minus start without reset compensation; require Statistics for reset-aware counter totals. Raw fallback cannot recover data already purged by Recorder. Leaving `sum_entities` absent or empty preserves the existing single-sensor behavior.
+
 ### Sensor visibility
 
 Each sensor has **Show by default / Standaard tonen**, enabled for existing and new sensors. Disable it to start that sensor hidden. With `show_legend: true`, click/tap its label or focus its button and press Space/Enter to toggle it. Hidden labels are dimmed and struck through, but remain available to turn the sensor back on. Turning every sensor off shows a recoverable empty chart.
@@ -151,6 +173,7 @@ Each `series_options` record supports:
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `entity` | Required | A sensor listed in `entities`. |
+| `sum_entities` | `[]` | Up to seven additional unique sensors added to the primary sensor as one displayed series. Exact matching units required; missing contributors leave gaps. |
 | `name` | Sensor friendly name | Optional display name. |
 | `visible` | `true` | Show this sensor initially. Set `false` to start hidden; its legend button remains available to enable it. |
 | `line_style_source` | Own appearance | Optional entity ID of another sensor on this card. Follow its width, dash style and interpolation live; color, gradient and fill remain independent. Missing sources, self-links and cycles are rejected. |
