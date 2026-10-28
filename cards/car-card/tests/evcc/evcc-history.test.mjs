@@ -17,6 +17,28 @@ test('power history converts watts, anchors the window and preserves unavailable
  assert.equal(evccHistoryPoints([[row(0,'0')]],'sensor.power','kW',start,end)[0].value,0);
 });
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+for(const state of ['off','false'])test(`completed Recorder sessions are rediscovered after a newer live ${state} transition`,async()=>{
+ const now=Date.now(),id='binary_sensor.connected',oldStart=now-7200000,oldEnd=now-3600000,newStart=now-120000,newEnd=now-60000;
+ const connection=(time,state)=>({entity_id:id,state,last_changed:new Date(time).toISOString()});
+ let rows=[connection(oldStart,'on'),connection(oldEnd,'off')],discoveries=0;const requests=[];
+ const card=host(()=>Promise.resolve([]));card._activeTab='session';
+ card._hass.states[id]={state,last_changed:new Date(newEnd).toISOString()};
+ card._hass.callApi=async(method,url)=>{
+  if(url.includes(id)){discoveries++;return [rows];}
+  requests.push({start:Date.parse(decodeURIComponent(url.split('history/period/')[1].split('?')[0])),end:Date.parse(new URLSearchParams(url.split('?')[1]).get('end_time'))});return [];
+ };
+ card._syncHistory();await flush();
+ assert.equal(card._historySession,null,'a previous completed session must not become a permanent cache');
+ assert.equal(card._historyRange,null,'do not present the previous cycle as the latest session');
+ assert.equal(card._historyMissingSession,true);assert.equal(requests.length,0,'wait for the real session start instead of guessing');
+ rows=[...rows,connection(newStart,'on'),connection(newEnd,'off')];
+ card._historyRequestedAt=0;card._syncHistory();await flush();
+ assert.equal(discoveries,2);assert.deepEqual(card._historyRange,{start:newStart,end:newEnd});
+ assert.deepEqual(requests,[{start:newStart,end:newEnd}]);assert.equal(card._historySession.active,false);
+ card._historyRequestedAt=0;card._syncHistory();await flush();
+ assert.equal(discoveries,2,'a completed window matching the live disconnect may be cached');
+});
+
 test('delayed Recorder reconnect uses the live session and retries until history catches up',async()=>{
  const now=Date.now(),changed=now-120000,old=now-7200000,id='binary_sensor.connected';
  const row=(time,state)=>({entity_id:id,state,last_changed:new Date(time).toISOString()});

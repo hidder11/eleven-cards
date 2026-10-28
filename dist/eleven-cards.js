@@ -11619,6 +11619,11 @@ const evccHistoryMethods = {
     if (['on','true'].includes(connected?.state) && session && (!session.active || changed > session.start)) { session = null; recorderCurrent = false; }
     if (!session) recorderCurrent = false;
     if (!session && ['on','true'].includes(connected?.state) && changed > 0 && changed < now) session = {start: changed, end: now, active: true};
+    // A newer live disconnect means Recorder has not stored the latest cycle.
+    // Its start is unknown: wait for discovery instead of caching an older end.
+    if (['off','false'].includes(connected?.state) && session && !session.active && changed > session.end && changed <= now) {
+     session = null; recorderCurrent = false;
+    }
     if (['off','false'].includes(connected?.state) && session?.active) {
      session = changed > session.start && changed <= now ? {...session, end: changed, active: false} : null;
      recorderCurrent = false;
