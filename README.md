@@ -1,6 +1,6 @@
 # Eleven Cards
 
-Home Assistant dashboard cards for energy prices, sensor graphs, state timelines and calendars.
+Home Assistant dashboard cards for energy prices, sensor graphs, state timelines, calendars and EV charging.
 
 ## Cards
 
@@ -10,15 +10,22 @@ Home Assistant dashboard cards for energy prices, sensor graphs, state timelines
 | **History** | Recorded values from 1–8 numeric sensors, with an independent y-axis per unit. | [History documentation](cards/history-graph-card/README.md) |
 | **Timeline** | State history for entities such as doors, switches and people. | [Timeline documentation](cards/timeline-card/README.md) |
 | **Overview (beta)** | Current sensor values, sparklines and change since period start. | [Overview documentation](cards/overview-card/README.md) |
-| **Bar Chart (beta)** | Vertical grouped or stacked sensor-history bars, based on History. | [Bar Chart documentation](cards/bar-chart/README.md) |
+| **Bar Chart** | Vertical grouped or stacked sensor-history bars, based on History. | [Bar Chart documentation](cards/bar-chart/README.md) |
 | **Heatmap (beta)** | Sensor averages or consumption grouped by hour, day, week or month. | [Heatmap documentation](cards/heatmap-card/README.md) |
+| **Car (beta)** | Vehicle image, percentage and custom readings, with optional EVCC charging integration and selectable tabs. | [Car documentation](cards/car-card/README.md) |
+| **Weather (beta)** | Compact current weather and a short hourly or daily forecast, with state-colored artwork. | [Weather documentation](cards/weather-card/README.md) |
+| **Energy Flow (beta)** | Solar, grid and home distribution using Home Assistant Energy configuration and Recorder, with live/history buttons. | [Energy Flow documentation](cards/energy-flow-card/README.md) |
 | **Calendar (beta)** | Calendar events in a day list, day columns or month view, with optional weather. | [Calendar documentation](cards/calendar-card/README.md) |
 
 ![Eleven Dynamic Energy Price Card preview](cards/dynamic-energy-price-card/docs/images/revised-default-dark-desktop.png)
 
-All seven cards include a visual editor and follow Home Assistant's light/dark theme and Dutch/English frontend language. Energy, History, Timeline and Bar Chart support synchronized hover across cards. History, Bar Chart and Timeline also share a compact period picker and a single group for previous/next, Now and zoom controls in the header, with rolling windows and local calendar days, weeks, months, quarters and years. These three cards also indicate zoom, support isolating one entity and provide an information icon beside History with compact per-sensor source and unit information. History and Bar Chart include per-sensor min/max/average for the viewed range; Delta Bar Chart adds sums in the same popup. Calendar has its own day/month navigation and does not join graph timeframe synchronization.
+All ten cards include a visual editor and follow Home Assistant's light/dark theme and Dutch/English frontend language. Energy, History, Timeline and Bar Chart support synchronized hover across cards. History, Bar Chart and Timeline also share a compact period picker and a single group for previous/next, Now and zoom controls in the header, with rolling windows and local calendar days, weeks, months, quarters and years. These three cards also indicate zoom, support isolating one entity and provide an information icon beside History with compact per-sensor source and unit information. History and Bar Chart include per-sensor min/max/average for the viewed range; Delta Bar Chart adds sums in the same popup. Calendar has its own day/month navigation and does not join graph timeframe synchronization.
 
-The cards use existing Home Assistant data. They do not provide tariffs, create sensors or control devices. See each card's documentation for its sensor requirements and configuration options.
+Car combines the vehicle and EVCC cards. Enable EVCC integration to show charging data and choose the Controls, Session and EVCC tabs; disable it to choose your own percentage and three entity readings. Compact changes density independently of visible tabs. The standalone EVCC card has been removed. Migrate existing `custom:eleven-evcc-card` dashboards to `custom:eleven-car-card` with `evcc_enabled: true`; retain the entity mappings and other settings. The Climate prototype has also been removed.
+
+The cards use existing Home Assistant data. They do not provide tariffs or create sensors. The EVCC card can change charging settings through Home Assistant. See each card's documentation for its sensor requirements and configuration options.
+
+Weather, Car and Energy Flow share one header fade that ends before tab content, including compact layouts.
 
 ## Synchronize timeframes (local version)
 
@@ -76,11 +83,14 @@ For YAML configuration, use these types:
 | History | `custom:eleven-history-graph-card` |
 | Timeline | `custom:eleven-timeline-card` |
 | Overview (beta) | `custom:eleven-overview-card` |
-| Bar Chart (beta) | `custom:eleven-bar-chart` |
+| Bar Chart | `custom:eleven-bar-chart` |
 | Heatmap (beta) | `custom:eleven-heatmap-card` |
 | Calendar (beta) | `custom:eleven-calendar-card` |
+| Car (beta) | `custom:eleven-car-card` |
+| Weather (beta) | `custom:eleven-weather-card` |
+| Energy Flow (beta) | `custom:eleven-energy-flow-card` |
 
-Overview, Bar Chart, Heatmap and Calendar are local betas in this working tree; they have not been published as a HACS release.
+Overview, Heatmap, Calendar, Car, Weather and Energy Flow are local betas in this working tree; they have not been published as a HACS release.
 
 The card documentation linked above includes YAML examples and option details.
 
@@ -98,7 +108,7 @@ Installing Eleven Cards does not automatically update saved dashboard configurat
 
 ## Card height
 
-All seven cards support vertical sizing in the Home Assistant Sections view. Open the card editor's Layout tab and choose its number of rows. Each card supplies a default and a minimum height. History, Bar Chart and Energy resize their graphs; Calendar, Timeline and Overview scroll their contents when needed. Heatmap scrolls its matrix inside the allocated height, still respecting its configured maximum matrix height. Masonry dashboards continue to use each card's `getCardSize()` estimate.
+All ten cards support vertical sizing in the Home Assistant Sections view. Open the card editor's Layout tab and choose its number of rows. Each card supplies a default and a minimum height. History, Bar Chart and Energy resize their graphs; Calendar, Timeline, Overview and Car scroll their contents when needed. Heatmap scrolls its matrix inside the allocated height, still respecting its configured maximum matrix height. Masonry dashboards continue to use each card's `getCardSize()` estimate.
 
 ## Development
 

@@ -313,6 +313,11 @@ export function findCurrentPoint(points, now = new Date()) {
   return points.find((point) => point.timestamp <= timestamp && timestamp < point.timestamp + intervalMs) ?? null;
 }
 
+// The graph and Energy grid details must select the same active interval.
+export function currentPricePoint(data, now = new Date(), timeZone = 'Europe/Amsterdam', tomorrowAfter = 14, offset = 0) {
+  return findCurrentPoint(getVisiblePoints(offsetPriceData(data, offset), now, timeZone, tomorrowAfter), now);
+}
+
 export function selectCheapestDuration(points, totalMinutes = 240, options = {}) {
   return selectDurationByPrice(points, totalMinutes, 'lowest', options);
 }

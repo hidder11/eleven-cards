@@ -1,7 +1,16 @@
-// Eleven Cards — HACS collection; seven cards, no external dependencies.
+// Eleven Cards — HACS collection; ten card types, no external dependencies.
 // Eleven Dynamic Energy Price Card — standalone dashboard bundle
 (()=>{
 "use strict";
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
+
 // Domain-neutral SVG renderer. Adapters own data, geometry, colors and annotations.
 function graphLineStyle(style, width = 3.5) {
   return {style, width, dash: style === 'dashed' ? '8 7' : style === 'dotted' ? '1 7' : 'none', cap: style === 'dashed' ? 'butt' : 'round'};
@@ -53,7 +62,7 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return `.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:8px 10px;border:1px solid var(--divider-color,#ddd);border-radius:6px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));box-shadow:0 3px 12px #0002;font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:4px;white-space:normal}.tooltip span{display:grid;grid-template-columns:9px minmax(0,1fr);column-gap:6px;margin-top:5px;white-space:normal}.tooltip i{display:block;width:9px;height:9px;margin:4px 0 0;border:0;border-radius:3px;flex-shrink:0;background:var(--series-color)}.tooltip b{font-weight:600;min-width:0;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -618,6 +627,11 @@ function findCurrentPoint(points, now = new Date()) {
   if (!Number.isFinite(timestamp)) return null;
   const intervalMs = inferIntervalMinutes(points) * 60000;
   return points.find((point) => point.timestamp <= timestamp && timestamp < point.timestamp + intervalMs) ?? null;
+}
+
+// The graph and Energy grid details must select the same active interval.
+function currentPricePoint(data, now = new Date(), timeZone = 'Europe/Amsterdam', tomorrowAfter = 14, offset = 0) {
+  return findCurrentPoint(getVisiblePoints(offsetPriceData(data, offset), now, timeZone, tomorrowAfter), now);
 }
 
 function selectCheapestDuration(points, totalMinutes = 240, options = {}) {
@@ -1618,6 +1632,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       }
       this._scheduleTibberRefresh();
       this._render();
+      this.dispatchEvent(new CustomEvent('eleven-prices-changed'));
     })();
   }
 
@@ -1815,7 +1830,21 @@ class DynamicEnergyPriceCard extends HTMLElement {
     })();
   }
 
+  currentPrices(now = new Date()) {
+    const zone=this._hass?.config?.time_zone||'Europe/Amsterdam';
+    return Object.fromEntries(['import','export'].map(prefix=>{
+      const raw=this._sourceState(prefix)?.attributes?.data;
+      const configured=Number(this._config?.export_price_offset);
+      const offset=prefix==='export'&&Number.isFinite(configured)?configured:0;
+      const point=currentPricePoint(raw,now,zone,this._config?.tomorrow_after??14,offset);
+      return [prefix,point?{value:point.price,currency:'EUR'}:null];
+    }));
+  }
+
   _render() {
+    if(this._config.price_provider===true){
+      this._ensureTibber('import');this._ensureTibber('export');return;
+    }
     const tibberImport=this._config.import_source==='tibber_prices';
     if (!tibberImport && !this._config.entity) {
       this.shadowRoot.innerHTML = this._stateCard(this._t("Kies een prijsbron"), this._t("Selecteer een prijsbron bij Afname in de kaartinstellingen."));
@@ -2093,8 +2122,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
       ? `<div class="data-status warning">${statusParts.map((part) => `<span>${escapeHtml(part)}</span>`).join('<i aria-hidden="true">·</i>')}</div>`
       : '';
 
-    const currentImport = findCurrentPoint(getVisiblePoints(rawImportData,now,timeZone,this._config.tomorrow_after), now);
-    const currentExport = findCurrentPoint(getVisiblePoints(rawExportData,now,timeZone,this._config.tomorrow_after), now);
+    const currentImport = currentPricePoint(rawImportData,now,timeZone,this._config.tomorrow_after);
+    const currentExport = currentPricePoint(rawExportData,now,timeZone,this._config.tomorrow_after);
     const currentCards = [];
     if (currentShowsImport) currentCards.push(this._currentMetric(this._t("Afname"), currentImport, 'import', importSelected, cheapestEnabled));
     if (currentShowsExport) currentCards.push(this._currentMetric(this._t("Teruglevering"), currentExport, 'export', exportSelected, exportBestEnabled));
@@ -2376,7 +2405,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       : '—';
     const appearance = this._chart.consumptionAppearance;
     const range = point ? `${this._formatTime(point.timestamp, this._chart.timeZone)}–${this._formatTime(point.endTimestamp, this._chart.timeZone)}` : '';
-    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b>${this._t('Netafname')}: ${value}</b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
+    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b>${this._t('Netafname')} <em class="tooltip-value">${value}</em></b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
       live: `${this._t('Netafname')} ${value}, ${range}` };
   }
 
@@ -2427,7 +2456,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       else dot.style.removeProperty('border-color');
       dot.setAttribute('class', `hover-dot${type === 'export' ? ' export-dot' : ''} ${priceClass}`);
       const favorable = selected.has(point.timestamp);
-      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b>${type === 'import' ? this._t("Afname") : this._t("Teruglevering")}: ${this._formatPrice(price)} ct/kWh</b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
+      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b>${type === 'import' ? this._t("Afname") : this._t("Teruglevering")} <em class="tooltip-value">${this._formatPrice(price)} ct/kWh</em></b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
       liveEntries.push(`${type === 'import' ? this._t("afname") : this._t("teruglevering")} ${this._formatPrice(price)} ${this._t("cent per kilowattuur")}${favorable ? `, ${favorableLabel} ${hours} ${this._t("uur")}` : ''}`);
     };
     if (this._chart.graphShowsImport) showDot('import', point.importPrice, this._chart.importSelected, this._config.cheapest_hours, this._t("goedkoopste"));
@@ -2683,6 +2712,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         .current { justify-content: center; }
       }
       @media (prefers-reduced-motion: reduce) { .tooltip { transition: none; } }
+      ${this._config?.embedded===true?`:host{height:auto;min-width:0}ha-card{height:auto;background:transparent;border:0;border-radius:0;box-shadow:none}.card-content{height:auto;padding:0}.state{padding:8px 0}.chart{flex:0 0 auto;height:260px;min-height:180px}.current{border-radius:8px}.cheapest-table .period-type{border-radius:8px}`:''}
     `;
   }
 }
@@ -2760,7 +2790,7 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return `.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:8px 10px;border:1px solid var(--divider-color,#ddd);border-radius:6px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));box-shadow:0 3px 12px #0002;font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:4px;white-space:normal}.tooltip span{display:grid;grid-template-columns:9px minmax(0,1fr);column-gap:6px;margin-top:5px;white-space:normal}.tooltip i{display:block;width:9px;height:9px;margin:4px 0 0;border:0;border-radius:3px;flex-shrink:0;background:var(--series-color)}.tooltip b{font-weight:600;min-width:0;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -2853,6 +2883,15 @@ function graphStyles() {
   `;
 }
 
+// ../../shared/ui-surface.js
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
 // ../../shared/ui-button.js
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -2917,12 +2956,12 @@ function bindUILegend(host,{selector='[data-ui-legend]',getId=button=>button.dat
 }
 
 // ../../shared/ui-tabs.js
-function uiTabs({id,label,items,selected,className='',panelClassName=''}={}){
+function uiTabs({id,label,items,selected,className='',panelClassName='',variant=''}={}){
  if(typeof id!=='string'||!id||!items?.length||items.some(item=>typeof item.value!=='string'||!item.value)||new Set(items.map(item=>item.value)).size!==items.length)throw Error('Tabs need an id and distinct text values.');
  const active=items.find(item=>item.value===selected&&!item.disabled)??items.find(item=>!item.disabled);
  const tabId=value=>`${id}-tab-${encodeURIComponent(value)}`,panelId=value=>`${id}-panel-${encodeURIComponent(value)}`;
- const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'',role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
- const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
+ const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'','data-ui-card-tabs':variant==='card'?true:null,role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
+ const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,'data-ui-card-tab-panel':variant==='card'?true:null,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
  return bar+panels;
 }
 function bindUITabs({tabs,panels,onSelect=()=>{}}){
@@ -2952,24 +2991,29 @@ function uiTabsStyles(){return `
 [data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
 [data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
 [data-ui-tab-panel][hidden]{display:none!important}
+[data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
+[data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
+[data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
+[data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
 
 // ../../shared/ui-popup.js
 function uiPopup({id,title,label=title,closeLabel='Close',content='',className='',attrs={},closeAttrs={}}){
  return `<div${uiAttributes({id,class:className||null,'data-ui-popup':'',popover:'auto',role:'dialog','aria-label':label,...attrs})}><div class="ui-popup-heading"><strong>${uiEscape(title)}</strong>${uiButton({variant:'close',content:'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>',label:closeLabel,attrs:{'data-ui-popup-close':'',...closeAttrs}})}</div>${content}</div>`;
 }
-function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560}){
+function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560,topBoundary=()=>8,align='end'}){
  let active=true;
  const position=()=>{
   if(!active||!isRequested())return;
   const box=trigger.getBoundingClientRect();
   if(!box.width||!box.height){popup.style.visibility='hidden';return;}
-  const actualWidth=Math.min(width,window.innerWidth-16);
-  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-16)+'px';
+  const actualWidth=Math.min(width,window.innerWidth-16),minimumTop=Math.max(8,Math.min(topBoundary(),window.innerHeight-80));
+  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-minimumTop-8)+'px';
   popup.style.visibility='';onShow?.();
   const height=popup.getBoundingClientRect().height,below=window.innerHeight-box.bottom-8,above=box.top-8;
-  popup.style.left=Math.max(8,Math.min(box.right-actualWidth,window.innerWidth-actualWidth-8))+'px';
-  popup.style.top=Math.max(8,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
+  const left=align==='center'?(box.left+box.right-actualWidth)/2:box.right-actualWidth;
+  popup.style.left=Math.max(8,Math.min(left,window.innerWidth-actualWidth-8))+'px';
+  popup.style.top=Math.max(minimumTop,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
  };
  if(ready?.then)ready.then(position,()=>{});
  const observer=typeof ResizeObserver==='function'?new ResizeObserver(position):null;
@@ -2977,7 +3021,7 @@ function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,m
  return {position,disconnect(){active=false;observer?.disconnect();}};
 }
 // Domain state lives in callbacks; this controller also works without a card host.
-function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false}){
+function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false,keepOpenOnOutside=()=>false,topBoundary,align}){
  let requested=false,pending=false,focusPending=false,pointerWasOpen;
  const wantsOpen=isRequested??(()=>requested),native=typeof popup.showPopover==='function';
  const isOpen=()=>native?popup.matches(':popover-open'):popup.hasAttribute('data-fallback-open');
@@ -2985,7 +3029,7 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  const cleanups=[],listen=(target,type,handler,capture=false)=>{target?.addEventListener?.(type,handler,capture);cleanups.push(()=>target?.removeEventListener?.(type,handler,capture));};
  const property=(target,key,handler)=>{if(!target)return;target[key]=handler;cleanups.push(()=>{if(target[key]===handler)target[key]=null;});};
  const closeButton=popup.querySelector('[data-ui-popup-close]');
- const placement=bindUIPopupPosition({trigger,popup,ready,isRequested:wantsOpen,onShow:()=>{
+ const placement=bindUIPopupPosition({trigger,popup,ready,topBoundary,align,isRequested:wantsOpen,onShow:()=>{
   pending=false;if(native){if(!isOpen())popup.showPopover();}else popup.setAttribute('data-fallback-open','');
   if(focusPending){(focusTarget?.()??closeButton)?.focus({preventScroll:true});focusPending=false;}
   onShown();
@@ -3004,13 +3048,14 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  listen(popup,'toggle',e=>{if(!isCurrent())return;const opened=e.newState==='open';if(!opened){if(wantsOpen())onClose();pending=false;focusPending=false;}requested=opened;trigger.setAttribute('aria-expanded',String(opened));onToggle(opened);});
  listen(window,'resize',()=>{if(wantsOpen()){if(closeWhenAnchorHidden&&trigger.getClientRects?.().length===0)close();else placement.position();}});
  listen(window,'scroll',e=>{if(isOpen()&&!e.composedPath().includes(popup))close();},true);
- listen(document,'pointerdown',e=>{if((!native||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container))close();});
+ listen(document,'pointerdown',e=>{if((!native||popup.getAttribute?.('popover')==='manual'||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container)&&!keepOpenOnOutside(e))close();});
  return {open,close,isOpen,position:placement.position,disconnect(){placement.disconnect();cleanups.splice(0).forEach(remove=>remove());}};
 }
-function uiPopupStyles(){return `
-[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:8px 12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:1px solid var(--divider-color,#ddd);border-radius:10px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35;box-shadow:0 8px 28px #0004}
+function uiPopupStyles(){return uiSurfaceStyles('[data-ui-popup]')+`
+[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:0;border-radius:8px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35}
 [data-ui-popup]:popover-open,[data-ui-popup][data-fallback-open]{display:block}
 [data-ui-popup] [hidden]{display:none!important}
+[data-ui-popup]>:last-child{margin-block-end:0}
 .ui-popup-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px}
 .ui-popup-heading>strong{font-size:14px;font-weight:600}
 .ui-popup-heading [data-ui-popup-close]{display:grid;place-items:center;width:30px;height:30px;min-height:30px;padding:0;line-height:1;flex:none}
@@ -3047,14 +3092,14 @@ function cardHeader({title,showTitle=true,ready=false,historyUrl,language='en',p
  const showZoomStatus=zoomState.zoomed&&!periods.picker;
  return `<header class="card-header">${showTitle&&title?`<h2>${headerEscape(title)}</h2>`:''}<div class="header-actions">${group}${zoom}<div class="chart-links" role="group" aria-label="${nl?'Geschiedenis en informatie':'History and information'}">${uiButton({href:historyUrl??'',className:'history-link',content:cardHeaderIcon('history'),title:label[3],label:label[3]})}${information}</div></div></header>${showZoomStatus?`<div class="chart-context"><div class="chart-range"><span class="zoom-status">${nl?'Ingezoomd':'Zoomed in'}</span></div></div>`:''}`;
 }
-function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+`
+function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+uiSurfaceStyles('.chart-controls,.zoom-controls,.chart-links')+`
 .card-header{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;min-height:32px;flex:none;margin:-6px -4px 10px 0}
 .card-header h2{flex:1 1 110px;min-width:0;margin:4.75px 0 0;font-size:18px;line-height:1.25;font-weight:650;letter-spacing:-.01em;overflow-wrap:anywhere}
 .header-actions{--chart-action-gap:8px;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--chart-action-gap);flex:0 1 auto;min-width:0;max-width:100%;margin-inline-start:auto}
 .chart-controls{display:flex;align-items:center;gap:0;min-width:0;max-width:100%}
 .chart-links{display:flex;align-items:center;gap:0;flex:none}
 .zoom-controls{display:flex;gap:0;position:relative}
-.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border-radius:5px}
+.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border:0;border-radius:8px}
 .chart-controls>[data-period="now"]{width:36px}
 .chart-controls>.period-controls{position:relative;margin-inline-end:8px;padding-inline-end:8px}
 .chart-controls>.period-controls::after{content:"";position:absolute;inset-inline-end:0;top:8px;height:16px;width:1px;background:var(--divider-color,#ddd)}
@@ -3259,7 +3304,7 @@ function compactPeriodName({start,end,mode,past,zoomed,hours,name,locale,zone}){
  if(past)return `${dateRange(start,end)} · ${hours>=168&&hours%24===0?`${hours/24} ${locale==='nl-NL'?'dagen':'days'}`:`${hours} ${locale==='nl-NL'?'uur':hours===1?'hour':'hours'}`}`;
  return name;
 }
-function periodControls(host,language='en'){
+function periodControls(host,language='en',{popupNavigation=false,tabVariant=''}={}){
  const active=host.shadowRoot.activeElement;
  if(!host._periodMenuPending)host._periodFocus=null;
  if(active?.closest?.('.header-actions'))host._periodFocus=active.dataset.periodTab!=null?`tab:${active.dataset.periodTab}`:active.dataset.customField!=null?`custom:${active.dataset.customField}`:active.dataset.periodOption!=null?`option:${active.dataset.periodOption}`:active.dataset.zoom!=null?`zoom:${active.dataset.zoom}`:active.classList.contains('history-link')?'history':active.dataset.period;
@@ -3291,14 +3336,15 @@ function periodControls(host,language='en'){
  const customRange=graphPeriodRange(host),draft=host._periodCustomDraft??{start:periodDateTime(customRange.start,zone),end:periodDateTime(customRange.end,zone)};
  const canGoNext=mode==='custom'?host._periodEnd!=null&&customRange.end<Date.now():past;
  const custom=`<form data-custom-range><div class="period-custom-fields">${[['start',label('Start','Begin')],['end',label('End','Einde')]].map(([key,text])=>`<label>${text}<input type="datetime-local" name="${key}" data-custom-field="${key}" value="${periodEscape(draft[key])}" step="60" required></label>`).join('')}</div><p class="period-custom-zone">${periodEscape(zone)}</p><p class="period-custom-error" role="alert"${draft.error?'':' hidden'}>${periodEscape(draft.error??'')}</p>${uiButton({variant:'surface',type:'submit',text:label('Apply','Toepassen'),attrs:{'data-custom-field':'apply'}})}</form>`;
- const contents=uiTabs({id:'eleven-period',label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
+ const contents=uiTabs({id:'eleven-period',variant:tabVariant,label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
   {value:'rolling',label:label('Last','Afgelopen'),content:`<div class="period-options" role="menu" aria-label="${label('Last','Afgelopen')}">${rolling.map(choice).join('')}</div>`},
   {value:'calendar',label:label('Calendar','Kalender'),content:`<div class="period-options period-calendar" role="menu" aria-label="${label('Calendar','Kalender')}">${calendar.map(([id,text])=>choice([id,text])).join('')}</div>`},
   {value:'custom',label:label('Custom range','Eigen bereik'),content:custom,className:'period-custom'}
  ].map(item=>({...item,tabAttrs:{'data-period-tab':item.value},panelAttrs:{'data-period-panel':item.value}}))});
- const popup=uiPopup({id:'eleven-period-menu',className:'period-menu',title:label('Timeframe','Tijdvak'),label:label('Choose a period','Kies een periode'),closeLabel:label('Close','Sluiten'),closeAttrs:{'data-period':'close'},content:`<div class="period-current-range">${periodEscape(range)}${zoomed?`<span class="zoom-status">${label('Zoomed in','Ingezoomd')}</span>`:''}</div><div class="period-default" role="menu" aria-label="${label('Default','Standaard')}">${choice(['configured',standard])}</div>${contents}`});
- const trigger=uiButton({className:'period-trigger',content:`<span>${periodEscape(compactName)}</span>${cardHeaderIcon('down')}`,attrs:{'data-period':'menu','aria-haspopup':'dialog','aria-controls':'eleven-period-menu','aria-expanded':host._periodMenuOpen===true,title:range,'aria-label':label('Timeframe','Tijdvak')+': '+compactName,'aria-description':range+(zoomed?'. '+label('Zoomed in','Ingezoomd'):'')}});
  const navigation=[['previous',label('Previous period','Vorige periode')],['now',label('Return to the current period','Terug naar de huidige periode')],['next',label('Next period','Volgende periode')]].map(([key,title])=>uiButton({text:key==='now'?label('Now','Nu'):'',content:key==='now'?undefined:cardHeaderIcon(key),disabled:key==='next'&&!canGoNext,title,label:title,attrs:{'data-period':key}})).join('');
+ const popup=uiPopup({id:'eleven-period-menu',className:'period-menu',title:label('Timeframe','Tijdvak'),label:label('Choose a period','Kies een periode'),closeLabel:label('Close','Sluiten'),closeAttrs:{'data-period':'close'},content:`<div class="period-current-range">${periodEscape(range)}${zoomed?`<span class="zoom-status">${label('Zoomed in','Ingezoomd')}</span>`:''}</div><div class="period-default" role="menu" aria-label="${label('Default','Standaard')}">${choice(['configured',standard])}</div>${contents}${popupNavigation?`<div class="period-menu-navigation" role="group" aria-label="${label('Period navigation','Periode navigeren')}">${navigation}</div>`:''}`});
+ const trigger=uiButton({className:'period-trigger',content:`<span>${periodEscape(compactName)}</span>${cardHeaderIcon('down')}`,attrs:{'data-period':'menu','aria-haspopup':'dialog','aria-controls':'eleven-period-menu','aria-expanded':host._periodMenuOpen===true,title:range,'aria-label':label('Timeframe','Tijdvak')+': '+compactName,'aria-description':range+(zoomed?'. '+label('Zoomed in','Ingezoomd'):'')}});
+
  return {picker:`<div class="period-controls">${trigger}${popup}</div>`,navigation};
 
 }
@@ -3362,11 +3408,13 @@ function bindPeriodControls(host){
    visible[next].focus();
   }
  };
- for(const [key,direction]of [['previous',-1],['next',1],['now',0]])root.querySelector(`[data-period="${key}"]`).onclick=()=>{close();moveGraphPeriod(host,direction);};
+ for(const [key,direction]of [['previous',-1],['next',1],['now',0]])for(const button of root.querySelectorAll(`[data-period="${key}"]`))button.onclick=()=>{close();moveGraphPeriod(host,direction);};
  if(host._periodMenuOpen)open(false);
  if(!host._periodMenuPending)restorePeriodFocus(host,items);
 }
 function periodControlsStyles(){return uiTabsStyles()+`
+.period-menu-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;margin-top:12px;border-top:1px solid var(--divider-color,#ddd)}
+.period-menu-navigation>[data-period]{width:36px;height:32px}.period-menu-navigation>[data-period=now]{width:auto;padding:4px 12px}
 .period-controls{display:flex;min-width:0;max-width:100%;flex:0 1 auto}
 .header-actions .period-trigger{width:auto;min-width:0;max-width:100%;flex:0 1 auto;gap:6px;padding:4px 10px;border:0;border-radius:4px;background:transparent;font-weight:400}
 .header-actions .period-trigger:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
@@ -3374,8 +3422,9 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-current-range{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;margin:2px 0 10px}
 .period-current-range .zoom-status{display:table;margin-top:4px}
 .period-tabs{margin:10px 0 0}
+.period-menu:has([data-ui-card-tabs]){font-size:inherit;line-height:inherit}
 .period-panel{padding-top:12px}
-.period-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:4px}
+.period-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:0}
 .period-options button{position:relative;justify-content:center;padding:7px 3px;gap:0;min-width:0;white-space:nowrap}
 .period-options button>span:last-child{position:absolute;inset-inline-end:2px;top:1px;font-size:9px;line-height:1}
 .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -3386,6 +3435,38 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-custom p{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);margin:8px 0;overflow-wrap:anywhere}
 .period-custom .period-custom-error{color:var(--error-color,#db4437)}
 .period-custom button[type="submit"]{justify-content:center;margin-top:10px}
+`;}
+
+// ../../shared/ui-detail-surface.js
+
+// Informational detail surface. Callers format/translate text and compute percentages.
+// All content is escaped; this component deliberately accepts no trusted HTML.
+function uiDetailSurface({title='',metrics=[],percent=null,entity='',actionLabel='',attrs={}}={}){
+ const progress=Number.isFinite(percent)?Math.max(0,Math.min(100,percent)):null;
+ return `<section${uiAttributes({...attrs,'data-ui-detail-surface':'','aria-label':title})}>
+  <h3 class="ui-detail-surface-title">${entity?`<button type="button" class="ui-detail-surface-action" data-entity="${uiEscape(entity)}" aria-label="${uiEscape(actionLabel||title)}">${uiEscape(title)} <span aria-hidden="true">›</span></button>`:uiEscape(title)}</h3>
+  <dl class="ui-detail-surface-metrics">${metrics.map(({label='',value,unit='',hint=''})=>{
+   const missing=value==null||value==='';
+   return `<div><dt>${uiEscape(label)}</dt><dd>${uiEscape(missing?'—':value)}${!missing&&unit?' '+uiEscape(unit):''}${hint?`<small class="ui-detail-surface-hint">${uiEscape(hint)}</small>`:''}</dd></div>`;
+  }).join('')}</dl>
+  ${progress==null?'':`<div class="ui-detail-surface-track" aria-hidden="true"><i style="width:${progress}%"></i></div>`}
+ </section>`;
+}
+
+function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+`
+[data-ui-detail-surface]{box-sizing:border-box;min-width:0;padding:12px;border-radius:8px;color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--ui-detail-tone,var(--primary-color,#2196f3)) 5%,transparent)}
+[data-ui-detail-surface] .ui-detail-surface-title{font-family:inherit;font-size:12px;font-weight:600;line-height:1.4;color:inherit;margin:0 0 8px;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-action{font:inherit;line-height:1.4;color:inherit;background:none;border:0;border-radius:4px;padding:4px 0;margin:-4px 0;text-align:start;cursor:pointer}
+[data-ui-detail-surface] .ui-detail-surface-action:hover{text-decoration:underline}[data-ui-detail-surface] .ui-detail-surface-action:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
+[data-ui-detail-surface] .ui-detail-surface-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,68px),1fr));gap:8px 12px;margin:0}
+[data-ui-detail-surface] .ui-detail-surface-metrics>div{min-width:0}
+[data-ui-detail-surface] dt{font-size:10px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere;margin:0 0 2px}
+[data-ui-detail-surface] dd{margin:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-hint{display:block;margin-top:3px;font-size:10px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--secondary-text-color,#626a78)}
+[data-ui-detail-surface] .ui-detail-surface-track{height:8px;border-radius:8px;background:var(--divider-color,#ddd);overflow:hidden;margin-top:8px}
+[data-ui-detail-surface] .ui-detail-surface-track>i{display:block;height:100%;background:var(--ui-detail-tone,var(--primary-color,#2196f3))}
+@container(max-width:360px){[data-ui-detail-surface] dd{font-size:15px}}
+@media(forced-colors:active){[data-ui-detail-surface]{border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track{background:Canvas;border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track>i{background:Highlight;forced-color-adjust:none}}
 `;}
 
 // ../../shared/chart-insights.js
@@ -3450,10 +3531,10 @@ function chartDataInformation(host,language='en'){
    const source=load.sources.find(s=>s.id===item.id),row=summary?.rows.find(r=>r.id===item.id),hidden=!host._isSeriesVisible(i);
    const sourceLabel=source?(source.source==='statistics'?(nl?'Statistieken':'Statistics'):(nl?'Historie':'History')):(nl?'Niet geladen':'Not loaded');
    const unit=row?.unit??host._hass?.states?.[item.id]?.attributes?.unit_of_measurement??'';
-   const metrics=row?.durations?`<dl class="insight-durations">${row.durations.map(s=>`<div><dt title="${insightEscape(s.missing?(nl?'Geen geschiedenis':'No history'):s.state)}">${insightEscape(s.label)}</dt><dd>${insightEscape(host._duration(s.duration))}</dd></div>`).join('')}</dl>`:row?`<dl class="insight-metrics${'total' in row?' has-total':''}">${[['minimum','Min'],['maximum','Max'],['average',nl?'Gem.':'Avg.']].map(([key,label])=>`<div><dt${key==='average'?` title="${nl?'Gemiddeld':'Average'}"`:''}>${label}</dt><dd data-metric="${key}">${value(row[key])}</dd></div>`).join('')}${'total' in row?`<div><dt title="${nl?'Som van volledige staven':'Sum of whole bars'}">${nl?'Som':'Sum'}</dt><dd data-metric="total">${value(row.total)}</dd></div>`:''}</dl>`:'';
+   const metrics=row?.durations?`<dl class="insight-durations">${row.durations.map(s=>`<div><dt title="${insightEscape(s.missing?(nl?'Geen geschiedenis':'No history'):s.state)}">${insightEscape(s.label)}</dt><dd>${insightEscape(host._duration(s.duration))}</dd></div>`).join('')}</dl>`:row?`<dl class="ui-detail-surface-metrics insight-metrics${'total' in row?' has-total':''}">${[['minimum','Min'],['maximum','Max'],['average',nl?'Gem.':'Avg.']].map(([key,label])=>`<div><dt${key==='average'?` title="${nl?'Gemiddeld':'Average'}"`:''}>${label}</dt><dd data-metric="${key}">${value(row[key])}</dd></div>`).join('')}${'total' in row?`<div><dt title="${nl?'Som van volledige staven':'Sum of whole bars'}">${nl?'Som':'Sum'}</dt><dd data-metric="total">${value(row.total)}</dd></div>`:''}</dl>`:'';
    const states=[host._inFlight?(nl?'Vernieuwen…':'Refreshing…'):host._loadFailed?(nl?'Verouderd':'Outdated'):'',hidden?(nl?'Verborgen':'Hidden'):'',row?.limited?(nl?'Meer dan 20 statussen':'More than 20 states'):row?.count===0||source?.empty?(nl?'Geen gegevens':'No data'):row?.missing?(nl?'Onvolledig':'Incomplete'):''].filter(Boolean);
    const color=host._insightColor?.(i,row)??'var(--primary-color,#2196f3)';
-   return `<section class="insight-sensor" data-information-entity="${insightEscape(item.id)}"><div class="insight-sensor-heading"><i class="insight-color" style="--insight-color:${insightEscape(color)}" aria-hidden="true"></i><strong>${insightEscape(item.name)}</strong><span class="insight-source">${sourceLabel}${unit?` <span class="insight-unit">· ${insightEscape(unit)}</span>`:''}</span></div>${metrics}${states.length?`<div class="insight-states" role="status">${states.join(' · ')}</div>`:''}</section>`;
+   return `<section class="insight-sensor" data-information-entity="${insightEscape(item.id)}" data-ui-detail-surface><div class="insight-sensor-heading ui-detail-surface-title"><i class="insight-color" style="--insight-color:${insightEscape(color)}" aria-hidden="true"></i><strong>${insightEscape(item.name)}</strong><span class="insight-source">${sourceLabel}${unit?` <span class="insight-unit">· ${insightEscape(unit)}</span>`:''}</span></div>${metrics}${states.length?`<div class="insight-states" role="status">${states.join(' · ')}</div>`:''}</section>`;
   }).join('')}</div>`;
  }
  return insightControl(host,'data',nl?'Gegevens':'Data information',body,cardHeaderIcon('info'));
@@ -3494,7 +3575,7 @@ function bindChartInsights(host){
  if(host._insightFocus)listen(document,'pointerdown',e=>{if(!e.composedPath().includes(host)){host._insightFocus=null;host._insightOpen=null;host._insightPending=null;}},true);
  bindChartLegend(host);
 }
-function chartInsightStyles(){return `
+function chartInsightStyles(){return uiDetailSurfaceStyles()+`
 .chart-context{display:flex;align-items:center;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;flex:none;margin:0 0 8px;min-width:0}
 .chart-range{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;min-width:0;flex:1}
 .chart-range .period-panel{margin:0}
@@ -3509,19 +3590,15 @@ function chartInsightStyles(){return `
 .insight-popup p strong{color:var(--primary-text-color,#20252b);font-weight:500}
 .insight-popup .insight-choice{display:block;width:100%;padding:6px 8px;text-align:start;overflow-wrap:anywhere}
 .insight-choice[aria-pressed="true"]{background:var(--secondary-background-color,#eee);font-weight:600}
-.insight-sensors{display:grid}
-.insight-sensor{min-width:0;padding:8px 0}
-.insight-sensor+.insight-sensor{border-top:1px solid var(--divider-color,#ddd)}
+.insight-sensors{display:grid;gap:10px}
+.insight-sensor{min-width:0}
 .insight-sensor-heading{display:flex;align-items:center;flex-wrap:wrap;gap:2px 8px}
 .insight-color{display:block;width:7px;height:7px;flex:none;border-radius:2px;background:var(--insight-color,var(--primary-color,#2196f3))}
 .insight-sensor-heading>strong{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
 .insight-source{font-size:10px;font-weight:400;color:var(--secondary-text-color,#666);color:color-mix(in srgb,var(--secondary-text-color,#666) 90%,var(--ha-card-background,var(--card-background-color,#fff)));flex:none}
 .insight-unit{white-space:nowrap}
-.insight-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 8px;margin:6px 0 0}
+.insight-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
 .insight-metrics.has-total{grid-template-columns:repeat(4,minmax(0,1fr))}
-.insight-metrics>div{min-width:0}
-.insight-metrics dt{font-size:10px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere}
-.insight-metrics dd{margin:1px 0 0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:var(--primary-text-color,#20252b)}
 .insight-states{font-size:10px;color:var(--secondary-text-color,#666);margin-top:4px}
 .insight-durations{margin:6px 0 0;display:grid;gap:4px}
 .insight-durations>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:12px}
@@ -4252,7 +4329,7 @@ class HistoryGraphCard extends HTMLElement {
   const previous=this._config,visibility=this._visibility;
   this._visibility=new Map(validated.entities.map(id=>{const initial=validated.series_options.find(s=>s.entity===id)?.visible??true,old=previous?.series_options.find(s=>s.entity===id)?.visible??true;return [id,initial===old&&visibility?.has(id)?visibility.get(id):initial];}));
   SharedGraph.clearHover(this);this._config={...validated,...timeframeSyncConfig(validated)};this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._generation++;this._inFlight=false;this._series=[];this._rawSeries=null;this._viewport=null;resetGraphPeriod(this);this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);this._timer=null;connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
- set hass(hass){this._hass=hass;if(!this._config)return;let signature;try{const meta=seriesMetadata(hass,this._config.entities);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone]);}catch(e){signature=e.message;}
+ set hass(hass){this._hass=hass;if(!this._config)return;let signature;try{const meta=seriesMetadata(hass,this._config.entities);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?hass.states?.[s.id]?.state:null)]);}catch(e){signature=e.message;}
   if(signature!==this._signature){this._signature=signature;this._render();}
   this._updateGraphTheme();
   if(this._connected&&!this._started)this._refresh();
@@ -4293,6 +4370,13 @@ class HistoryGraphCard extends HTMLElement {
   const start=this._viewStart,end=this._viewEnd;
   return {start,end,rows:this._series.map((s,i)=>({...this._meta.items[i],...chartValueStatistics(s.points,start,end)}))};
  }
+ _usesLiveLegend(series){return series.source==='statistics'&&this._config.aggregation_method!=='delta'&&this._periodEnd==null&&(this._periodOffset??0)===0;}
+ _legendValue(series){
+  // Recorder summaries lag behind live sensors. Keep that lag in the plot,
+  // but use the real current state in a live measurement legend.
+  // Historical statistics bins end exclusively: avoid the closing null sentinel.
+  return this._usesLiveLegend(series)?numericState(this._hass?.states?.[series.id]?.state):valueAt(series.points,this._end-(series.source==='statistics'?1:0));
+ }
  _defaultTitle(lang){return text('title',lang);}
  _render(){
   if(!this._config)return;captureChartInsights(this);const lang=language(this._hass);this._lang=lang;this._zone=this._hass?.config?.time_zone;
@@ -4328,9 +4412,7 @@ class HistoryGraphCard extends HTMLElement {
     fills:display.flatMap((s,i)=>{const a=this._seriesAppearance(i);if(!visible[i]||!a.show_fill)return [];const fillColor=Array.isArray(a.fill_color)?`rgb(${a.fill_color.join(',')})`:a.fill_color;return [{d:this._area(s.points,x,seriesY(i),i),className:'series-fill',fill:a.fill_mode==='own'?fillColor:this._appearance(i).stroke,opacity:a.fill_opacity,mask:a.fill_fade?'url(#history-fill-fade)':null}];}),
     lines:display.flatMap((s,i)=>visible[i]?[{d:this._line(s.points,Math.max(this._viewEnd,s.points.at(-1)?.t??this._viewEnd),x,seriesY(i),i),className:'series-line',entity:s.id,appearance:this._appearance(i)}]:[]),
    });
-   // Statistics bins end exclusively; sample inside the requested range rather
-   // than its closing null sentinel. A real gap before the end remains null.
-   const legend=uiLegend({items:meta.items.map((item,i)=>{const s=this._series[i],value=valueAt(s.points,this._end-(s.source==='statistics'?1:0));const a=this._appearance(i,value);return {id:item.id,visible:visible[i],title:text(visible[i]?'hide_sensor':'show_sensor',lang)+' '+item.name,attrs:{'data-series':item.id},content:`<i style="--series-color:${a.color};border-top-width:${a.width}px;border-top-style:${a.style}"></i><span>${escapeHtml(item.name)}</span><strong>${value===null?text('unavailable',lang):escapeHtml(number(value,lang))}${mixed&&value!==null&&item.unit?` ${escapeHtml(item.unit)}`:''}</strong>`};}),afterContent:mixed?'':`<span class="unit">${escapeHtml(meta.unit)}</span>`});
+   const legend=uiLegend({items:meta.items.map((item,i)=>{const s=this._series[i],value=this._legendValue(s);const a=this._appearance(i,value);return {id:item.id,visible:visible[i],title:text(visible[i]?'hide_sensor':'show_sensor',lang)+' '+item.name,attrs:{'data-series':item.id},content:`<i style="--series-color:${a.color};border-top-width:${a.width}px;border-top-style:${a.style}"></i><span>${escapeHtml(item.name)}</span><strong>${value===null?text('unavailable',lang):escapeHtml(number(value,lang))}${mixed&&value!==null&&item.unit?` ${escapeHtml(item.unit)}`:''}</strong>`};}),afterContent:mixed?'':`<span class="unit">${escapeHtml(meta.unit)}</span>`});
    const missing=meta.items.filter((_,i)=>visible[i]&&!this._series[i].points.some(p=>p.v!==null)).map(s=>s.name);
    content=`${this._config.show_legend?legend:`<div class="data-status">${escapeHtml(mixed?'':meta.unit)}</div>`}${missing.length?`<div class="data-status">${text('partial',lang)} ${escapeHtml(missing.join(', '))}</div>`:''}<div class="chart" style="--axis-column:min(48px, calc((100% - 124px) / ${Math.max(1,extra)}));--axes-right:calc(${extra} * var(--axis-column))" tabindex="0" role="group" aria-label="${text('chart',lang)}">${anyVisible?axes+times:`<div class="empty-visibility" role="status">${escapeHtml(text('no_visible',lang))}</div>`}<div class="plot">${graph}<div class="zoom-selection" hidden></div></div>${this._config.show_hover_line?'<div class="guide" hidden></div>':''}<div class="markers"></div><div class="tooltip" hidden></div><div class="sr-only" aria-live="polite"></div></div>`;
   }
@@ -4400,7 +4482,7 @@ class HistoryGraphCard extends HTMLElement {
   const rows=this._series.flatMap((s,i)=>{if(!this._isSeriesVisible(i))return [];const {min,max}=this._axes?.[this._seriesAxes[i]]??{min:this._range[0],max:this._range[1]};const value=valueAt(s.points,timestamp),height=valueAt((this._plotSeries??this._series)[i].points,timestamp);if(height!==null&&height>=min&&height<=max)positions.push({x:px,y:p.top-box.top+(max-height)/(max-min)*p.height,color:this._appearance(i,value).color});return [{name:this._meta.items[i].name,value:value===null?text('unavailable',this._lang):`${number(value,this._lang)} ${this._meta.items[i].unit??this._meta.unit}`}];});
   if(!rows.length){this._hideTooltip(publish);return;}
   const colors=this._series.flatMap((s,i)=>this._isSeriesVisible(i)?[this._appearance(i,valueAt(s.points,timestamp)).color]:[]);
-  tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)}: <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
+  tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)} <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
   tooltip.style.maxHeight=`${Math.max(0,box.height-8)}px`;
   const measured=tooltip.getBoundingClientRect();let left=Math.max(4,Math.min(box.width-measured.width-4,px+14));
   if(px+14+measured.width>box.width-4)left=Math.max(4,px-measured.width-14);
@@ -4450,6 +4532,14 @@ if(!window.customCards.some(card=>card.type==='eleven-history-graph-card'))windo
 
 ;
 (()=>{
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function uiAttributes(values={}){
@@ -4511,12 +4601,12 @@ function bindUILegend(host,{selector='[data-ui-legend]',getId=button=>button.dat
  }
 }
 
-function uiTabs({id,label,items,selected,className='',panelClassName=''}={}){
+function uiTabs({id,label,items,selected,className='',panelClassName='',variant=''}={}){
  if(typeof id!=='string'||!id||!items?.length||items.some(item=>typeof item.value!=='string'||!item.value)||new Set(items.map(item=>item.value)).size!==items.length)throw Error('Tabs need an id and distinct text values.');
  const active=items.find(item=>item.value===selected&&!item.disabled)??items.find(item=>!item.disabled);
  const tabId=value=>`${id}-tab-${encodeURIComponent(value)}`,panelId=value=>`${id}-panel-${encodeURIComponent(value)}`;
- const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'',role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
- const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
+ const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'','data-ui-card-tabs':variant==='card'?true:null,role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
+ const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,'data-ui-card-tab-panel':variant==='card'?true:null,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
  return bar+panels;
 }
 function bindUITabs({tabs,panels,onSelect=()=>{}}){
@@ -4546,23 +4636,28 @@ function uiTabsStyles(){return `
 [data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
 [data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
 [data-ui-tab-panel][hidden]{display:none!important}
+[data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
+[data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
+[data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
+[data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
 
 function uiPopup({id,title,label=title,closeLabel='Close',content='',className='',attrs={},closeAttrs={}}){
  return `<div${uiAttributes({id,class:className||null,'data-ui-popup':'',popover:'auto',role:'dialog','aria-label':label,...attrs})}><div class="ui-popup-heading"><strong>${uiEscape(title)}</strong>${uiButton({variant:'close',content:'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>',label:closeLabel,attrs:{'data-ui-popup-close':'',...closeAttrs}})}</div>${content}</div>`;
 }
-function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560}){
+function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560,topBoundary=()=>8,align='end'}){
  let active=true;
  const position=()=>{
   if(!active||!isRequested())return;
   const box=trigger.getBoundingClientRect();
   if(!box.width||!box.height){popup.style.visibility='hidden';return;}
-  const actualWidth=Math.min(width,window.innerWidth-16);
-  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-16)+'px';
+  const actualWidth=Math.min(width,window.innerWidth-16),minimumTop=Math.max(8,Math.min(topBoundary(),window.innerHeight-80));
+  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-minimumTop-8)+'px';
   popup.style.visibility='';onShow?.();
   const height=popup.getBoundingClientRect().height,below=window.innerHeight-box.bottom-8,above=box.top-8;
-  popup.style.left=Math.max(8,Math.min(box.right-actualWidth,window.innerWidth-actualWidth-8))+'px';
-  popup.style.top=Math.max(8,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
+  const left=align==='center'?(box.left+box.right-actualWidth)/2:box.right-actualWidth;
+  popup.style.left=Math.max(8,Math.min(left,window.innerWidth-actualWidth-8))+'px';
+  popup.style.top=Math.max(minimumTop,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
  };
  if(ready?.then)ready.then(position,()=>{});
  const observer=typeof ResizeObserver==='function'?new ResizeObserver(position):null;
@@ -4570,7 +4665,7 @@ function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,m
  return {position,disconnect(){active=false;observer?.disconnect();}};
 }
 // Domain state lives in callbacks; this controller also works without a card host.
-function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false}){
+function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false,keepOpenOnOutside=()=>false,topBoundary,align}){
  let requested=false,pending=false,focusPending=false,pointerWasOpen;
  const wantsOpen=isRequested??(()=>requested),native=typeof popup.showPopover==='function';
  const isOpen=()=>native?popup.matches(':popover-open'):popup.hasAttribute('data-fallback-open');
@@ -4578,7 +4673,7 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  const cleanups=[],listen=(target,type,handler,capture=false)=>{target?.addEventListener?.(type,handler,capture);cleanups.push(()=>target?.removeEventListener?.(type,handler,capture));};
  const property=(target,key,handler)=>{if(!target)return;target[key]=handler;cleanups.push(()=>{if(target[key]===handler)target[key]=null;});};
  const closeButton=popup.querySelector('[data-ui-popup-close]');
- const placement=bindUIPopupPosition({trigger,popup,ready,isRequested:wantsOpen,onShow:()=>{
+ const placement=bindUIPopupPosition({trigger,popup,ready,topBoundary,align,isRequested:wantsOpen,onShow:()=>{
   pending=false;if(native){if(!isOpen())popup.showPopover();}else popup.setAttribute('data-fallback-open','');
   if(focusPending){(focusTarget?.()??closeButton)?.focus({preventScroll:true});focusPending=false;}
   onShown();
@@ -4597,13 +4692,14 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  listen(popup,'toggle',e=>{if(!isCurrent())return;const opened=e.newState==='open';if(!opened){if(wantsOpen())onClose();pending=false;focusPending=false;}requested=opened;trigger.setAttribute('aria-expanded',String(opened));onToggle(opened);});
  listen(window,'resize',()=>{if(wantsOpen()){if(closeWhenAnchorHidden&&trigger.getClientRects?.().length===0)close();else placement.position();}});
  listen(window,'scroll',e=>{if(isOpen()&&!e.composedPath().includes(popup))close();},true);
- listen(document,'pointerdown',e=>{if((!native||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container))close();});
+ listen(document,'pointerdown',e=>{if((!native||popup.getAttribute?.('popover')==='manual'||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container)&&!keepOpenOnOutside(e))close();});
  return {open,close,isOpen,position:placement.position,disconnect(){placement.disconnect();cleanups.splice(0).forEach(remove=>remove());}};
 }
-function uiPopupStyles(){return `
-[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:8px 12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:1px solid var(--divider-color,#ddd);border-radius:10px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35;box-shadow:0 8px 28px #0004}
+function uiPopupStyles(){return uiSurfaceStyles('[data-ui-popup]')+`
+[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:0;border-radius:8px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35}
 [data-ui-popup]:popover-open,[data-ui-popup][data-fallback-open]{display:block}
 [data-ui-popup] [hidden]{display:none!important}
+[data-ui-popup]>:last-child{margin-block-end:0}
 .ui-popup-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px}
 .ui-popup-heading>strong{font-size:14px;font-weight:600}
 .ui-popup-heading [data-ui-popup-close]{display:grid;place-items:center;width:30px;height:30px;min-height:30px;padding:0;line-height:1;flex:none}
@@ -4639,14 +4735,14 @@ function cardHeader({title,showTitle=true,ready=false,historyUrl,language='en',p
  const showZoomStatus=zoomState.zoomed&&!periods.picker;
  return `<header class="card-header">${showTitle&&title?`<h2>${headerEscape(title)}</h2>`:''}<div class="header-actions">${group}${zoom}<div class="chart-links" role="group" aria-label="${nl?'Geschiedenis en informatie':'History and information'}">${uiButton({href:historyUrl??'',className:'history-link',content:cardHeaderIcon('history'),title:label[3],label:label[3]})}${information}</div></div></header>${showZoomStatus?`<div class="chart-context"><div class="chart-range"><span class="zoom-status">${nl?'Ingezoomd':'Zoomed in'}</span></div></div>`:''}`;
 }
-function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+`
+function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+uiSurfaceStyles('.chart-controls,.zoom-controls,.chart-links')+`
 .card-header{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;min-height:32px;flex:none;margin:-6px -4px 10px 0}
 .card-header h2{flex:1 1 110px;min-width:0;margin:4.75px 0 0;font-size:18px;line-height:1.25;font-weight:650;letter-spacing:-.01em;overflow-wrap:anywhere}
 .header-actions{--chart-action-gap:8px;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--chart-action-gap);flex:0 1 auto;min-width:0;max-width:100%;margin-inline-start:auto}
 .chart-controls{display:flex;align-items:center;gap:0;min-width:0;max-width:100%}
 .chart-links{display:flex;align-items:center;gap:0;flex:none}
 .zoom-controls{display:flex;gap:0;position:relative}
-.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border-radius:5px}
+.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border:0;border-radius:8px}
 .chart-controls>[data-period="now"]{width:36px}
 .chart-controls>.period-controls{position:relative;margin-inline-end:8px;padding-inline-end:8px}
 .chart-controls>.period-controls::after{content:"";position:absolute;inset-inline-end:0;top:8px;height:16px;width:1px;background:var(--divider-color,#ddd)}
@@ -4704,7 +4800,7 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return `.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:8px 10px;border:1px solid var(--divider-color,#ddd);border-radius:6px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));box-shadow:0 3px 12px #0002;font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:4px;white-space:normal}.tooltip span{display:grid;grid-template-columns:9px minmax(0,1fr);column-gap:6px;margin-top:5px;white-space:normal}.tooltip i{display:block;width:9px;height:9px;margin:4px 0 0;border:0;border-radius:3px;flex-shrink:0;background:var(--series-color)}.tooltip b{font-weight:600;min-width:0;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -4992,7 +5088,7 @@ function compactPeriodName({start,end,mode,past,zoomed,hours,name,locale,zone}){
  if(past)return `${dateRange(start,end)} · ${hours>=168&&hours%24===0?`${hours/24} ${locale==='nl-NL'?'dagen':'days'}`:`${hours} ${locale==='nl-NL'?'uur':hours===1?'hour':'hours'}`}`;
  return name;
 }
-function periodControls(host,language='en'){
+function periodControls(host,language='en',{popupNavigation=false,tabVariant=''}={}){
  const active=host.shadowRoot.activeElement;
  if(!host._periodMenuPending)host._periodFocus=null;
  if(active?.closest?.('.header-actions'))host._periodFocus=active.dataset.periodTab!=null?`tab:${active.dataset.periodTab}`:active.dataset.customField!=null?`custom:${active.dataset.customField}`:active.dataset.periodOption!=null?`option:${active.dataset.periodOption}`:active.dataset.zoom!=null?`zoom:${active.dataset.zoom}`:active.classList.contains('history-link')?'history':active.dataset.period;
@@ -5024,14 +5120,15 @@ function periodControls(host,language='en'){
  const customRange=graphPeriodRange(host),draft=host._periodCustomDraft??{start:periodDateTime(customRange.start,zone),end:periodDateTime(customRange.end,zone)};
  const canGoNext=mode==='custom'?host._periodEnd!=null&&customRange.end<Date.now():past;
  const custom=`<form data-custom-range><div class="period-custom-fields">${[['start',label('Start','Begin')],['end',label('End','Einde')]].map(([key,text])=>`<label>${text}<input type="datetime-local" name="${key}" data-custom-field="${key}" value="${periodEscape(draft[key])}" step="60" required></label>`).join('')}</div><p class="period-custom-zone">${periodEscape(zone)}</p><p class="period-custom-error" role="alert"${draft.error?'':' hidden'}>${periodEscape(draft.error??'')}</p>${uiButton({variant:'surface',type:'submit',text:label('Apply','Toepassen'),attrs:{'data-custom-field':'apply'}})}</form>`;
- const contents=uiTabs({id:'eleven-period',label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
+ const contents=uiTabs({id:'eleven-period',variant:tabVariant,label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
   {value:'rolling',label:label('Last','Afgelopen'),content:`<div class="period-options" role="menu" aria-label="${label('Last','Afgelopen')}">${rolling.map(choice).join('')}</div>`},
   {value:'calendar',label:label('Calendar','Kalender'),content:`<div class="period-options period-calendar" role="menu" aria-label="${label('Calendar','Kalender')}">${calendar.map(([id,text])=>choice([id,text])).join('')}</div>`},
   {value:'custom',label:label('Custom range','Eigen bereik'),content:custom,className:'period-custom'}
  ].map(item=>({...item,tabAttrs:{'data-period-tab':item.value},panelAttrs:{'data-period-panel':item.value}}))});
- const popup=uiPopup({id:'eleven-period-menu',className:'period-menu',title:label('Timeframe','Tijdvak'),label:label('Choose a period','Kies een periode'),closeLabel:label('Close','Sluiten'),closeAttrs:{'data-period':'close'},content:`<div class="period-current-range">${periodEscape(range)}${zoomed?`<span class="zoom-status">${label('Zoomed in','Ingezoomd')}</span>`:''}</div><div class="period-default" role="menu" aria-label="${label('Default','Standaard')}">${choice(['configured',standard])}</div>${contents}`});
- const trigger=uiButton({className:'period-trigger',content:`<span>${periodEscape(compactName)}</span>${cardHeaderIcon('down')}`,attrs:{'data-period':'menu','aria-haspopup':'dialog','aria-controls':'eleven-period-menu','aria-expanded':host._periodMenuOpen===true,title:range,'aria-label':label('Timeframe','Tijdvak')+': '+compactName,'aria-description':range+(zoomed?'. '+label('Zoomed in','Ingezoomd'):'')}});
  const navigation=[['previous',label('Previous period','Vorige periode')],['now',label('Return to the current period','Terug naar de huidige periode')],['next',label('Next period','Volgende periode')]].map(([key,title])=>uiButton({text:key==='now'?label('Now','Nu'):'',content:key==='now'?undefined:cardHeaderIcon(key),disabled:key==='next'&&!canGoNext,title,label:title,attrs:{'data-period':key}})).join('');
+ const popup=uiPopup({id:'eleven-period-menu',className:'period-menu',title:label('Timeframe','Tijdvak'),label:label('Choose a period','Kies een periode'),closeLabel:label('Close','Sluiten'),closeAttrs:{'data-period':'close'},content:`<div class="period-current-range">${periodEscape(range)}${zoomed?`<span class="zoom-status">${label('Zoomed in','Ingezoomd')}</span>`:''}</div><div class="period-default" role="menu" aria-label="${label('Default','Standaard')}">${choice(['configured',standard])}</div>${contents}${popupNavigation?`<div class="period-menu-navigation" role="group" aria-label="${label('Period navigation','Periode navigeren')}">${navigation}</div>`:''}`});
+ const trigger=uiButton({className:'period-trigger',content:`<span>${periodEscape(compactName)}</span>${cardHeaderIcon('down')}`,attrs:{'data-period':'menu','aria-haspopup':'dialog','aria-controls':'eleven-period-menu','aria-expanded':host._periodMenuOpen===true,title:range,'aria-label':label('Timeframe','Tijdvak')+': '+compactName,'aria-description':range+(zoomed?'. '+label('Zoomed in','Ingezoomd'):'')}});
+
  return {picker:`<div class="period-controls">${trigger}${popup}</div>`,navigation};
 
 }
@@ -5095,11 +5192,13 @@ function bindPeriodControls(host){
    visible[next].focus();
   }
  };
- for(const [key,direction]of [['previous',-1],['next',1],['now',0]])root.querySelector(`[data-period="${key}"]`).onclick=()=>{close();moveGraphPeriod(host,direction);};
+ for(const [key,direction]of [['previous',-1],['next',1],['now',0]])for(const button of root.querySelectorAll(`[data-period="${key}"]`))button.onclick=()=>{close();moveGraphPeriod(host,direction);};
  if(host._periodMenuOpen)open(false);
  if(!host._periodMenuPending)restorePeriodFocus(host,items);
 }
 function periodControlsStyles(){return uiTabsStyles()+`
+.period-menu-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;margin-top:12px;border-top:1px solid var(--divider-color,#ddd)}
+.period-menu-navigation>[data-period]{width:36px;height:32px}.period-menu-navigation>[data-period=now]{width:auto;padding:4px 12px}
 .period-controls{display:flex;min-width:0;max-width:100%;flex:0 1 auto}
 .header-actions .period-trigger{width:auto;min-width:0;max-width:100%;flex:0 1 auto;gap:6px;padding:4px 10px;border:0;border-radius:4px;background:transparent;font-weight:400}
 .header-actions .period-trigger:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
@@ -5107,8 +5206,9 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-current-range{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;margin:2px 0 10px}
 .period-current-range .zoom-status{display:table;margin-top:4px}
 .period-tabs{margin:10px 0 0}
+.period-menu:has([data-ui-card-tabs]){font-size:inherit;line-height:inherit}
 .period-panel{padding-top:12px}
-.period-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:4px}
+.period-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:0}
 .period-options button{position:relative;justify-content:center;padding:7px 3px;gap:0;min-width:0;white-space:nowrap}
 .period-options button>span:last-child{position:absolute;inset-inline-end:2px;top:1px;font-size:9px;line-height:1}
 .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -5119,6 +5219,37 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-custom p{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);margin:8px 0;overflow-wrap:anywhere}
 .period-custom .period-custom-error{color:var(--error-color,#db4437)}
 .period-custom button[type="submit"]{justify-content:center;margin-top:10px}
+`;}
+
+
+// Informational detail surface. Callers format/translate text and compute percentages.
+// All content is escaped; this component deliberately accepts no trusted HTML.
+function uiDetailSurface({title='',metrics=[],percent=null,entity='',actionLabel='',attrs={}}={}){
+ const progress=Number.isFinite(percent)?Math.max(0,Math.min(100,percent)):null;
+ return `<section${uiAttributes({...attrs,'data-ui-detail-surface':'','aria-label':title})}>
+  <h3 class="ui-detail-surface-title">${entity?`<button type="button" class="ui-detail-surface-action" data-entity="${uiEscape(entity)}" aria-label="${uiEscape(actionLabel||title)}">${uiEscape(title)} <span aria-hidden="true">›</span></button>`:uiEscape(title)}</h3>
+  <dl class="ui-detail-surface-metrics">${metrics.map(({label='',value,unit='',hint=''})=>{
+   const missing=value==null||value==='';
+   return `<div><dt>${uiEscape(label)}</dt><dd>${uiEscape(missing?'—':value)}${!missing&&unit?' '+uiEscape(unit):''}${hint?`<small class="ui-detail-surface-hint">${uiEscape(hint)}</small>`:''}</dd></div>`;
+  }).join('')}</dl>
+  ${progress==null?'':`<div class="ui-detail-surface-track" aria-hidden="true"><i style="width:${progress}%"></i></div>`}
+ </section>`;
+}
+
+function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+`
+[data-ui-detail-surface]{box-sizing:border-box;min-width:0;padding:12px;border-radius:8px;color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--ui-detail-tone,var(--primary-color,#2196f3)) 5%,transparent)}
+[data-ui-detail-surface] .ui-detail-surface-title{font-family:inherit;font-size:12px;font-weight:600;line-height:1.4;color:inherit;margin:0 0 8px;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-action{font:inherit;line-height:1.4;color:inherit;background:none;border:0;border-radius:4px;padding:4px 0;margin:-4px 0;text-align:start;cursor:pointer}
+[data-ui-detail-surface] .ui-detail-surface-action:hover{text-decoration:underline}[data-ui-detail-surface] .ui-detail-surface-action:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
+[data-ui-detail-surface] .ui-detail-surface-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,68px),1fr));gap:8px 12px;margin:0}
+[data-ui-detail-surface] .ui-detail-surface-metrics>div{min-width:0}
+[data-ui-detail-surface] dt{font-size:10px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere;margin:0 0 2px}
+[data-ui-detail-surface] dd{margin:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-hint{display:block;margin-top:3px;font-size:10px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--secondary-text-color,#626a78)}
+[data-ui-detail-surface] .ui-detail-surface-track{height:8px;border-radius:8px;background:var(--divider-color,#ddd);overflow:hidden;margin-top:8px}
+[data-ui-detail-surface] .ui-detail-surface-track>i{display:block;height:100%;background:var(--ui-detail-tone,var(--primary-color,#2196f3))}
+@container(max-width:360px){[data-ui-detail-surface] dd{font-size:15px}}
+@media(forced-colors:active){[data-ui-detail-surface]{border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track{background:Canvas;border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track>i{background:Highlight;forced-color-adjust:none}}
 `;}
 
 const insightEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -5182,10 +5313,10 @@ function chartDataInformation(host,language='en'){
    const source=load.sources.find(s=>s.id===item.id),row=summary?.rows.find(r=>r.id===item.id),hidden=!host._isSeriesVisible(i);
    const sourceLabel=source?(source.source==='statistics'?(nl?'Statistieken':'Statistics'):(nl?'Historie':'History')):(nl?'Niet geladen':'Not loaded');
    const unit=row?.unit??host._hass?.states?.[item.id]?.attributes?.unit_of_measurement??'';
-   const metrics=row?.durations?`<dl class="insight-durations">${row.durations.map(s=>`<div><dt title="${insightEscape(s.missing?(nl?'Geen geschiedenis':'No history'):s.state)}">${insightEscape(s.label)}</dt><dd>${insightEscape(host._duration(s.duration))}</dd></div>`).join('')}</dl>`:row?`<dl class="insight-metrics${'total' in row?' has-total':''}">${[['minimum','Min'],['maximum','Max'],['average',nl?'Gem.':'Avg.']].map(([key,label])=>`<div><dt${key==='average'?` title="${nl?'Gemiddeld':'Average'}"`:''}>${label}</dt><dd data-metric="${key}">${value(row[key])}</dd></div>`).join('')}${'total' in row?`<div><dt title="${nl?'Som van volledige staven':'Sum of whole bars'}">${nl?'Som':'Sum'}</dt><dd data-metric="total">${value(row.total)}</dd></div>`:''}</dl>`:'';
+   const metrics=row?.durations?`<dl class="insight-durations">${row.durations.map(s=>`<div><dt title="${insightEscape(s.missing?(nl?'Geen geschiedenis':'No history'):s.state)}">${insightEscape(s.label)}</dt><dd>${insightEscape(host._duration(s.duration))}</dd></div>`).join('')}</dl>`:row?`<dl class="ui-detail-surface-metrics insight-metrics${'total' in row?' has-total':''}">${[['minimum','Min'],['maximum','Max'],['average',nl?'Gem.':'Avg.']].map(([key,label])=>`<div><dt${key==='average'?` title="${nl?'Gemiddeld':'Average'}"`:''}>${label}</dt><dd data-metric="${key}">${value(row[key])}</dd></div>`).join('')}${'total' in row?`<div><dt title="${nl?'Som van volledige staven':'Sum of whole bars'}">${nl?'Som':'Sum'}</dt><dd data-metric="total">${value(row.total)}</dd></div>`:''}</dl>`:'';
    const states=[host._inFlight?(nl?'Vernieuwen…':'Refreshing…'):host._loadFailed?(nl?'Verouderd':'Outdated'):'',hidden?(nl?'Verborgen':'Hidden'):'',row?.limited?(nl?'Meer dan 20 statussen':'More than 20 states'):row?.count===0||source?.empty?(nl?'Geen gegevens':'No data'):row?.missing?(nl?'Onvolledig':'Incomplete'):''].filter(Boolean);
    const color=host._insightColor?.(i,row)??'var(--primary-color,#2196f3)';
-   return `<section class="insight-sensor" data-information-entity="${insightEscape(item.id)}"><div class="insight-sensor-heading"><i class="insight-color" style="--insight-color:${insightEscape(color)}" aria-hidden="true"></i><strong>${insightEscape(item.name)}</strong><span class="insight-source">${sourceLabel}${unit?` <span class="insight-unit">· ${insightEscape(unit)}</span>`:''}</span></div>${metrics}${states.length?`<div class="insight-states" role="status">${states.join(' · ')}</div>`:''}</section>`;
+   return `<section class="insight-sensor" data-information-entity="${insightEscape(item.id)}" data-ui-detail-surface><div class="insight-sensor-heading ui-detail-surface-title"><i class="insight-color" style="--insight-color:${insightEscape(color)}" aria-hidden="true"></i><strong>${insightEscape(item.name)}</strong><span class="insight-source">${sourceLabel}${unit?` <span class="insight-unit">· ${insightEscape(unit)}</span>`:''}</span></div>${metrics}${states.length?`<div class="insight-states" role="status">${states.join(' · ')}</div>`:''}</section>`;
   }).join('')}</div>`;
  }
  return insightControl(host,'data',nl?'Gegevens':'Data information',body,cardHeaderIcon('info'));
@@ -5226,7 +5357,7 @@ function bindChartInsights(host){
  if(host._insightFocus)listen(document,'pointerdown',e=>{if(!e.composedPath().includes(host)){host._insightFocus=null;host._insightOpen=null;host._insightPending=null;}},true);
  bindChartLegend(host);
 }
-function chartInsightStyles(){return `
+function chartInsightStyles(){return uiDetailSurfaceStyles()+`
 .chart-context{display:flex;align-items:center;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;flex:none;margin:0 0 8px;min-width:0}
 .chart-range{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;min-width:0;flex:1}
 .chart-range .period-panel{margin:0}
@@ -5241,19 +5372,15 @@ function chartInsightStyles(){return `
 .insight-popup p strong{color:var(--primary-text-color,#20252b);font-weight:500}
 .insight-popup .insight-choice{display:block;width:100%;padding:6px 8px;text-align:start;overflow-wrap:anywhere}
 .insight-choice[aria-pressed="true"]{background:var(--secondary-background-color,#eee);font-weight:600}
-.insight-sensors{display:grid}
-.insight-sensor{min-width:0;padding:8px 0}
-.insight-sensor+.insight-sensor{border-top:1px solid var(--divider-color,#ddd)}
+.insight-sensors{display:grid;gap:10px}
+.insight-sensor{min-width:0}
 .insight-sensor-heading{display:flex;align-items:center;flex-wrap:wrap;gap:2px 8px}
 .insight-color{display:block;width:7px;height:7px;flex:none;border-radius:2px;background:var(--insight-color,var(--primary-color,#2196f3))}
 .insight-sensor-heading>strong{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
 .insight-source{font-size:10px;font-weight:400;color:var(--secondary-text-color,#666);color:color-mix(in srgb,var(--secondary-text-color,#666) 90%,var(--ha-card-background,var(--card-background-color,#fff)));flex:none}
 .insight-unit{white-space:nowrap}
-.insight-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 8px;margin:6px 0 0}
+.insight-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
 .insight-metrics.has-total{grid-template-columns:repeat(4,minmax(0,1fr))}
-.insight-metrics>div{min-width:0}
-.insight-metrics dt{font-size:10px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere}
-.insight-metrics dd{margin:1px 0 0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:var(--primary-text-color,#20252b)}
 .insight-states{font-size:10px;color:var(--secondary-text-color,#666);margin-top:4px}
 .insight-durations{margin:6px 0 0;display:grid;gap:4px}
 .insight-durations>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:12px}
@@ -5319,7 +5446,7 @@ const TimelineView={
   if(!SharedGraph.tooltipInView(this)){this._hideTooltip(publish);return;}
   const chart=this.shadowRoot.querySelector('.chart'),tooltip=chart?.querySelector('.tooltip'),guide=chart?.querySelector('.guide');if(!tooltip)return;
   this._cursor=t;const nl=this._nl(),a=this._viewStart,b=this._viewEnd,esc=escapeTimeline;
-  tooltip.innerHTML=`<strong>${esc(this._time(t))}</strong>`+this._config.entities.map((id,i)=>{if(!this._isSeriesVisible(i)||this._stateLimits?.[i])return '';const s=this._segmentAt(this._series[i]??[],t,b),v=s?this._segmentAppearance(s,id):{label:nl?'Geen geschiedenis':'No history',color:'transparent'};return `<span><i style="background:${v.color}"></i><b class="tooltip-label">${esc(this._name(id))}: <em class="tooltip-value">${esc(v.label)}</em></b>${s?`<small>${esc(this._time(s.start))} – ${esc(this._time(s.end))} · ${esc(this._duration(s.end-s.start))}</small>`:''}</span>`;}).join('');
+  tooltip.innerHTML=`<strong>${esc(this._time(t))}</strong>`+this._config.entities.map((id,i)=>{if(!this._isSeriesVisible(i)||this._stateLimits?.[i])return '';const s=this._segmentAt(this._series[i]??[],t,b),v=s?this._segmentAppearance(s,id):{label:nl?'Geen geschiedenis':'No history',color:'transparent'};return `<span><i style="background:${v.color}"></i><b class="tooltip-label">${esc(this._name(id))} <em class="tooltip-value">${esc(v.label)}</em></b>${s?`<small>${esc(this._time(s.start))} – ${esc(this._time(s.end))} · ${esc(this._duration(s.end-s.start))}</small>`:''}</span>`;}).join('');
   tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';const box=chart.getBoundingClientRect(),px=(t-a)/(b-a)*box.width;
   if(guide){guide.hidden=false;guide.style.left=`${px}px`;}
   tooltip.style.maxHeight=`${Math.min(360,(window.innerHeight??480)-16)}px`;
@@ -5347,12 +5474,12 @@ const TimelineView={
    if(c.show_axis)body+=`<div class="axis">${this._ticks().map(r=>`<span>${esc(this._time(a+(b-a)*r))}</span>`).join('')}</div>`;
    if(c.show_legend)body+=`<div class="legend">${[...legend.values()].map(v=>`<span><i style="background:${v.color}"></i>${esc(v.label)}</span>`).join('')}</div>`;
   }
-  this.shadowRoot.innerHTML=`<style>:host{display:block;height:100%;min-width:0;min-height:0}ha-card{display:block;min-height:0;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font-family:inherit;height:100%}
-.content{height:100%;min-height:0;overflow:auto;padding:16px 16px 12px;box-sizing:border-box;position:relative;scrollbar-width:thin}
+  this.shadowRoot.innerHTML=`<style>:host{display:block;container-type:inline-size;height:100%;min-width:0;min-height:0}ha-card{display:block;min-height:0;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font-family:inherit;height:100%}
+.content{height:100%;min-height:0;overflow:auto;padding:var(--eleven-card-padding,16px);box-sizing:border-box;position:relative;scrollbar-width:thin}
 ${cardHeaderStyles()}
 ${periodControlsStyles()}
 ${chartInsightStyles()}
-@media(max-width:480px){.content{padding:12px 12px 10px}}
+@container(max-width:480px){.content{padding:var(--eleven-card-padding,16px)}}
 .chart{position:relative;touch-action:pan-y;min-width:0}
 .grid-line{position:absolute;top:0;bottom:0;border-left:1px solid var(--divider-color,#ddd);opacity:.45;pointer-events:none}
 .row{position:relative}
@@ -5860,7 +5987,7 @@ class OverviewCard extends HTMLElement{
    const difference=change==null?(dutch?'Geen vergelijkingspunt':'No comparison point'):`${change>0?'+':''}${this._format(change)}${unit?' '+(unit==='%'?'pp':unit):''}`;
    return `<button type="button" class="metric" data-entity="${esc(row.entity)}" aria-label="${esc(name+': '+(status||this._format(v)+' '+unit))}" style="--series-color:${color(row.color,PALETTE[i])}"><span class="label"><i></i>${esc(name)}</span><span class="reading"><span class="value">${v==null?'—':esc(this._format(displayValue,v))}</span>${v!=null&&unit?`<span class="unit">${esc(unit)}</span>`:''}</span>${status?`<span class="status">${status}</span>`:''}${c.show_graph?`<span class="spark">${path?`<svg viewBox="0 0 300 48" preserveAspectRatio="none" aria-hidden="true"><path d="${path}"/></svg>`:`<span>${graphStatus}</span>`}</span>`:''}${c.show_delta?`<span class="delta">${v==null?'—':esc(difference)}</span><span class="caption">${dutch?'sinds begin periode':'since period start'}</span>`:''}</button>`;
   }).join('');
-  this.shadowRoot.innerHTML=`<style>:host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}ha-card{display:block;height:100%;font-family:inherit;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b)}.content{height:100%;min-height:0;overflow:auto;padding:16px;box-sizing:border-box;scrollbar-width:thin}header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:20px}h2{font-size:18px;font-weight:650;letter-spacing:-.01em;line-height:1.25;margin:0;overflow-wrap:anywhere}.period{font-size:12px;text-align:right;overflow-wrap:anywhere;color:var(--secondary-text-color,#666);}.grid{display:grid;grid-template-columns:repeat(${c.columns==='auto'?'2':c.columns},minmax(0,1fr));gap:20px 24px}.metric{appearance:none;font:inherit;color:inherit;background:none;border:0;border-radius:4px;text-align:left;min-width:0;min-height:44px;padding:0;cursor:pointer;display:flex;flex-direction:column;align-items:stretch}.metric:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:5px}.label{font-size:12px;color:var(--secondary-text-color,#666);line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:7px}.label i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--series-color);flex-shrink:0}.reading{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;margin-top:6px;font-variant-numeric:tabular-nums;min-width:0}.value{font-size:28px;font-weight:550;line-height:1.25;overflow-wrap:anywhere;letter-spacing:-.025em}.unit{font-size:13px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere}.spark{height:48px;display:flex;align-items:center;margin-top:8px;color:var(--secondary-text-color,#666);font-size:11px}.spark svg{width:100%;height:48px;overflow:visible}.spark path{fill:none;stroke:var(--series-color);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.delta{font-size:12px;font-variant-numeric:tabular-nums;margin-top:8px;overflow-wrap:anywhere}.caption{font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}.status{font-size:12px;color:var(--secondary-text-color,#666);margin-top:4px}.error{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;font-size:12px;color:var(--secondary-text-color,#666)}.retry{font:inherit;min-height:44px;flex-shrink:0;padding:8px 12px;border:1px solid var(--divider-color,#ddd);border-radius:6px;background:transparent;color:inherit;cursor:pointer}@container(max-width:340px){.grid{grid-template-columns:minmax(0,1fr)}header{margin-bottom:16px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}</style><ha-card><div class="content"><header><h2>${esc(c.title)}${/\(beta\)/i.test(c.title)?'':' <small>(beta)</small>'}</h2><span class="period">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span><button type="button" class="retry">${dutch?'Opnieuw':'Retry'}</button></div>`:''}</div></ha-card>`;
+  this.shadowRoot.innerHTML=`<style>:host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}ha-card{display:block;height:100%;font-family:inherit;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b)}.content{height:100%;min-height:0;overflow:auto;padding:var(--eleven-card-padding,16px);box-sizing:border-box;scrollbar-width:thin}header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:20px}h2{font-size:18px;font-weight:650;letter-spacing:-.01em;line-height:1.25;margin:0;overflow-wrap:anywhere}.period{font-size:12px;text-align:right;overflow-wrap:anywhere;color:var(--secondary-text-color,#666);}.grid{display:grid;grid-template-columns:repeat(${c.columns==='auto'?'2':c.columns},minmax(0,1fr));gap:20px 24px}.metric{appearance:none;font:inherit;color:inherit;background:none;border:0;border-radius:4px;text-align:left;min-width:0;min-height:44px;padding:0;cursor:pointer;display:flex;flex-direction:column;align-items:stretch}.metric:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:5px}.label{font-size:12px;color:var(--secondary-text-color,#666);line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:7px}.label i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--series-color);flex-shrink:0}.reading{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;margin-top:6px;font-variant-numeric:tabular-nums;min-width:0}.value{font-size:28px;font-weight:550;line-height:1.25;overflow-wrap:anywhere;letter-spacing:-.025em}.unit{font-size:13px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere}.spark{height:48px;display:flex;align-items:center;margin-top:8px;color:var(--secondary-text-color,#666);font-size:11px}.spark svg{width:100%;height:48px;overflow:visible}.spark path{fill:none;stroke:var(--series-color);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.delta{font-size:12px;font-variant-numeric:tabular-nums;margin-top:8px;overflow-wrap:anywhere}.caption{font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}.status{font-size:12px;color:var(--secondary-text-color,#666);margin-top:4px}.error{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;font-size:12px;color:var(--secondary-text-color,#666)}.retry{font:inherit;min-height:44px;flex-shrink:0;padding:8px 12px;border:1px solid var(--divider-color,#ddd);border-radius:6px;background:transparent;color:inherit;cursor:pointer}@container(max-width:340px){.grid{grid-template-columns:minmax(0,1fr)}header{margin-bottom:16px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}</style><ha-card><div class="content"><header><h2>${esc(c.title)}${/\(beta\)/i.test(c.title)?'':' <small>(beta)</small>'}</h2><span class="period">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span><button type="button" class="retry">${dutch?'Opnieuw':'Retry'}</button></div>`:''}</div></ha-card>`;
   this.shadowRoot.querySelectorAll('.metric').forEach(b=>{b.onclick=()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:b.dataset.entity},bubbles:true,composed:true}));if(b.dataset.entity===focus)b.focus();});const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();
  }
 }
@@ -5871,7 +5998,7 @@ if(!window.customCards.some(c=>c.type==='eleven-overview-card'))window.customCar
 })();
 
 ;
-/* Eleven Bar Chart — local beta; standalone, based on Eleven History. */
+/* Eleven Bar Chart — standalone, based on Eleven History. */
 (()=>{
 "use strict";
 
@@ -5927,7 +6054,7 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return `.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:8px 10px;border:1px solid var(--divider-color,#ddd);border-radius:6px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));box-shadow:0 3px 12px #0002;font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:4px;white-space:normal}.tooltip span{display:grid;grid-template-columns:9px minmax(0,1fr);column-gap:6px;margin-top:5px;white-space:normal}.tooltip i{display:block;width:9px;height:9px;margin:4px 0 0;border:0;border-radius:3px;flex-shrink:0;background:var(--series-color)}.tooltip b{font-weight:600;min-width:0;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -6020,6 +6147,15 @@ function graphStyles() {
   `;
 }
 
+// ../../shared/ui-surface.js
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
 // ../../shared/ui-button.js
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -6084,12 +6220,12 @@ function bindUILegend(host,{selector='[data-ui-legend]',getId=button=>button.dat
 }
 
 // ../../shared/ui-tabs.js
-function uiTabs({id,label,items,selected,className='',panelClassName=''}={}){
+function uiTabs({id,label,items,selected,className='',panelClassName='',variant=''}={}){
  if(typeof id!=='string'||!id||!items?.length||items.some(item=>typeof item.value!=='string'||!item.value)||new Set(items.map(item=>item.value)).size!==items.length)throw Error('Tabs need an id and distinct text values.');
  const active=items.find(item=>item.value===selected&&!item.disabled)??items.find(item=>!item.disabled);
  const tabId=value=>`${id}-tab-${encodeURIComponent(value)}`,panelId=value=>`${id}-panel-${encodeURIComponent(value)}`;
- const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'',role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
- const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
+ const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'','data-ui-card-tabs':variant==='card'?true:null,role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
+ const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,'data-ui-card-tab-panel':variant==='card'?true:null,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
  return bar+panels;
 }
 function bindUITabs({tabs,panels,onSelect=()=>{}}){
@@ -6119,24 +6255,29 @@ function uiTabsStyles(){return `
 [data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
 [data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
 [data-ui-tab-panel][hidden]{display:none!important}
+[data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
+[data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
+[data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
+[data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
 
 // ../../shared/ui-popup.js
 function uiPopup({id,title,label=title,closeLabel='Close',content='',className='',attrs={},closeAttrs={}}){
  return `<div${uiAttributes({id,class:className||null,'data-ui-popup':'',popover:'auto',role:'dialog','aria-label':label,...attrs})}><div class="ui-popup-heading"><strong>${uiEscape(title)}</strong>${uiButton({variant:'close',content:'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>',label:closeLabel,attrs:{'data-ui-popup-close':'',...closeAttrs}})}</div>${content}</div>`;
 }
-function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560}){
+function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560,topBoundary=()=>8,align='end'}){
  let active=true;
  const position=()=>{
   if(!active||!isRequested())return;
   const box=trigger.getBoundingClientRect();
   if(!box.width||!box.height){popup.style.visibility='hidden';return;}
-  const actualWidth=Math.min(width,window.innerWidth-16);
-  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-16)+'px';
+  const actualWidth=Math.min(width,window.innerWidth-16),minimumTop=Math.max(8,Math.min(topBoundary(),window.innerHeight-80));
+  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-minimumTop-8)+'px';
   popup.style.visibility='';onShow?.();
   const height=popup.getBoundingClientRect().height,below=window.innerHeight-box.bottom-8,above=box.top-8;
-  popup.style.left=Math.max(8,Math.min(box.right-actualWidth,window.innerWidth-actualWidth-8))+'px';
-  popup.style.top=Math.max(8,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
+  const left=align==='center'?(box.left+box.right-actualWidth)/2:box.right-actualWidth;
+  popup.style.left=Math.max(8,Math.min(left,window.innerWidth-actualWidth-8))+'px';
+  popup.style.top=Math.max(minimumTop,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
  };
  if(ready?.then)ready.then(position,()=>{});
  const observer=typeof ResizeObserver==='function'?new ResizeObserver(position):null;
@@ -6144,7 +6285,7 @@ function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,m
  return {position,disconnect(){active=false;observer?.disconnect();}};
 }
 // Domain state lives in callbacks; this controller also works without a card host.
-function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false}){
+function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false,keepOpenOnOutside=()=>false,topBoundary,align}){
  let requested=false,pending=false,focusPending=false,pointerWasOpen;
  const wantsOpen=isRequested??(()=>requested),native=typeof popup.showPopover==='function';
  const isOpen=()=>native?popup.matches(':popover-open'):popup.hasAttribute('data-fallback-open');
@@ -6152,7 +6293,7 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  const cleanups=[],listen=(target,type,handler,capture=false)=>{target?.addEventListener?.(type,handler,capture);cleanups.push(()=>target?.removeEventListener?.(type,handler,capture));};
  const property=(target,key,handler)=>{if(!target)return;target[key]=handler;cleanups.push(()=>{if(target[key]===handler)target[key]=null;});};
  const closeButton=popup.querySelector('[data-ui-popup-close]');
- const placement=bindUIPopupPosition({trigger,popup,ready,isRequested:wantsOpen,onShow:()=>{
+ const placement=bindUIPopupPosition({trigger,popup,ready,topBoundary,align,isRequested:wantsOpen,onShow:()=>{
   pending=false;if(native){if(!isOpen())popup.showPopover();}else popup.setAttribute('data-fallback-open','');
   if(focusPending){(focusTarget?.()??closeButton)?.focus({preventScroll:true});focusPending=false;}
   onShown();
@@ -6171,13 +6312,14 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  listen(popup,'toggle',e=>{if(!isCurrent())return;const opened=e.newState==='open';if(!opened){if(wantsOpen())onClose();pending=false;focusPending=false;}requested=opened;trigger.setAttribute('aria-expanded',String(opened));onToggle(opened);});
  listen(window,'resize',()=>{if(wantsOpen()){if(closeWhenAnchorHidden&&trigger.getClientRects?.().length===0)close();else placement.position();}});
  listen(window,'scroll',e=>{if(isOpen()&&!e.composedPath().includes(popup))close();},true);
- listen(document,'pointerdown',e=>{if((!native||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container))close();});
+ listen(document,'pointerdown',e=>{if((!native||popup.getAttribute?.('popover')==='manual'||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container)&&!keepOpenOnOutside(e))close();});
  return {open,close,isOpen,position:placement.position,disconnect(){placement.disconnect();cleanups.splice(0).forEach(remove=>remove());}};
 }
-function uiPopupStyles(){return `
-[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:8px 12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:1px solid var(--divider-color,#ddd);border-radius:10px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35;box-shadow:0 8px 28px #0004}
+function uiPopupStyles(){return uiSurfaceStyles('[data-ui-popup]')+`
+[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:0;border-radius:8px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35}
 [data-ui-popup]:popover-open,[data-ui-popup][data-fallback-open]{display:block}
 [data-ui-popup] [hidden]{display:none!important}
+[data-ui-popup]>:last-child{margin-block-end:0}
 .ui-popup-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px}
 .ui-popup-heading>strong{font-size:14px;font-weight:600}
 .ui-popup-heading [data-ui-popup-close]{display:grid;place-items:center;width:30px;height:30px;min-height:30px;padding:0;line-height:1;flex:none}
@@ -6214,14 +6356,14 @@ function cardHeader({title,showTitle=true,ready=false,historyUrl,language='en',p
  const showZoomStatus=zoomState.zoomed&&!periods.picker;
  return `<header class="card-header">${showTitle&&title?`<h2>${headerEscape(title)}</h2>`:''}<div class="header-actions">${group}${zoom}<div class="chart-links" role="group" aria-label="${nl?'Geschiedenis en informatie':'History and information'}">${uiButton({href:historyUrl??'',className:'history-link',content:cardHeaderIcon('history'),title:label[3],label:label[3]})}${information}</div></div></header>${showZoomStatus?`<div class="chart-context"><div class="chart-range"><span class="zoom-status">${nl?'Ingezoomd':'Zoomed in'}</span></div></div>`:''}`;
 }
-function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+`
+function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+uiSurfaceStyles('.chart-controls,.zoom-controls,.chart-links')+`
 .card-header{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;min-height:32px;flex:none;margin:-6px -4px 10px 0}
 .card-header h2{flex:1 1 110px;min-width:0;margin:4.75px 0 0;font-size:18px;line-height:1.25;font-weight:650;letter-spacing:-.01em;overflow-wrap:anywhere}
 .header-actions{--chart-action-gap:8px;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--chart-action-gap);flex:0 1 auto;min-width:0;max-width:100%;margin-inline-start:auto}
 .chart-controls{display:flex;align-items:center;gap:0;min-width:0;max-width:100%}
 .chart-links{display:flex;align-items:center;gap:0;flex:none}
 .zoom-controls{display:flex;gap:0;position:relative}
-.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border-radius:5px}
+.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border:0;border-radius:8px}
 .chart-controls>[data-period="now"]{width:36px}
 .chart-controls>.period-controls{position:relative;margin-inline-end:8px;padding-inline-end:8px}
 .chart-controls>.period-controls::after{content:"";position:absolute;inset-inline-end:0;top:8px;height:16px;width:1px;background:var(--divider-color,#ddd)}
@@ -6426,7 +6568,7 @@ function compactPeriodName({start,end,mode,past,zoomed,hours,name,locale,zone}){
  if(past)return `${dateRange(start,end)} · ${hours>=168&&hours%24===0?`${hours/24} ${locale==='nl-NL'?'dagen':'days'}`:`${hours} ${locale==='nl-NL'?'uur':hours===1?'hour':'hours'}`}`;
  return name;
 }
-function periodControls(host,language='en'){
+function periodControls(host,language='en',{popupNavigation=false,tabVariant=''}={}){
  const active=host.shadowRoot.activeElement;
  if(!host._periodMenuPending)host._periodFocus=null;
  if(active?.closest?.('.header-actions'))host._periodFocus=active.dataset.periodTab!=null?`tab:${active.dataset.periodTab}`:active.dataset.customField!=null?`custom:${active.dataset.customField}`:active.dataset.periodOption!=null?`option:${active.dataset.periodOption}`:active.dataset.zoom!=null?`zoom:${active.dataset.zoom}`:active.classList.contains('history-link')?'history':active.dataset.period;
@@ -6458,14 +6600,15 @@ function periodControls(host,language='en'){
  const customRange=graphPeriodRange(host),draft=host._periodCustomDraft??{start:periodDateTime(customRange.start,zone),end:periodDateTime(customRange.end,zone)};
  const canGoNext=mode==='custom'?host._periodEnd!=null&&customRange.end<Date.now():past;
  const custom=`<form data-custom-range><div class="period-custom-fields">${[['start',label('Start','Begin')],['end',label('End','Einde')]].map(([key,text])=>`<label>${text}<input type="datetime-local" name="${key}" data-custom-field="${key}" value="${periodEscape(draft[key])}" step="60" required></label>`).join('')}</div><p class="period-custom-zone">${periodEscape(zone)}</p><p class="period-custom-error" role="alert"${draft.error?'':' hidden'}>${periodEscape(draft.error??'')}</p>${uiButton({variant:'surface',type:'submit',text:label('Apply','Toepassen'),attrs:{'data-custom-field':'apply'}})}</form>`;
- const contents=uiTabs({id:'eleven-period',label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
+ const contents=uiTabs({id:'eleven-period',variant:tabVariant,label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
   {value:'rolling',label:label('Last','Afgelopen'),content:`<div class="period-options" role="menu" aria-label="${label('Last','Afgelopen')}">${rolling.map(choice).join('')}</div>`},
   {value:'calendar',label:label('Calendar','Kalender'),content:`<div class="period-options period-calendar" role="menu" aria-label="${label('Calendar','Kalender')}">${calendar.map(([id,text])=>choice([id,text])).join('')}</div>`},
   {value:'custom',label:label('Custom range','Eigen bereik'),content:custom,className:'period-custom'}
  ].map(item=>({...item,tabAttrs:{'data-period-tab':item.value},panelAttrs:{'data-period-panel':item.value}}))});
- const popup=uiPopup({id:'eleven-period-menu',className:'period-menu',title:label('Timeframe','Tijdvak'),label:label('Choose a period','Kies een periode'),closeLabel:label('Close','Sluiten'),closeAttrs:{'data-period':'close'},content:`<div class="period-current-range">${periodEscape(range)}${zoomed?`<span class="zoom-status">${label('Zoomed in','Ingezoomd')}</span>`:''}</div><div class="period-default" role="menu" aria-label="${label('Default','Standaard')}">${choice(['configured',standard])}</div>${contents}`});
- const trigger=uiButton({className:'period-trigger',content:`<span>${periodEscape(compactName)}</span>${cardHeaderIcon('down')}`,attrs:{'data-period':'menu','aria-haspopup':'dialog','aria-controls':'eleven-period-menu','aria-expanded':host._periodMenuOpen===true,title:range,'aria-label':label('Timeframe','Tijdvak')+': '+compactName,'aria-description':range+(zoomed?'. '+label('Zoomed in','Ingezoomd'):'')}});
  const navigation=[['previous',label('Previous period','Vorige periode')],['now',label('Return to the current period','Terug naar de huidige periode')],['next',label('Next period','Volgende periode')]].map(([key,title])=>uiButton({text:key==='now'?label('Now','Nu'):'',content:key==='now'?undefined:cardHeaderIcon(key),disabled:key==='next'&&!canGoNext,title,label:title,attrs:{'data-period':key}})).join('');
+ const popup=uiPopup({id:'eleven-period-menu',className:'period-menu',title:label('Timeframe','Tijdvak'),label:label('Choose a period','Kies een periode'),closeLabel:label('Close','Sluiten'),closeAttrs:{'data-period':'close'},content:`<div class="period-current-range">${periodEscape(range)}${zoomed?`<span class="zoom-status">${label('Zoomed in','Ingezoomd')}</span>`:''}</div><div class="period-default" role="menu" aria-label="${label('Default','Standaard')}">${choice(['configured',standard])}</div>${contents}${popupNavigation?`<div class="period-menu-navigation" role="group" aria-label="${label('Period navigation','Periode navigeren')}">${navigation}</div>`:''}`});
+ const trigger=uiButton({className:'period-trigger',content:`<span>${periodEscape(compactName)}</span>${cardHeaderIcon('down')}`,attrs:{'data-period':'menu','aria-haspopup':'dialog','aria-controls':'eleven-period-menu','aria-expanded':host._periodMenuOpen===true,title:range,'aria-label':label('Timeframe','Tijdvak')+': '+compactName,'aria-description':range+(zoomed?'. '+label('Zoomed in','Ingezoomd'):'')}});
+
  return {picker:`<div class="period-controls">${trigger}${popup}</div>`,navigation};
 
 }
@@ -6529,11 +6672,13 @@ function bindPeriodControls(host){
    visible[next].focus();
   }
  };
- for(const [key,direction]of [['previous',-1],['next',1],['now',0]])root.querySelector(`[data-period="${key}"]`).onclick=()=>{close();moveGraphPeriod(host,direction);};
+ for(const [key,direction]of [['previous',-1],['next',1],['now',0]])for(const button of root.querySelectorAll(`[data-period="${key}"]`))button.onclick=()=>{close();moveGraphPeriod(host,direction);};
  if(host._periodMenuOpen)open(false);
  if(!host._periodMenuPending)restorePeriodFocus(host,items);
 }
 function periodControlsStyles(){return uiTabsStyles()+`
+.period-menu-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;margin-top:12px;border-top:1px solid var(--divider-color,#ddd)}
+.period-menu-navigation>[data-period]{width:36px;height:32px}.period-menu-navigation>[data-period=now]{width:auto;padding:4px 12px}
 .period-controls{display:flex;min-width:0;max-width:100%;flex:0 1 auto}
 .header-actions .period-trigger{width:auto;min-width:0;max-width:100%;flex:0 1 auto;gap:6px;padding:4px 10px;border:0;border-radius:4px;background:transparent;font-weight:400}
 .header-actions .period-trigger:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
@@ -6541,8 +6686,9 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-current-range{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;margin:2px 0 10px}
 .period-current-range .zoom-status{display:table;margin-top:4px}
 .period-tabs{margin:10px 0 0}
+.period-menu:has([data-ui-card-tabs]){font-size:inherit;line-height:inherit}
 .period-panel{padding-top:12px}
-.period-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:4px}
+.period-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:0}
 .period-options button{position:relative;justify-content:center;padding:7px 3px;gap:0;min-width:0;white-space:nowrap}
 .period-options button>span:last-child{position:absolute;inset-inline-end:2px;top:1px;font-size:9px;line-height:1}
 .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -6553,6 +6699,38 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-custom p{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);margin:8px 0;overflow-wrap:anywhere}
 .period-custom .period-custom-error{color:var(--error-color,#db4437)}
 .period-custom button[type="submit"]{justify-content:center;margin-top:10px}
+`;}
+
+// ../../shared/ui-detail-surface.js
+
+// Informational detail surface. Callers format/translate text and compute percentages.
+// All content is escaped; this component deliberately accepts no trusted HTML.
+function uiDetailSurface({title='',metrics=[],percent=null,entity='',actionLabel='',attrs={}}={}){
+ const progress=Number.isFinite(percent)?Math.max(0,Math.min(100,percent)):null;
+ return `<section${uiAttributes({...attrs,'data-ui-detail-surface':'','aria-label':title})}>
+  <h3 class="ui-detail-surface-title">${entity?`<button type="button" class="ui-detail-surface-action" data-entity="${uiEscape(entity)}" aria-label="${uiEscape(actionLabel||title)}">${uiEscape(title)} <span aria-hidden="true">›</span></button>`:uiEscape(title)}</h3>
+  <dl class="ui-detail-surface-metrics">${metrics.map(({label='',value,unit='',hint=''})=>{
+   const missing=value==null||value==='';
+   return `<div><dt>${uiEscape(label)}</dt><dd>${uiEscape(missing?'—':value)}${!missing&&unit?' '+uiEscape(unit):''}${hint?`<small class="ui-detail-surface-hint">${uiEscape(hint)}</small>`:''}</dd></div>`;
+  }).join('')}</dl>
+  ${progress==null?'':`<div class="ui-detail-surface-track" aria-hidden="true"><i style="width:${progress}%"></i></div>`}
+ </section>`;
+}
+
+function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+`
+[data-ui-detail-surface]{box-sizing:border-box;min-width:0;padding:12px;border-radius:8px;color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--ui-detail-tone,var(--primary-color,#2196f3)) 5%,transparent)}
+[data-ui-detail-surface] .ui-detail-surface-title{font-family:inherit;font-size:12px;font-weight:600;line-height:1.4;color:inherit;margin:0 0 8px;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-action{font:inherit;line-height:1.4;color:inherit;background:none;border:0;border-radius:4px;padding:4px 0;margin:-4px 0;text-align:start;cursor:pointer}
+[data-ui-detail-surface] .ui-detail-surface-action:hover{text-decoration:underline}[data-ui-detail-surface] .ui-detail-surface-action:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
+[data-ui-detail-surface] .ui-detail-surface-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,68px),1fr));gap:8px 12px;margin:0}
+[data-ui-detail-surface] .ui-detail-surface-metrics>div{min-width:0}
+[data-ui-detail-surface] dt{font-size:10px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere;margin:0 0 2px}
+[data-ui-detail-surface] dd{margin:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-hint{display:block;margin-top:3px;font-size:10px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--secondary-text-color,#626a78)}
+[data-ui-detail-surface] .ui-detail-surface-track{height:8px;border-radius:8px;background:var(--divider-color,#ddd);overflow:hidden;margin-top:8px}
+[data-ui-detail-surface] .ui-detail-surface-track>i{display:block;height:100%;background:var(--ui-detail-tone,var(--primary-color,#2196f3))}
+@container(max-width:360px){[data-ui-detail-surface] dd{font-size:15px}}
+@media(forced-colors:active){[data-ui-detail-surface]{border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track{background:Canvas;border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track>i{background:Highlight;forced-color-adjust:none}}
 `;}
 
 // ../../shared/chart-insights.js
@@ -6617,10 +6795,10 @@ function chartDataInformation(host,language='en'){
    const source=load.sources.find(s=>s.id===item.id),row=summary?.rows.find(r=>r.id===item.id),hidden=!host._isSeriesVisible(i);
    const sourceLabel=source?(source.source==='statistics'?(nl?'Statistieken':'Statistics'):(nl?'Historie':'History')):(nl?'Niet geladen':'Not loaded');
    const unit=row?.unit??host._hass?.states?.[item.id]?.attributes?.unit_of_measurement??'';
-   const metrics=row?.durations?`<dl class="insight-durations">${row.durations.map(s=>`<div><dt title="${insightEscape(s.missing?(nl?'Geen geschiedenis':'No history'):s.state)}">${insightEscape(s.label)}</dt><dd>${insightEscape(host._duration(s.duration))}</dd></div>`).join('')}</dl>`:row?`<dl class="insight-metrics${'total' in row?' has-total':''}">${[['minimum','Min'],['maximum','Max'],['average',nl?'Gem.':'Avg.']].map(([key,label])=>`<div><dt${key==='average'?` title="${nl?'Gemiddeld':'Average'}"`:''}>${label}</dt><dd data-metric="${key}">${value(row[key])}</dd></div>`).join('')}${'total' in row?`<div><dt title="${nl?'Som van volledige staven':'Sum of whole bars'}">${nl?'Som':'Sum'}</dt><dd data-metric="total">${value(row.total)}</dd></div>`:''}</dl>`:'';
+   const metrics=row?.durations?`<dl class="insight-durations">${row.durations.map(s=>`<div><dt title="${insightEscape(s.missing?(nl?'Geen geschiedenis':'No history'):s.state)}">${insightEscape(s.label)}</dt><dd>${insightEscape(host._duration(s.duration))}</dd></div>`).join('')}</dl>`:row?`<dl class="ui-detail-surface-metrics insight-metrics${'total' in row?' has-total':''}">${[['minimum','Min'],['maximum','Max'],['average',nl?'Gem.':'Avg.']].map(([key,label])=>`<div><dt${key==='average'?` title="${nl?'Gemiddeld':'Average'}"`:''}>${label}</dt><dd data-metric="${key}">${value(row[key])}</dd></div>`).join('')}${'total' in row?`<div><dt title="${nl?'Som van volledige staven':'Sum of whole bars'}">${nl?'Som':'Sum'}</dt><dd data-metric="total">${value(row.total)}</dd></div>`:''}</dl>`:'';
    const states=[host._inFlight?(nl?'Vernieuwen…':'Refreshing…'):host._loadFailed?(nl?'Verouderd':'Outdated'):'',hidden?(nl?'Verborgen':'Hidden'):'',row?.limited?(nl?'Meer dan 20 statussen':'More than 20 states'):row?.count===0||source?.empty?(nl?'Geen gegevens':'No data'):row?.missing?(nl?'Onvolledig':'Incomplete'):''].filter(Boolean);
    const color=host._insightColor?.(i,row)??'var(--primary-color,#2196f3)';
-   return `<section class="insight-sensor" data-information-entity="${insightEscape(item.id)}"><div class="insight-sensor-heading"><i class="insight-color" style="--insight-color:${insightEscape(color)}" aria-hidden="true"></i><strong>${insightEscape(item.name)}</strong><span class="insight-source">${sourceLabel}${unit?` <span class="insight-unit">· ${insightEscape(unit)}</span>`:''}</span></div>${metrics}${states.length?`<div class="insight-states" role="status">${states.join(' · ')}</div>`:''}</section>`;
+   return `<section class="insight-sensor" data-information-entity="${insightEscape(item.id)}" data-ui-detail-surface><div class="insight-sensor-heading ui-detail-surface-title"><i class="insight-color" style="--insight-color:${insightEscape(color)}" aria-hidden="true"></i><strong>${insightEscape(item.name)}</strong><span class="insight-source">${sourceLabel}${unit?` <span class="insight-unit">· ${insightEscape(unit)}</span>`:''}</span></div>${metrics}${states.length?`<div class="insight-states" role="status">${states.join(' · ')}</div>`:''}</section>`;
   }).join('')}</div>`;
  }
  return insightControl(host,'data',nl?'Gegevens':'Data information',body,cardHeaderIcon('info'));
@@ -6661,7 +6839,7 @@ function bindChartInsights(host){
  if(host._insightFocus)listen(document,'pointerdown',e=>{if(!e.composedPath().includes(host)){host._insightFocus=null;host._insightOpen=null;host._insightPending=null;}},true);
  bindChartLegend(host);
 }
-function chartInsightStyles(){return `
+function chartInsightStyles(){return uiDetailSurfaceStyles()+`
 .chart-context{display:flex;align-items:center;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;flex:none;margin:0 0 8px;min-width:0}
 .chart-range{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;min-width:0;flex:1}
 .chart-range .period-panel{margin:0}
@@ -6676,19 +6854,15 @@ function chartInsightStyles(){return `
 .insight-popup p strong{color:var(--primary-text-color,#20252b);font-weight:500}
 .insight-popup .insight-choice{display:block;width:100%;padding:6px 8px;text-align:start;overflow-wrap:anywhere}
 .insight-choice[aria-pressed="true"]{background:var(--secondary-background-color,#eee);font-weight:600}
-.insight-sensors{display:grid}
-.insight-sensor{min-width:0;padding:8px 0}
-.insight-sensor+.insight-sensor{border-top:1px solid var(--divider-color,#ddd)}
+.insight-sensors{display:grid;gap:10px}
+.insight-sensor{min-width:0}
 .insight-sensor-heading{display:flex;align-items:center;flex-wrap:wrap;gap:2px 8px}
 .insight-color{display:block;width:7px;height:7px;flex:none;border-radius:2px;background:var(--insight-color,var(--primary-color,#2196f3))}
 .insight-sensor-heading>strong{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
 .insight-source{font-size:10px;font-weight:400;color:var(--secondary-text-color,#666);color:color-mix(in srgb,var(--secondary-text-color,#666) 90%,var(--ha-card-background,var(--card-background-color,#fff)));flex:none}
 .insight-unit{white-space:nowrap}
-.insight-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 8px;margin:6px 0 0}
+.insight-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
 .insight-metrics.has-total{grid-template-columns:repeat(4,minmax(0,1fr))}
-.insight-metrics>div{min-width:0}
-.insight-metrics dt{font-size:10px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere}
-.insight-metrics dd{margin:1px 0 0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:var(--primary-text-color,#20252b)}
 .insight-states{font-size:10px;color:var(--secondary-text-color,#666);margin-top:4px}
 .insight-durations{margin:6px 0 0;display:grid;gap:4px}
 .insight-durations>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:12px}
@@ -7419,7 +7593,7 @@ class HistoryGraphCard extends HTMLElement {
   const previous=this._config,visibility=this._visibility;
   this._visibility=new Map(validated.entities.map(id=>{const initial=validated.series_options.find(s=>s.entity===id)?.visible??true,old=previous?.series_options.find(s=>s.entity===id)?.visible??true;return [id,initial===old&&visibility?.has(id)?visibility.get(id):initial];}));
   SharedGraph.clearHover(this);this._config={...validated,...timeframeSyncConfig(validated)};this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._generation++;this._inFlight=false;this._series=[];this._rawSeries=null;this._viewport=null;resetGraphPeriod(this);this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);this._timer=null;connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
- set hass(hass){this._hass=hass;if(!this._config)return;let signature;try{const meta=seriesMetadata(hass,this._config.entities);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone]);}catch(e){signature=e.message;}
+ set hass(hass){this._hass=hass;if(!this._config)return;let signature;try{const meta=seriesMetadata(hass,this._config.entities);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?hass.states?.[s.id]?.state:null)]);}catch(e){signature=e.message;}
   if(signature!==this._signature){this._signature=signature;this._render();}
   this._updateGraphTheme();
   if(this._connected&&!this._started)this._refresh();
@@ -7460,6 +7634,13 @@ class HistoryGraphCard extends HTMLElement {
   const start=this._viewStart,end=this._viewEnd;
   return {start,end,rows:this._series.map((s,i)=>({...this._meta.items[i],...chartValueStatistics(s.points,start,end)}))};
  }
+ _usesLiveLegend(series){return series.source==='statistics'&&this._config.aggregation_method!=='delta'&&this._periodEnd==null&&(this._periodOffset??0)===0;}
+ _legendValue(series){
+  // Recorder summaries lag behind live sensors. Keep that lag in the plot,
+  // but use the real current state in a live measurement legend.
+  // Historical statistics bins end exclusively: avoid the closing null sentinel.
+  return this._usesLiveLegend(series)?numericState(this._hass?.states?.[series.id]?.state):valueAt(series.points,this._end-(series.source==='statistics'?1:0));
+ }
  _defaultTitle(lang){return text('title',lang);}
  _render(){
   if(!this._config)return;captureChartInsights(this);const lang=language(this._hass);this._lang=lang;this._zone=this._hass?.config?.time_zone;
@@ -7495,9 +7676,7 @@ class HistoryGraphCard extends HTMLElement {
     fills:display.flatMap((s,i)=>{const a=this._seriesAppearance(i);if(!visible[i]||!a.show_fill)return [];const fillColor=Array.isArray(a.fill_color)?`rgb(${a.fill_color.join(',')})`:a.fill_color;return [{d:this._area(s.points,x,seriesY(i),i),className:'series-fill',fill:a.fill_mode==='own'?fillColor:this._appearance(i).stroke,opacity:a.fill_opacity,mask:a.fill_fade?'url(#history-fill-fade)':null}];}),
     lines:display.flatMap((s,i)=>visible[i]?[{d:this._line(s.points,Math.max(this._viewEnd,s.points.at(-1)?.t??this._viewEnd),x,seriesY(i),i),className:'series-line',entity:s.id,appearance:this._appearance(i)}]:[]),
    });
-   // Statistics bins end exclusively; sample inside the requested range rather
-   // than its closing null sentinel. A real gap before the end remains null.
-   const legend=uiLegend({items:meta.items.map((item,i)=>{const s=this._series[i],value=valueAt(s.points,this._end-(s.source==='statistics'?1:0));const a=this._appearance(i,value);return {id:item.id,visible:visible[i],title:text(visible[i]?'hide_sensor':'show_sensor',lang)+' '+item.name,attrs:{'data-series':item.id},content:`<i style="--series-color:${a.color};border-top-width:${a.width}px;border-top-style:${a.style}"></i><span>${escapeHtml(item.name)}</span><strong>${value===null?text('unavailable',lang):escapeHtml(number(value,lang))}${mixed&&value!==null&&item.unit?` ${escapeHtml(item.unit)}`:''}</strong>`};}),afterContent:mixed?'':`<span class="unit">${escapeHtml(meta.unit)}</span>`});
+   const legend=uiLegend({items:meta.items.map((item,i)=>{const s=this._series[i],value=this._legendValue(s);const a=this._appearance(i,value);return {id:item.id,visible:visible[i],title:text(visible[i]?'hide_sensor':'show_sensor',lang)+' '+item.name,attrs:{'data-series':item.id},content:`<i style="--series-color:${a.color};border-top-width:${a.width}px;border-top-style:${a.style}"></i><span>${escapeHtml(item.name)}</span><strong>${value===null?text('unavailable',lang):escapeHtml(number(value,lang))}${mixed&&value!==null&&item.unit?` ${escapeHtml(item.unit)}`:''}</strong>`};}),afterContent:mixed?'':`<span class="unit">${escapeHtml(meta.unit)}</span>`});
    const missing=meta.items.filter((_,i)=>visible[i]&&!this._series[i].points.some(p=>p.v!==null)).map(s=>s.name);
    content=`${this._config.show_legend?legend:`<div class="data-status">${escapeHtml(mixed?'':meta.unit)}</div>`}${missing.length?`<div class="data-status">${text('partial',lang)} ${escapeHtml(missing.join(', '))}</div>`:''}<div class="chart" style="--axis-column:min(48px, calc((100% - 124px) / ${Math.max(1,extra)}));--axes-right:calc(${extra} * var(--axis-column))" tabindex="0" role="group" aria-label="${text('chart',lang)}">${anyVisible?axes+times:`<div class="empty-visibility" role="status">${escapeHtml(text('no_visible',lang))}</div>`}<div class="plot">${graph}<div class="zoom-selection" hidden></div></div>${this._config.show_hover_line?'<div class="guide" hidden></div>':''}<div class="markers"></div><div class="tooltip" hidden></div><div class="sr-only" aria-live="polite"></div></div>`;
   }
@@ -7567,7 +7746,7 @@ class HistoryGraphCard extends HTMLElement {
   const rows=this._series.flatMap((s,i)=>{if(!this._isSeriesVisible(i))return [];const {min,max}=this._axes?.[this._seriesAxes[i]]??{min:this._range[0],max:this._range[1]};const value=valueAt(s.points,timestamp),height=valueAt((this._plotSeries??this._series)[i].points,timestamp);if(height!==null&&height>=min&&height<=max)positions.push({x:px,y:p.top-box.top+(max-height)/(max-min)*p.height,color:this._appearance(i,value).color});return [{name:this._meta.items[i].name,value:value===null?text('unavailable',this._lang):`${number(value,this._lang)} ${this._meta.items[i].unit??this._meta.unit}`}];});
   if(!rows.length){this._hideTooltip(publish);return;}
   const colors=this._series.flatMap((s,i)=>this._isSeriesVisible(i)?[this._appearance(i,valueAt(s.points,timestamp)).color]:[]);
-  tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)}: <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
+  tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)} <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
   tooltip.style.maxHeight=`${Math.max(0,box.height-8)}px`;
   const measured=tooltip.getBoundingClientRect();let left=Math.max(4,Math.min(box.width-measured.width-4,px+14));
   if(px+14+measured.width>box.width-4)left=Math.max(4,px-measured.width-14);
@@ -8001,6 +8180,14 @@ function moveGraphPeriod(host,direction){
  return host._reloadPeriod();
 }
 
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function uiAttributes(values={}){
@@ -8063,12 +8250,12 @@ function bindUILegend(host,{selector='[data-ui-legend]',getId=button=>button.dat
 }
 
 
-function uiTabs({id,label,items,selected,className='',panelClassName=''}={}){
+function uiTabs({id,label,items,selected,className='',panelClassName='',variant=''}={}){
  if(typeof id!=='string'||!id||!items?.length||items.some(item=>typeof item.value!=='string'||!item.value)||new Set(items.map(item=>item.value)).size!==items.length)throw Error('Tabs need an id and distinct text values.');
  const active=items.find(item=>item.value===selected&&!item.disabled)??items.find(item=>!item.disabled);
  const tabId=value=>`${id}-tab-${encodeURIComponent(value)}`,panelId=value=>`${id}-panel-${encodeURIComponent(value)}`;
- const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'',role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
- const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
+ const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'','data-ui-card-tabs':variant==='card'?true:null,role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
+ const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,'data-ui-card-tab-panel':variant==='card'?true:null,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
  return bar+panels;
 }
 function bindUITabs({tabs,panels,onSelect=()=>{}}){
@@ -8098,24 +8285,30 @@ function uiTabsStyles(){return `
 [data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
 [data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
 [data-ui-tab-panel][hidden]{display:none!important}
+[data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
+[data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
+[data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
+[data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
+
 
 
 function uiPopup({id,title,label=title,closeLabel='Close',content='',className='',attrs={},closeAttrs={}}){
  return `<div${uiAttributes({id,class:className||null,'data-ui-popup':'',popover:'auto',role:'dialog','aria-label':label,...attrs})}><div class="ui-popup-heading"><strong>${uiEscape(title)}</strong>${uiButton({variant:'close',content:'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>',label:closeLabel,attrs:{'data-ui-popup-close':'',...closeAttrs}})}</div>${content}</div>`;
 }
-function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560}){
+function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560,topBoundary=()=>8,align='end'}){
  let active=true;
  const position=()=>{
   if(!active||!isRequested())return;
   const box=trigger.getBoundingClientRect();
   if(!box.width||!box.height){popup.style.visibility='hidden';return;}
-  const actualWidth=Math.min(width,window.innerWidth-16);
-  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-16)+'px';
+  const actualWidth=Math.min(width,window.innerWidth-16),minimumTop=Math.max(8,Math.min(topBoundary(),window.innerHeight-80));
+  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-minimumTop-8)+'px';
   popup.style.visibility='';onShow?.();
   const height=popup.getBoundingClientRect().height,below=window.innerHeight-box.bottom-8,above=box.top-8;
-  popup.style.left=Math.max(8,Math.min(box.right-actualWidth,window.innerWidth-actualWidth-8))+'px';
-  popup.style.top=Math.max(8,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
+  const left=align==='center'?(box.left+box.right-actualWidth)/2:box.right-actualWidth;
+  popup.style.left=Math.max(8,Math.min(left,window.innerWidth-actualWidth-8))+'px';
+  popup.style.top=Math.max(minimumTop,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
  };
  if(ready?.then)ready.then(position,()=>{});
  const observer=typeof ResizeObserver==='function'?new ResizeObserver(position):null;
@@ -8123,7 +8316,7 @@ function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,m
  return {position,disconnect(){active=false;observer?.disconnect();}};
 }
 // Domain state lives in callbacks; this controller also works without a card host.
-function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false}){
+function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false,keepOpenOnOutside=()=>false,topBoundary,align}){
  let requested=false,pending=false,focusPending=false,pointerWasOpen;
  const wantsOpen=isRequested??(()=>requested),native=typeof popup.showPopover==='function';
  const isOpen=()=>native?popup.matches(':popover-open'):popup.hasAttribute('data-fallback-open');
@@ -8131,7 +8324,7 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  const cleanups=[],listen=(target,type,handler,capture=false)=>{target?.addEventListener?.(type,handler,capture);cleanups.push(()=>target?.removeEventListener?.(type,handler,capture));};
  const property=(target,key,handler)=>{if(!target)return;target[key]=handler;cleanups.push(()=>{if(target[key]===handler)target[key]=null;});};
  const closeButton=popup.querySelector('[data-ui-popup-close]');
- const placement=bindUIPopupPosition({trigger,popup,ready,isRequested:wantsOpen,onShow:()=>{
+ const placement=bindUIPopupPosition({trigger,popup,ready,topBoundary,align,isRequested:wantsOpen,onShow:()=>{
   pending=false;if(native){if(!isOpen())popup.showPopover();}else popup.setAttribute('data-fallback-open','');
   if(focusPending){(focusTarget?.()??closeButton)?.focus({preventScroll:true});focusPending=false;}
   onShown();
@@ -8150,18 +8343,20 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  listen(popup,'toggle',e=>{if(!isCurrent())return;const opened=e.newState==='open';if(!opened){if(wantsOpen())onClose();pending=false;focusPending=false;}requested=opened;trigger.setAttribute('aria-expanded',String(opened));onToggle(opened);});
  listen(window,'resize',()=>{if(wantsOpen()){if(closeWhenAnchorHidden&&trigger.getClientRects?.().length===0)close();else placement.position();}});
  listen(window,'scroll',e=>{if(isOpen()&&!e.composedPath().includes(popup))close();},true);
- listen(document,'pointerdown',e=>{if((!native||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container))close();});
+ listen(document,'pointerdown',e=>{if((!native||popup.getAttribute?.('popover')==='manual'||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container)&&!keepOpenOnOutside(e))close();});
  return {open,close,isOpen,position:placement.position,disconnect(){placement.disconnect();cleanups.splice(0).forEach(remove=>remove());}};
 }
-function uiPopupStyles(){return `
-[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:8px 12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:1px solid var(--divider-color,#ddd);border-radius:10px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35;box-shadow:0 8px 28px #0004}
+function uiPopupStyles(){return uiSurfaceStyles('[data-ui-popup]')+`
+[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:0;border-radius:8px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35}
 [data-ui-popup]:popover-open,[data-ui-popup][data-fallback-open]{display:block}
 [data-ui-popup] [hidden]{display:none!important}
+[data-ui-popup]>:last-child{margin-block-end:0}
 .ui-popup-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px}
 .ui-popup-heading>strong{font-size:14px;font-weight:600}
 .ui-popup-heading [data-ui-popup-close]{display:grid;place-items:center;width:30px;height:30px;min-height:30px;padding:0;line-height:1;flex:none}
 .ui-popup-heading [data-ui-popup-close] svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
 `;}
+
 
 
 
@@ -8194,14 +8389,14 @@ function cardHeader({title,showTitle=true,ready=false,historyUrl,language='en',p
  const showZoomStatus=zoomState.zoomed&&!periods.picker;
  return `<header class="card-header">${showTitle&&title?`<h2>${headerEscape(title)}</h2>`:''}<div class="header-actions">${group}${zoom}<div class="chart-links" role="group" aria-label="${nl?'Geschiedenis en informatie':'History and information'}">${uiButton({href:historyUrl??'',className:'history-link',content:cardHeaderIcon('history'),title:label[3],label:label[3]})}${information}</div></div></header>${showZoomStatus?`<div class="chart-context"><div class="chart-range"><span class="zoom-status">${nl?'Ingezoomd':'Zoomed in'}</span></div></div>`:''}`;
 }
-function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+`
+function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+uiSurfaceStyles('.chart-controls,.zoom-controls,.chart-links')+`
 .card-header{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;min-height:32px;flex:none;margin:-6px -4px 10px 0}
 .card-header h2{flex:1 1 110px;min-width:0;margin:4.75px 0 0;font-size:18px;line-height:1.25;font-weight:650;letter-spacing:-.01em;overflow-wrap:anywhere}
 .header-actions{--chart-action-gap:8px;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--chart-action-gap);flex:0 1 auto;min-width:0;max-width:100%;margin-inline-start:auto}
 .chart-controls{display:flex;align-items:center;gap:0;min-width:0;max-width:100%}
 .chart-links{display:flex;align-items:center;gap:0;flex:none}
 .zoom-controls{display:flex;gap:0;position:relative}
-.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border-radius:5px}
+.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border:0;border-radius:8px}
 .chart-controls>[data-period="now"]{width:36px}
 .chart-controls>.period-controls{position:relative;margin-inline-end:8px;padding-inline-end:8px}
 .chart-controls>.period-controls::after{content:"";position:absolute;inset-inline-end:0;top:8px;height:16px;width:1px;background:var(--divider-color,#ddd)}
@@ -8245,7 +8440,7 @@ function compactPeriodName({start,end,mode,past,zoomed,hours,name,locale,zone}){
  if(past)return `${dateRange(start,end)} · ${hours>=168&&hours%24===0?`${hours/24} ${locale==='nl-NL'?'dagen':'days'}`:`${hours} ${locale==='nl-NL'?'uur':hours===1?'hour':'hours'}`}`;
  return name;
 }
-function periodControls(host,language='en'){
+function periodControls(host,language='en',{popupNavigation=false,tabVariant=''}={}){
  const active=host.shadowRoot.activeElement;
  if(!host._periodMenuPending)host._periodFocus=null;
  if(active?.closest?.('.header-actions'))host._periodFocus=active.dataset.periodTab!=null?`tab:${active.dataset.periodTab}`:active.dataset.customField!=null?`custom:${active.dataset.customField}`:active.dataset.periodOption!=null?`option:${active.dataset.periodOption}`:active.dataset.zoom!=null?`zoom:${active.dataset.zoom}`:active.classList.contains('history-link')?'history':active.dataset.period;
@@ -8277,14 +8472,15 @@ function periodControls(host,language='en'){
  const customRange=graphPeriodRange(host),draft=host._periodCustomDraft??{start:periodDateTime(customRange.start,zone),end:periodDateTime(customRange.end,zone)};
  const canGoNext=mode==='custom'?host._periodEnd!=null&&customRange.end<Date.now():past;
  const custom=`<form data-custom-range><div class="period-custom-fields">${[['start',label('Start','Begin')],['end',label('End','Einde')]].map(([key,text])=>`<label>${text}<input type="datetime-local" name="${key}" data-custom-field="${key}" value="${periodEscape(draft[key])}" step="60" required></label>`).join('')}</div><p class="period-custom-zone">${periodEscape(zone)}</p><p class="period-custom-error" role="alert"${draft.error?'':' hidden'}>${periodEscape(draft.error??'')}</p>${uiButton({variant:'surface',type:'submit',text:label('Apply','Toepassen'),attrs:{'data-custom-field':'apply'}})}</form>`;
- const contents=uiTabs({id:'eleven-period',label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
+ const contents=uiTabs({id:'eleven-period',variant:tabVariant,label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
   {value:'rolling',label:label('Last','Afgelopen'),content:`<div class="period-options" role="menu" aria-label="${label('Last','Afgelopen')}">${rolling.map(choice).join('')}</div>`},
   {value:'calendar',label:label('Calendar','Kalender'),content:`<div class="period-options period-calendar" role="menu" aria-label="${label('Calendar','Kalender')}">${calendar.map(([id,text])=>choice([id,text])).join('')}</div>`},
   {value:'custom',label:label('Custom range','Eigen bereik'),content:custom,className:'period-custom'}
  ].map(item=>({...item,tabAttrs:{'data-period-tab':item.value},panelAttrs:{'data-period-panel':item.value}}))});
- const popup=uiPopup({id:'eleven-period-menu',className:'period-menu',title:label('Timeframe','Tijdvak'),label:label('Choose a period','Kies een periode'),closeLabel:label('Close','Sluiten'),closeAttrs:{'data-period':'close'},content:`<div class="period-current-range">${periodEscape(range)}${zoomed?`<span class="zoom-status">${label('Zoomed in','Ingezoomd')}</span>`:''}</div><div class="period-default" role="menu" aria-label="${label('Default','Standaard')}">${choice(['configured',standard])}</div>${contents}`});
- const trigger=uiButton({className:'period-trigger',content:`<span>${periodEscape(compactName)}</span>${cardHeaderIcon('down')}`,attrs:{'data-period':'menu','aria-haspopup':'dialog','aria-controls':'eleven-period-menu','aria-expanded':host._periodMenuOpen===true,title:range,'aria-label':label('Timeframe','Tijdvak')+': '+compactName,'aria-description':range+(zoomed?'. '+label('Zoomed in','Ingezoomd'):'')}});
  const navigation=[['previous',label('Previous period','Vorige periode')],['now',label('Return to the current period','Terug naar de huidige periode')],['next',label('Next period','Volgende periode')]].map(([key,title])=>uiButton({text:key==='now'?label('Now','Nu'):'',content:key==='now'?undefined:cardHeaderIcon(key),disabled:key==='next'&&!canGoNext,title,label:title,attrs:{'data-period':key}})).join('');
+ const popup=uiPopup({id:'eleven-period-menu',className:'period-menu',title:label('Timeframe','Tijdvak'),label:label('Choose a period','Kies een periode'),closeLabel:label('Close','Sluiten'),closeAttrs:{'data-period':'close'},content:`<div class="period-current-range">${periodEscape(range)}${zoomed?`<span class="zoom-status">${label('Zoomed in','Ingezoomd')}</span>`:''}</div><div class="period-default" role="menu" aria-label="${label('Default','Standaard')}">${choice(['configured',standard])}</div>${contents}${popupNavigation?`<div class="period-menu-navigation" role="group" aria-label="${label('Period navigation','Periode navigeren')}">${navigation}</div>`:''}`});
+ const trigger=uiButton({className:'period-trigger',content:`<span>${periodEscape(compactName)}</span>${cardHeaderIcon('down')}`,attrs:{'data-period':'menu','aria-haspopup':'dialog','aria-controls':'eleven-period-menu','aria-expanded':host._periodMenuOpen===true,title:range,'aria-label':label('Timeframe','Tijdvak')+': '+compactName,'aria-description':range+(zoomed?'. '+label('Zoomed in','Ingezoomd'):'')}});
+
  return {picker:`<div class="period-controls">${trigger}${popup}</div>`,navigation};
 
 }
@@ -8348,11 +8544,13 @@ function bindPeriodControls(host){
    visible[next].focus();
   }
  };
- for(const [key,direction]of [['previous',-1],['next',1],['now',0]])root.querySelector(`[data-period="${key}"]`).onclick=()=>{close();moveGraphPeriod(host,direction);};
+ for(const [key,direction]of [['previous',-1],['next',1],['now',0]])for(const button of root.querySelectorAll(`[data-period="${key}"]`))button.onclick=()=>{close();moveGraphPeriod(host,direction);};
  if(host._periodMenuOpen)open(false);
  if(!host._periodMenuPending)restorePeriodFocus(host,items);
 }
 function periodControlsStyles(){return uiTabsStyles()+`
+.period-menu-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;margin-top:12px;border-top:1px solid var(--divider-color,#ddd)}
+.period-menu-navigation>[data-period]{width:36px;height:32px}.period-menu-navigation>[data-period=now]{width:auto;padding:4px 12px}
 .period-controls{display:flex;min-width:0;max-width:100%;flex:0 1 auto}
 .header-actions .period-trigger{width:auto;min-width:0;max-width:100%;flex:0 1 auto;gap:6px;padding:4px 10px;border:0;border-radius:4px;background:transparent;font-weight:400}
 .header-actions .period-trigger:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
@@ -8360,8 +8558,9 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-current-range{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;margin:2px 0 10px}
 .period-current-range .zoom-status{display:table;margin-top:4px}
 .period-tabs{margin:10px 0 0}
+.period-menu:has([data-ui-card-tabs]){font-size:inherit;line-height:inherit}
 .period-panel{padding-top:12px}
-.period-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:4px}
+.period-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:0}
 .period-options button{position:relative;justify-content:center;padding:7px 3px;gap:0;min-width:0;white-space:nowrap}
 .period-options button>span:last-child{position:absolute;inset-inline-end:2px;top:1px;font-size:9px;line-height:1}
 .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -8373,6 +8572,39 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-custom .period-custom-error{color:var(--error-color,#db4437)}
 .period-custom button[type="submit"]{justify-content:center;margin-top:10px}
 `;}
+
+
+
+// Informational detail surface. Callers format/translate text and compute percentages.
+// All content is escaped; this component deliberately accepts no trusted HTML.
+function uiDetailSurface({title='',metrics=[],percent=null,entity='',actionLabel='',attrs={}}={}){
+ const progress=Number.isFinite(percent)?Math.max(0,Math.min(100,percent)):null;
+ return `<section${uiAttributes({...attrs,'data-ui-detail-surface':'','aria-label':title})}>
+  <h3 class="ui-detail-surface-title">${entity?`<button type="button" class="ui-detail-surface-action" data-entity="${uiEscape(entity)}" aria-label="${uiEscape(actionLabel||title)}">${uiEscape(title)} <span aria-hidden="true">›</span></button>`:uiEscape(title)}</h3>
+  <dl class="ui-detail-surface-metrics">${metrics.map(({label='',value,unit='',hint=''})=>{
+   const missing=value==null||value==='';
+   return `<div><dt>${uiEscape(label)}</dt><dd>${uiEscape(missing?'—':value)}${!missing&&unit?' '+uiEscape(unit):''}${hint?`<small class="ui-detail-surface-hint">${uiEscape(hint)}</small>`:''}</dd></div>`;
+  }).join('')}</dl>
+  ${progress==null?'':`<div class="ui-detail-surface-track" aria-hidden="true"><i style="width:${progress}%"></i></div>`}
+ </section>`;
+}
+
+function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+`
+[data-ui-detail-surface]{box-sizing:border-box;min-width:0;padding:12px;border-radius:8px;color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--ui-detail-tone,var(--primary-color,#2196f3)) 5%,transparent)}
+[data-ui-detail-surface] .ui-detail-surface-title{font-family:inherit;font-size:12px;font-weight:600;line-height:1.4;color:inherit;margin:0 0 8px;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-action{font:inherit;line-height:1.4;color:inherit;background:none;border:0;border-radius:4px;padding:4px 0;margin:-4px 0;text-align:start;cursor:pointer}
+[data-ui-detail-surface] .ui-detail-surface-action:hover{text-decoration:underline}[data-ui-detail-surface] .ui-detail-surface-action:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
+[data-ui-detail-surface] .ui-detail-surface-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,68px),1fr));gap:8px 12px;margin:0}
+[data-ui-detail-surface] .ui-detail-surface-metrics>div{min-width:0}
+[data-ui-detail-surface] dt{font-size:10px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere;margin:0 0 2px}
+[data-ui-detail-surface] dd{margin:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-hint{display:block;margin-top:3px;font-size:10px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--secondary-text-color,#626a78)}
+[data-ui-detail-surface] .ui-detail-surface-track{height:8px;border-radius:8px;background:var(--divider-color,#ddd);overflow:hidden;margin-top:8px}
+[data-ui-detail-surface] .ui-detail-surface-track>i{display:block;height:100%;background:var(--ui-detail-tone,var(--primary-color,#2196f3))}
+@container(max-width:360px){[data-ui-detail-surface] dd{font-size:15px}}
+@media(forced-colors:active){[data-ui-detail-surface]{border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track{background:Canvas;border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track>i{background:Highlight;forced-color-adjust:none}}
+`;}
+
 
 
 
@@ -8439,10 +8671,10 @@ function chartDataInformation(host,language='en'){
    const source=load.sources.find(s=>s.id===item.id),row=summary?.rows.find(r=>r.id===item.id),hidden=!host._isSeriesVisible(i);
    const sourceLabel=source?(source.source==='statistics'?(nl?'Statistieken':'Statistics'):(nl?'Historie':'History')):(nl?'Niet geladen':'Not loaded');
    const unit=row?.unit??host._hass?.states?.[item.id]?.attributes?.unit_of_measurement??'';
-   const metrics=row?.durations?`<dl class="insight-durations">${row.durations.map(s=>`<div><dt title="${insightEscape(s.missing?(nl?'Geen geschiedenis':'No history'):s.state)}">${insightEscape(s.label)}</dt><dd>${insightEscape(host._duration(s.duration))}</dd></div>`).join('')}</dl>`:row?`<dl class="insight-metrics${'total' in row?' has-total':''}">${[['minimum','Min'],['maximum','Max'],['average',nl?'Gem.':'Avg.']].map(([key,label])=>`<div><dt${key==='average'?` title="${nl?'Gemiddeld':'Average'}"`:''}>${label}</dt><dd data-metric="${key}">${value(row[key])}</dd></div>`).join('')}${'total' in row?`<div><dt title="${nl?'Som van volledige staven':'Sum of whole bars'}">${nl?'Som':'Sum'}</dt><dd data-metric="total">${value(row.total)}</dd></div>`:''}</dl>`:'';
+   const metrics=row?.durations?`<dl class="insight-durations">${row.durations.map(s=>`<div><dt title="${insightEscape(s.missing?(nl?'Geen geschiedenis':'No history'):s.state)}">${insightEscape(s.label)}</dt><dd>${insightEscape(host._duration(s.duration))}</dd></div>`).join('')}</dl>`:row?`<dl class="ui-detail-surface-metrics insight-metrics${'total' in row?' has-total':''}">${[['minimum','Min'],['maximum','Max'],['average',nl?'Gem.':'Avg.']].map(([key,label])=>`<div><dt${key==='average'?` title="${nl?'Gemiddeld':'Average'}"`:''}>${label}</dt><dd data-metric="${key}">${value(row[key])}</dd></div>`).join('')}${'total' in row?`<div><dt title="${nl?'Som van volledige staven':'Sum of whole bars'}">${nl?'Som':'Sum'}</dt><dd data-metric="total">${value(row.total)}</dd></div>`:''}</dl>`:'';
    const states=[host._inFlight?(nl?'Vernieuwen…':'Refreshing…'):host._loadFailed?(nl?'Verouderd':'Outdated'):'',hidden?(nl?'Verborgen':'Hidden'):'',row?.limited?(nl?'Meer dan 20 statussen':'More than 20 states'):row?.count===0||source?.empty?(nl?'Geen gegevens':'No data'):row?.missing?(nl?'Onvolledig':'Incomplete'):''].filter(Boolean);
    const color=host._insightColor?.(i,row)??'var(--primary-color,#2196f3)';
-   return `<section class="insight-sensor" data-information-entity="${insightEscape(item.id)}"><div class="insight-sensor-heading"><i class="insight-color" style="--insight-color:${insightEscape(color)}" aria-hidden="true"></i><strong>${insightEscape(item.name)}</strong><span class="insight-source">${sourceLabel}${unit?` <span class="insight-unit">· ${insightEscape(unit)}</span>`:''}</span></div>${metrics}${states.length?`<div class="insight-states" role="status">${states.join(' · ')}</div>`:''}</section>`;
+   return `<section class="insight-sensor" data-information-entity="${insightEscape(item.id)}" data-ui-detail-surface><div class="insight-sensor-heading ui-detail-surface-title"><i class="insight-color" style="--insight-color:${insightEscape(color)}" aria-hidden="true"></i><strong>${insightEscape(item.name)}</strong><span class="insight-source">${sourceLabel}${unit?` <span class="insight-unit">· ${insightEscape(unit)}</span>`:''}</span></div>${metrics}${states.length?`<div class="insight-states" role="status">${states.join(' · ')}</div>`:''}</section>`;
   }).join('')}</div>`;
  }
  return insightControl(host,'data',nl?'Gegevens':'Data information',body,cardHeaderIcon('info'));
@@ -8483,7 +8715,7 @@ function bindChartInsights(host){
  if(host._insightFocus)listen(document,'pointerdown',e=>{if(!e.composedPath().includes(host)){host._insightFocus=null;host._insightOpen=null;host._insightPending=null;}},true);
  bindChartLegend(host);
 }
-function chartInsightStyles(){return `
+function chartInsightStyles(){return uiDetailSurfaceStyles()+`
 .chart-context{display:flex;align-items:center;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;flex:none;margin:0 0 8px;min-width:0}
 .chart-range{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;min-width:0;flex:1}
 .chart-range .period-panel{margin:0}
@@ -8498,19 +8730,15 @@ function chartInsightStyles(){return `
 .insight-popup p strong{color:var(--primary-text-color,#20252b);font-weight:500}
 .insight-popup .insight-choice{display:block;width:100%;padding:6px 8px;text-align:start;overflow-wrap:anywhere}
 .insight-choice[aria-pressed="true"]{background:var(--secondary-background-color,#eee);font-weight:600}
-.insight-sensors{display:grid}
-.insight-sensor{min-width:0;padding:8px 0}
-.insight-sensor+.insight-sensor{border-top:1px solid var(--divider-color,#ddd)}
+.insight-sensors{display:grid;gap:10px}
+.insight-sensor{min-width:0}
 .insight-sensor-heading{display:flex;align-items:center;flex-wrap:wrap;gap:2px 8px}
 .insight-color{display:block;width:7px;height:7px;flex:none;border-radius:2px;background:var(--insight-color,var(--primary-color,#2196f3))}
 .insight-sensor-heading>strong{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
 .insight-source{font-size:10px;font-weight:400;color:var(--secondary-text-color,#666);color:color-mix(in srgb,var(--secondary-text-color,#666) 90%,var(--ha-card-background,var(--card-background-color,#fff)));flex:none}
 .insight-unit{white-space:nowrap}
-.insight-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 8px;margin:6px 0 0}
+.insight-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
 .insight-metrics.has-total{grid-template-columns:repeat(4,minmax(0,1fr))}
-.insight-metrics>div{min-width:0}
-.insight-metrics dt{font-size:10px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere}
-.insight-metrics dd{margin:1px 0 0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:var(--primary-text-color,#20252b)}
 .insight-states{font-size:10px;color:var(--secondary-text-color,#666);margin-top:4px}
 .insight-durations{margin:6px 0 0;display:grid;gap:4px}
 .insight-durations>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:12px}
@@ -8518,6 +8746,7 @@ function chartInsightStyles(){return `
 .insight-durations dd{margin:0;color:var(--primary-text-color,#20252b);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 [data-series]{touch-action:manipulation}
 `;}
+
 
 // Domain-neutral SVG renderer. Adapters own data, geometry, colors and annotations.
 function graphLineStyle(style, width = 3.5) {
@@ -8570,7 +8799,7 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return `.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:8px 10px;border:1px solid var(--divider-color,#ddd);border-radius:6px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));box-shadow:0 3px 12px #0002;font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:4px;white-space:normal}.tooltip span{display:grid;grid-template-columns:9px minmax(0,1fr);column-gap:6px;margin-top:5px;white-space:normal}.tooltip i{display:block;width:9px;height:9px;margin:4px 0 0;border:0;border-radius:3px;flex-shrink:0;background:var(--series-color)}.tooltip b{font-weight:600;min-width:0;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -9131,7 +9360,7 @@ class HeatmapCard extends HTMLElement {
     const dutch=isDutch(this._hass),name=this._sensorName();
     const value=cell.value==null?(dutch?'Geen gegevens':'No data'):`${this._number(cell.value)} ${this._data.unit}`;
     const date=this._cellDate(cell),bounds=this._cellBounds(cell),color=cell.value==null?'var(--divider-color,#ddd)':(this._scale??colorScale(this._rows,this._config)).color(cell.value);
-    tooltip.innerHTML=`<strong>${esc(date)}${bounds?` · ${esc(bounds)}`:''}</strong><span><i style="background:${color}"></i><b class="tooltip-label">${esc(name)}: <em class="tooltip-value">${esc(value)}</em></b>${cell.partial?`<small>${dutch?'Onvolledig':'Incomplete'}</small>`:''}</span>`;
+    tooltip.innerHTML=`<strong>${esc(date)}${bounds?` · ${esc(bounds)}`:''}</strong><span><i style="background:${color}"></i><b class="tooltip-label">${esc(name)} <em class="tooltip-value">${esc(value)}</em></b>${cell.partial?`<small>${dutch?'Onvolledig':'Incomplete'}</small>`:''}</span>`;
     tooltip.style.width='max-content';tooltip.style.maxWidth=`${Math.max(0,Math.min(360,right-left-8))}px`;tooltip.style.maxHeight=`${Math.max(0,bottom-top-8)}px`;
     tooltip.hidden=false;
     const measured=tooltip.getBoundingClientRect();
@@ -9215,7 +9444,7 @@ class HeatmapCard extends HTMLElement {
     this.shadowRoot.innerHTML=`<style>${cardHeaderStyles()}${periodControlsStyles()}${chartInsightStyles()}${SharedGraph.tooltipStyles()}
       :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
       ha-card{display:block;height:100%;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-family:inherit}
-      .content{display:flex;flex-direction:column;height:100%;padding:16px;min-width:0;min-height:0;box-sizing:border-box}.content>.card-header,.content>.legend,.content>.status{flex-shrink:0}.chart{position:relative;display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
+      .content{display:flex;flex-direction:column;height:100%;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box}.content>.card-header,.content>.legend,.content>.status{flex-shrink:0}.chart{position:relative;display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
       .matrix-scroll{flex:1;min-height:0;overflow:auto;max-height:${c.max_height}px;box-sizing:border-box;padding-bottom:6px}
       .matrix{min-width:${(c.show_labels?82+c.cell_gap:0)+columnCount*c.cell_width+(columnCount-1)*c.cell_gap}px;display:grid;gap:${c.cell_gap}px}.matrix-row{display:grid;grid-template-columns:${c.show_labels?'82px ':''}repeat(${columnCount},minmax(${c.cell_width}px,1fr));gap:${c.cell_gap}px}.matrix-row:not(.hours){content-visibility:auto;contain-intrinsic-size:auto ${c.cell_height}px}.matrix-body{position:relative;min-width:100%}.virtual-row{position:absolute;left:0;right:0;height:${c.cell_height}px}
       .hours{${c.show_labels?'':'display:none;'}position:sticky;top:0;z-index:3;background:var(--ha-card-background,var(--card-background-color,#fff))}
@@ -9421,6 +9650,46 @@ function moveGraphPeriod(host,direction){
  return host._reloadPeriod();
 }
 
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
+
+
+// Informational detail surface. Callers format/translate text and compute percentages.
+// All content is escaped; this component deliberately accepts no trusted HTML.
+function uiDetailSurface({title='',metrics=[],percent=null,entity='',actionLabel='',attrs={}}={}){
+ const progress=Number.isFinite(percent)?Math.max(0,Math.min(100,percent)):null;
+ return `<section${uiAttributes({...attrs,'data-ui-detail-surface':'','aria-label':title})}>
+  <h3 class="ui-detail-surface-title">${entity?`<button type="button" class="ui-detail-surface-action" data-entity="${uiEscape(entity)}" aria-label="${uiEscape(actionLabel||title)}">${uiEscape(title)} <span aria-hidden="true">›</span></button>`:uiEscape(title)}</h3>
+  <dl class="ui-detail-surface-metrics">${metrics.map(({label='',value,unit='',hint=''})=>{
+   const missing=value==null||value==='';
+   return `<div><dt>${uiEscape(label)}</dt><dd>${uiEscape(missing?'—':value)}${!missing&&unit?' '+uiEscape(unit):''}${hint?`<small class="ui-detail-surface-hint">${uiEscape(hint)}</small>`:''}</dd></div>`;
+  }).join('')}</dl>
+  ${progress==null?'':`<div class="ui-detail-surface-track" aria-hidden="true"><i style="width:${progress}%"></i></div>`}
+ </section>`;
+}
+
+function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+`
+[data-ui-detail-surface]{box-sizing:border-box;min-width:0;padding:12px;border-radius:8px;color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--ui-detail-tone,var(--primary-color,#2196f3)) 5%,transparent)}
+[data-ui-detail-surface] .ui-detail-surface-title{font-family:inherit;font-size:12px;font-weight:600;line-height:1.4;color:inherit;margin:0 0 8px;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-action{font:inherit;line-height:1.4;color:inherit;background:none;border:0;border-radius:4px;padding:4px 0;margin:-4px 0;text-align:start;cursor:pointer}
+[data-ui-detail-surface] .ui-detail-surface-action:hover{text-decoration:underline}[data-ui-detail-surface] .ui-detail-surface-action:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
+[data-ui-detail-surface] .ui-detail-surface-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,68px),1fr));gap:8px 12px;margin:0}
+[data-ui-detail-surface] .ui-detail-surface-metrics>div{min-width:0}
+[data-ui-detail-surface] dt{font-size:10px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere;margin:0 0 2px}
+[data-ui-detail-surface] dd{margin:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-hint{display:block;margin-top:3px;font-size:10px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--secondary-text-color,#626a78)}
+[data-ui-detail-surface] .ui-detail-surface-track{height:8px;border-radius:8px;background:var(--divider-color,#ddd);overflow:hidden;margin-top:8px}
+[data-ui-detail-surface] .ui-detail-surface-track>i{display:block;height:100%;background:var(--ui-detail-tone,var(--primary-color,#2196f3))}
+@container(max-width:360px){[data-ui-detail-surface] dd{font-size:15px}}
+@media(forced-colors:active){[data-ui-detail-surface]{border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track{background:Canvas;border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track>i{background:Highlight;forced-color-adjust:none}}
+`;}
+
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function uiAttributes(values={}){
@@ -9483,21 +9752,23 @@ function bindUILegend(host,{selector='[data-ui-legend]',getId=button=>button.dat
 }
 
 
+
 function uiPopup({id,title,label=title,closeLabel='Close',content='',className='',attrs={},closeAttrs={}}){
  return `<div${uiAttributes({id,class:className||null,'data-ui-popup':'',popover:'auto',role:'dialog','aria-label':label,...attrs})}><div class="ui-popup-heading"><strong>${uiEscape(title)}</strong>${uiButton({variant:'close',content:'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>',label:closeLabel,attrs:{'data-ui-popup-close':'',...closeAttrs}})}</div>${content}</div>`;
 }
-function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560}){
+function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560,topBoundary=()=>8,align='end'}){
  let active=true;
  const position=()=>{
   if(!active||!isRequested())return;
   const box=trigger.getBoundingClientRect();
   if(!box.width||!box.height){popup.style.visibility='hidden';return;}
-  const actualWidth=Math.min(width,window.innerWidth-16);
-  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-16)+'px';
+  const actualWidth=Math.min(width,window.innerWidth-16),minimumTop=Math.max(8,Math.min(topBoundary(),window.innerHeight-80));
+  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-minimumTop-8)+'px';
   popup.style.visibility='';onShow?.();
   const height=popup.getBoundingClientRect().height,below=window.innerHeight-box.bottom-8,above=box.top-8;
-  popup.style.left=Math.max(8,Math.min(box.right-actualWidth,window.innerWidth-actualWidth-8))+'px';
-  popup.style.top=Math.max(8,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
+  const left=align==='center'?(box.left+box.right-actualWidth)/2:box.right-actualWidth;
+  popup.style.left=Math.max(8,Math.min(left,window.innerWidth-actualWidth-8))+'px';
+  popup.style.top=Math.max(minimumTop,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
  };
  if(ready?.then)ready.then(position,()=>{});
  const observer=typeof ResizeObserver==='function'?new ResizeObserver(position):null;
@@ -9505,7 +9776,7 @@ function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,m
  return {position,disconnect(){active=false;observer?.disconnect();}};
 }
 // Domain state lives in callbacks; this controller also works without a card host.
-function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false}){
+function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false,keepOpenOnOutside=()=>false,topBoundary,align}){
  let requested=false,pending=false,focusPending=false,pointerWasOpen;
  const wantsOpen=isRequested??(()=>requested),native=typeof popup.showPopover==='function';
  const isOpen=()=>native?popup.matches(':popover-open'):popup.hasAttribute('data-fallback-open');
@@ -9513,7 +9784,7 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  const cleanups=[],listen=(target,type,handler,capture=false)=>{target?.addEventListener?.(type,handler,capture);cleanups.push(()=>target?.removeEventListener?.(type,handler,capture));};
  const property=(target,key,handler)=>{if(!target)return;target[key]=handler;cleanups.push(()=>{if(target[key]===handler)target[key]=null;});};
  const closeButton=popup.querySelector('[data-ui-popup-close]');
- const placement=bindUIPopupPosition({trigger,popup,ready,isRequested:wantsOpen,onShow:()=>{
+ const placement=bindUIPopupPosition({trigger,popup,ready,topBoundary,align,isRequested:wantsOpen,onShow:()=>{
   pending=false;if(native){if(!isOpen())popup.showPopover();}else popup.setAttribute('data-fallback-open','');
   if(focusPending){(focusTarget?.()??closeButton)?.focus({preventScroll:true});focusPending=false;}
   onShown();
@@ -9532,18 +9803,20 @@ function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=
  listen(popup,'toggle',e=>{if(!isCurrent())return;const opened=e.newState==='open';if(!opened){if(wantsOpen())onClose();pending=false;focusPending=false;}requested=opened;trigger.setAttribute('aria-expanded',String(opened));onToggle(opened);});
  listen(window,'resize',()=>{if(wantsOpen()){if(closeWhenAnchorHidden&&trigger.getClientRects?.().length===0)close();else placement.position();}});
  listen(window,'scroll',e=>{if(isOpen()&&!e.composedPath().includes(popup))close();},true);
- listen(document,'pointerdown',e=>{if((!native||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container))close();});
+ listen(document,'pointerdown',e=>{if((!native||popup.getAttribute?.('popover')==='manual'||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container)&&!keepOpenOnOutside(e))close();});
  return {open,close,isOpen,position:placement.position,disconnect(){placement.disconnect();cleanups.splice(0).forEach(remove=>remove());}};
 }
-function uiPopupStyles(){return `
-[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:8px 12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:1px solid var(--divider-color,#ddd);border-radius:10px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35;box-shadow:0 8px 28px #0004}
+function uiPopupStyles(){return uiSurfaceStyles('[data-ui-popup]')+`
+[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:0;border-radius:8px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35}
 [data-ui-popup]:popover-open,[data-ui-popup][data-fallback-open]{display:block}
 [data-ui-popup] [hidden]{display:none!important}
+[data-ui-popup]>:last-child{margin-block-end:0}
 .ui-popup-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px}
 .ui-popup-heading>strong{font-size:14px;font-weight:600}
 .ui-popup-heading [data-ui-popup-close]{display:grid;place-items:center;width:30px;height:30px;min-height:30px;padding:0;line-height:1;flex:none}
 .ui-popup-heading [data-ui-popup-close] svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
 `;}
+
 
 
 
@@ -9576,14 +9849,14 @@ function cardHeader({title,showTitle=true,ready=false,historyUrl,language='en',p
  const showZoomStatus=zoomState.zoomed&&!periods.picker;
  return `<header class="card-header">${showTitle&&title?`<h2>${headerEscape(title)}</h2>`:''}<div class="header-actions">${group}${zoom}<div class="chart-links" role="group" aria-label="${nl?'Geschiedenis en informatie':'History and information'}">${uiButton({href:historyUrl??'',className:'history-link',content:cardHeaderIcon('history'),title:label[3],label:label[3]})}${information}</div></div></header>${showZoomStatus?`<div class="chart-context"><div class="chart-range"><span class="zoom-status">${nl?'Ingezoomd':'Zoomed in'}</span></div></div>`:''}`;
 }
-function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+`
+function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+uiSurfaceStyles('.chart-controls,.zoom-controls,.chart-links')+`
 .card-header{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;min-height:32px;flex:none;margin:-6px -4px 10px 0}
 .card-header h2{flex:1 1 110px;min-width:0;margin:4.75px 0 0;font-size:18px;line-height:1.25;font-weight:650;letter-spacing:-.01em;overflow-wrap:anywhere}
 .header-actions{--chart-action-gap:8px;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--chart-action-gap);flex:0 1 auto;min-width:0;max-width:100%;margin-inline-start:auto}
 .chart-controls{display:flex;align-items:center;gap:0;min-width:0;max-width:100%}
 .chart-links{display:flex;align-items:center;gap:0;flex:none}
 .zoom-controls{display:flex;gap:0;position:relative}
-.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border-radius:5px}
+.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border:0;border-radius:8px}
 .chart-controls>[data-period="now"]{width:36px}
 .chart-controls>.period-controls{position:relative;margin-inline-end:8px;padding-inline-end:8px}
 .chart-controls>.period-controls::after{content:"";position:absolute;inset-inline-end:0;top:8px;height:16px;width:1px;background:var(--divider-color,#ddd)}
@@ -9613,16 +9886,17 @@ function normalizeCalendarConfig(input={}, {draft=false}={}){
   if(!draft&&!validColor(color))throw Error('Choose an RGB color for each calendar. / Kies een RGB-kleur voor elke agenda.');
   return {...item,entity:item.entity??'',name:item.name??'',color:Array.isArray(color)?[...color]:color};
  });
- const days=input.days_to_show??5,view=input.view??'list',density=input.density??'expanded',weather=input.weather_entity??'';
+ const days=input.days_to_show??5,view=input.view??'list',density=input.compact!=null?(input.compact?'compact':'expanded'):(input.density??'expanded'),weather=input.weather_entity??'';
  if(!draft){
   if(!entities.length||entities.length>12||entities.some(row=>!/^calendar\.[a-z0-9_]+$/.test(row.entity))||new Set(entities.map(row=>row.entity)).size!==entities.length)throw Error('Choose 1–12 different calendar entities. / Kies 1–12 verschillende agenda-entiteiten.');
   if(!Number.isInteger(days)||days<1||days>14)throw Error('Days must be 1–14. / Aantal dagen moet 1–14 zijn.');
   if(!['list','columns','month'].includes(view))throw Error('Choose list, columns or month. / Kies lijst, kolommen of maand.');
   if(!['expanded','compact'].includes(density))throw Error('Choose expanded or compact density. / Kies uitgebreide of compacte weergave.');
   if(weather&&!/^weather\.[a-z0-9_]+$/.test(weather))throw Error('Choose a weather entity. / Kies een weerentiteit.');
-  for(const field of ['show_title','show_legend','show_navigation','hide_empty_days'])if(input[field]!==undefined&&typeof input[field]!=='boolean')throw Error(`${field} must be true or false.`);
+  for(const field of ['compact','show_title','show_legend','show_navigation','hide_empty_days'])if(input[field]!==undefined&&typeof input[field]!=='boolean')throw Error(`${field} must be true or false.`);
  }
  const {show_view_switcher: _legacyViewSwitcher,...settings}=input;
+ delete settings.compact;
  return {...settings,type:'custom:eleven-calendar-card',title:input.title??'',entities,weather_entity:weather,days_to_show:draft&&Object.hasOwn(input,'days_to_show')&&input.days_to_show===undefined?undefined:days,view,density,
   show_title:input.show_title!==false,show_legend:input.show_legend!==false,show_navigation:input.show_navigation!==false,hide_empty_days:input.hide_empty_days===true};
 }
@@ -9687,23 +9961,24 @@ function nextCalendarEvent(events,now=Date.now()){
  return events.reduce((next,event)=>event.start>now&&(!next||event.start<next.start)?event:next,null);
 }
 
-function calendarCardStyles(){return `
+
+
+function calendarCardStyles(){return uiDetailSurfaceStyles()+uiSurfaceStyles('.navigation,.info-button')+`
 :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
 ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
-.content{display:flex;flex-direction:column;height:100%;padding:16px;min-width:0;min-height:0;box-sizing:border-box}
+.content{display:flex;flex-direction:column;height:100%;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box}
 .content>.header,.content>.legend,.content>.status{flex-shrink:0}
 .calendar-body{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
 .legend-error{display:inline-grid;place-items:center;width:13px;height:13px;border:1px solid currentColor;border-radius:50%;color:var(--error-color,#db4437);font-size:10px;line-height:1;flex:none}
-.event-button[data-next-event],.month-chip[data-next-event],.popup-more li[data-next-event]{background:color-mix(in srgb,var(--event-color) 18%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--event-color) 50%,transparent)}
 .event-button[data-next-event] .event-title{font-weight:650}
 .header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:12px}
 .header h2{font-size:18px;line-height:1.25;font-weight:650;margin:0;min-width:72px;flex:1}
 .header-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0;margin-inline-start:auto}
-.navigation{display:flex;align-items:center;min-width:0;border-radius:5px;background:var(--secondary-background-color,#f3f3f3)}
+.navigation{display:flex;align-items:center;min-width:0;border-radius:8px;background:var(--secondary-background-color,#f3f3f3)}
 .navigation .range{padding:0 9px;white-space:nowrap;font-size:11px;font-variant-numeric:tabular-nums;border-inline-end:1px solid var(--divider-color,#ddd)}
 .navigation [data-nav=now]{width:auto;padding:0 9px}
 .header-actions svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.info-button{background:var(--secondary-background-color,#f3f3f3);border-radius:5px}
+.info-button{background:var(--secondary-background-color,#f3f3f3);border-radius:8px}
 .legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 15px;margin:0 0 12px;font-size:11px;color:var(--secondary-text-color,#666)}
 .legend-item{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;min-height:26px;padding:3px 0;border:0;border-radius:4px;background:transparent;color:inherit;font:inherit;text-align:start;cursor:pointer}.legend-item[aria-pressed="false"]{opacity:.45}.legend-item[aria-pressed="false"] span{text-decoration:line-through}.legend-item:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.legend-item span{overflow-wrap:anywhere}.dot{width:7px;height:7px;border-radius:2px;flex:none;background:var(--event-color)}
 .status{font-size:12px;line-height:1.45;color:var(--secondary-text-color,#666);margin:6px 0 12px}
@@ -9736,7 +10011,7 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .month-cell .weather{gap:2px;font-size:10px}.month-cell .weather svg{width:17px;height:17px}.month-cell .weather .low{display:none}
 .month-chip{display:block!important;width:100%;min-height:30px!important;min-width:0;text-align:start;margin:0 0 4px;padding:5px 6px!important;border:0!important;border-inline-start:3px solid var(--event-color)!important;border-radius:0 4px 4px 0!important;background:color-mix(in srgb,var(--event-color) 9%,transparent);font-size:12px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .month-more{display:block;min-height:26px;padding:4px 6px;border:0;background:transparent;color:var(--secondary-text-color,#666);font:inherit;font-size:11px;cursor:pointer;text-align:start}
-.compact .content{padding:12px 14px}.compact .header{margin-bottom:8px}.compact .legend{margin-bottom:7px}
+.compact .content{padding:var(--eleven-card-padding,16px)}.compact .header{margin-bottom:8px}.compact .legend{margin-bottom:7px}
 .compact .list-day+.list-day{margin-top:7px;padding-top:7px}.compact .day-heading{margin-bottom:2px}
 .compact .list-event{grid-template-columns:54px minmax(0,1fr);gap:7px;align-items:center;padding:2px 0}.compact .list-event>.event-time{font-size:10px}.compact .list-event .event-button{min-height:24px!important;padding-inline-start:7px!important}.compact .list-event .event-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.compact .event-meta{display:none}.compact .empty-day{padding:3px 0}
 .compact .column{padding-bottom:6px}.compact .column-heading{min-height:48px;margin-bottom:5px;gap:3px}.compact .column .event-button{min-height:24px!important;margin-bottom:4px;padding:4px 6px 4px 8px!important}.compact .column .event-time{margin-bottom:2px}
@@ -9749,15 +10024,15 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .popup-time{margin-top:3px;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}.popup-field{padding:10px 0 0;margin-top:10px;border-top:1px solid var(--divider-color,#ddd)}
 .popup-field-label{display:block;margin-bottom:3px;color:var(--secondary-text-color,#666);font-size:10px}.popup-location,.popup-description{font-size:12px;overflow-wrap:anywhere}.popup-description{white-space:pre-wrap}
 .popup-more{list-style:none;padding:0;margin:9px 0}.popup-more li{padding:5px 0;border-top:1px solid var(--divider-color,#ddd);font-size:11px}.popup-more summary{cursor:pointer}.popup-more small{display:block;color:var(--secondary-text-color,#666)}.popup-more-detail{padding:8px 0 10px 12px}
-.calendar-info .insight-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 8px}
-.calendar-info .calendar-agenda-metrics{grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:8px 12px;margin:6px 0 0}
-.calendar-info .insight-metrics>div{min-width:0}.calendar-info dt{font-size:10px;color:var(--secondary-text-color,#666)}.calendar-info dd{margin:2px 0 0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.calendar-info .insight-sensors{display:grid;gap:10px}
+.calendar-info .calendar-agenda-metrics{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
+.calendar-info .calendar-agenda-metrics>div:last-child dd{font-size:14px;line-height:1.5;letter-spacing:0}
+
 .calendar-info .calendar-agenda-metrics dd small{display:block;margin-top:2px;font-size:10px;font-weight:400;color:var(--secondary-text-color,#666)}
-.calendar-info .insight-sensor{padding:8px 0}
-.calendar-info .insight-sensor+.insight-sensor{border-top:1px solid var(--divider-color,#ddd)}
+
 .calendar-info .insight-sensor-heading{display:flex;align-items:center;gap:8px;min-width:0}.calendar-info .insight-sensor-heading strong{flex:1;min-width:0;overflow-wrap:anywhere}
 .calendar-info .insight-states{font-size:10px;color:var(--secondary-text-color,#666);margin-top:4px}
-@container(max-width:420px){.content{padding:12px}.header{align-items:flex-start}.header-actions{gap:5px}.navigation .range{font-size:10px;padding:0 6px}.navigation [data-nav=now]{padding:0 6px}.list-event{grid-template-columns:50px minmax(0,1fr);gap:8px}.weather{font-size:10px}}
+@container(max-width:420px){.content{padding:var(--eleven-card-padding,16px)}.header{align-items:flex-start}.header-actions{gap:5px}.navigation .range{font-size:10px;padding:0 6px}.navigation [data-nav=now]{padding:0 6px}.list-event{grid-template-columns:50px minmax(0,1fr);gap:8px}.weather{font-size:10px}}
 `;}
 
 
@@ -9782,10 +10057,10 @@ const words={
  nextAppointment:['Eerstvolgende','Next event'],location:['Locatie','Location'],description:['Beschrijving','Description']
 };
 const label=(key,dutch)=>words[key]?.[dutch?0:1]??key;
-const fieldLabels={title:['Titel','Title'],view:['Weergave','View'],density:['Dichtheid','Density'],days_to_show:['Aantal dagen','Days to show'],weather_entity:['Weerentiteit','Weather entity'],
+const fieldLabels={title:['Titel','Title'],view:['Weergave','View'],compact:['Compacte weergave','Compact layout'],density:['Dichtheid','Density'],days_to_show:['Aantal dagen','Days to show'],weather_entity:['Weerentiteit','Weather entity'],
  show_title:['Titel tonen','Show title'],show_legend:['Agendalegenda tonen','Show calendar legend'],show_navigation:['Navigatie tonen','Show navigation'],hide_empty_days:['Lege dagen verbergen in daglijst','Hide empty days in day list'],
  entity:['Agenda','Calendar'],name:['Naam','Name'],color:['Kleur','Color']};
-const fieldHelp={density:['Compact toont minder details; open een afspraak voor alle informatie.','Compact shows fewer details; open an event for full information.'],days_to_show:['Voor daglijst en dagkolommen; de maandweergave toont altijd een hele maand.','For list and columns; the month view always shows a full month.'],
+const fieldHelp={compact:['Compact toont minder details; open een afspraak voor alle informatie.','Compact shows fewer details; open an event for full information.'],days_to_show:['Voor daglijst en dagkolommen; de maandweergave toont altijd een hele maand.','For list and columns; the month view always shows a full month.'],
  weather_entity:['Optioneel. Dagtemperaturen komen uit de dagelijkse voorspelling van deze weerentiteit.','Optional. Daily temperatures come from this weather entity’s daily forecast.'],
  color:['Kleur van afspraken en de legenda.','Color for events and the legend.']};
 const selectorOptions=(dutch,items)=>({select:{mode:'dropdown',options:items.map(([value,nl,en])=>({value,label:dutch?nl:en}))}});
@@ -9806,7 +10081,7 @@ class CalendarEditor extends HTMLElement{
    this._form.addEventListener('value-changed',event=>{event.stopPropagation();this._config=normalizeCalendarConfig({...this._config,...event.detail.value,entities:this._config.entities},{draft:true});this._render();this._emit();});
    this.shadowRoot.querySelector('.add').onclick=()=>{if(this._config.entities.length>=12)return;this._config={...this._config,entities:[...this._config.entities,{entity:'',name:'',color:calendarRgb(CALENDAR_COLORS[this._config.entities.length%CALENDAR_COLORS.length])}]};this._render();this.shadowRoot.querySelector('.calendars').lastElementChild.open=true;};
   }
-  const global=CalendarCard.getConfigForm(dutch);this._form.hass=this._hass;this._form.schema=global.schema;this._form.data=this._config;this._form.computeLabel=global.computeLabel;this._form.computeHelper=global.computeHelper;
+  const global=CalendarCard.getConfigForm(dutch);this._form.hass=this._hass;this._form.schema=global.schema;this._form.data={...this._config,compact:this._config.density==='compact'};this._form.computeLabel=global.computeLabel;this._form.computeHelper=global.computeHelper;
   this.shadowRoot.querySelector('h3').textContent=dutch?'Agenda’s':'Calendars';
   const add=this.shadowRoot.querySelector('.add');add.textContent=dutch?'Agenda toevoegen':'Add calendar';add.disabled=this._config.entities.length>=12;
   const container=this.shadowRoot.querySelector('.calendars');while(container.children.length>this._config.entities.length)container.lastElementChild.remove();
@@ -9828,9 +10103,8 @@ class CalendarCard extends HTMLElement{
  constructor(){super();this.attachShadow({mode:'open'});this._connected=false;this._calendarGeneration=0;this._weatherGeneration=0;this._calendarUnsubs=[];this._events={};this._statuses={};this._forecast=null;this._weatherError=false;this._view='list';this._offset=0;this._hiddenCalendars=new Set();this._legendClickTimers=new Map();this._popupControllers=[];this._todayKey=null;}
  static getConfigForm(dutch=false){return {schema:[
   {name:'title',selector:{text:{}}},{name:'view',default:'list',selector:selectorOptions(dutch,[['list','Daglijst','Day list'],['columns','Dagkolommen','Day columns'],['month','Maand','Month']])},
-  {name:'density',default:'expanded',selector:selectorOptions(dutch,[['expanded','Uitgebreid','Expanded'],['compact','Compact','Compact']])},
   {name:'days_to_show',default:5,selector:{number:{min:1,max:14,step:1,mode:'box'}}},{name:'weather_entity',selector:{entity:{domain:'weather'}}},
-  {type:'expandable',name:'appearance',title:dutch?'Weergave':'Appearance',flatten:true,schema:[{name:'show_title',default:true,selector:{boolean:{}}},{name:'show_legend',default:true,selector:{boolean:{}}},{name:'show_navigation',default:true,selector:{boolean:{}}},{name:'hide_empty_days',default:false,selector:{boolean:{}}}]}
+  {type:'expandable',name:'appearance',title:dutch?'Weergave':'Appearance',flatten:true,schema:[{name:'compact',selector:{boolean:{}}},{name:'show_title',default:true,selector:{boolean:{}}},{name:'show_legend',default:true,selector:{boolean:{}}},{name:'show_navigation',default:true,selector:{boolean:{}}},{name:'hide_empty_days',default:false,selector:{boolean:{}}}]}
  ],computeLabel:item=>fieldLabels[item.name]?.[dutch?0:1]??item.name,computeHelper:item=>fieldHelp[item.name]?.[dutch?0:1]};}
  static async getConfigElement(){
   if(!customElements.get('ha-form')){const helpers=await window.loadCardHelpers();const card=await helpers.createCardElement({type:'entities',entities:[]});await card.constructor.getConfigElement();await customElements.whenDefined('ha-form');}
@@ -10024,7 +10298,7 @@ class CalendarCard extends HTMLElement{
    const id=row.entity,events=all.filter(event=>event.calendar===id),next=nextCalendarEvent(events),hidden=this._hiddenCalendars.has(id),status=this._statuses[id],failed=this._calendarFailed(id);
    const states=[hidden?label('hidden',dutch):'',failed?label('calendarUnavailable',dutch):status==='loading'?label('loading',dutch):status!=='ready'?label('noData',dutch):''].filter(Boolean);
    const nextText=next?escapeCalendarHtml(next.summary||label('title',dutch)):'—',nextWhen=next?`${nextFormat.format(next.start)}${next.allDay?` · ${label('allDay',dutch)}`:` · ${this._time(next.start)}`}`:'';
-   return `<section class="insight-sensor" data-information-entity="${escapeCalendarHtml(id)}"><div class="insight-sensor-heading"><i class="dot" style="--event-color:${this._eventColor(id)}" aria-hidden="true"></i><strong>${escapeCalendarHtml(this._calendarName(id))}</strong></div><dl class="insight-metrics calendar-agenda-metrics"><div><dt>${label('appointments',dutch)}</dt><dd>${status==='ready'?events.length:'—'}</dd></div><div><dt>${label('nextAppointment',dutch)}</dt><dd>${status==='ready'?nextText:'—'}${status==='ready'&&next?`<small>${escapeCalendarHtml(nextWhen)}</small>`:''}</dd></div></dl>${states.length?`<div class="insight-states" role="status">${escapeCalendarHtml(states.join(' · '))}</div>`:''}</section>`;
+   return `<section class="insight-sensor" data-information-entity="${escapeCalendarHtml(id)}" data-ui-detail-surface><div class="insight-sensor-heading ui-detail-surface-title"><i class="dot" style="--event-color:${this._eventColor(id)}" aria-hidden="true"></i><strong>${escapeCalendarHtml(this._calendarName(id))}</strong></div><dl class="ui-detail-surface-metrics insight-metrics calendar-agenda-metrics"><div><dt>${label('appointments',dutch)}</dt><dd>${status==='ready'?events.length:'—'}</dd></div><div><dt>${label('nextAppointment',dutch)}</dt><dd>${status==='ready'?nextText:'—'}${status==='ready'&&next?`<small>${escapeCalendarHtml(nextWhen)}</small>`:''}</dd></div></dl>${states.length?`<div class="insight-states" role="status">${escapeCalendarHtml(states.join(' · '))}</div>`:''}</section>`;
   }).join('');
   const content=`<div class="calendar-info"><div class="insight-sensors">${rows}</div></div>`;
   return uiPopup({id:'calendar-info',className:'insight-popup',title:dutch?'Gegevens':'Data information',closeLabel:label('close',dutch),content});
@@ -10065,4 +10339,4372 @@ class CalendarCard extends HTMLElement{
 if(!customElements.get('eleven-calendar-card'))customElements.define('eleven-calendar-card',CalendarCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(card=>card.type==='eleven-calendar-card'))window.customCards.push({type:'eleven-calendar-card',name:'Eleven Calendar (beta)',description:'Calendar events in a list, day columns or month view, with optional weather.',preview:true});
+})();
+
+;
+// Eleven Weather (beta) — self-contained module
+(()=>{
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
+// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
+function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function uiAttributes(values={}){
+ return Object.entries(values).map(([key,value])=>{
+  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
+  if(value==null)return '';
+  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
+  return ` ${key}="${uiEscape(value)}"`;
+ }).join('');
+}
+function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
+ const classes=className?` class="${uiEscape(className)}"`:'';
+ const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
+ return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
+}
+function uiButtonStyles(){return `
+[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
+[data-ui-button="icon"]{width:32px;height:32px}
+[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
+[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
+[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
+[data-ui-button]:disabled{opacity:.35;cursor:default}
+[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
+[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
+[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
+[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
+`;}
+
+
+// The caller formats measurements and translates the subtitle. All text is escaped.
+function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',attrs={}}={}){
+ const missing=value==null||value==='';
+ const number=uiEscape(missing?'—':value);
+ const label=subtitle!==''&&subtitle!=null?(subtitleEntity?`<button type="button" class="primary-label" data-entity="${uiEscape(subtitleEntity)}">${uiEscape(subtitle)}</button>`:`<div class="primary-label">${uiEscape(subtitle)}</div>`):'';
+ return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
+}
+
+function uiPrimaryValueStyles(){return `
+[data-ui-primary-value]{--_primary-tone:var(--ui-primary-tone,var(--tone,var(--primary-color,#2196f3)));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-primary-value] .primary-value{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin:0;font-size:var(--ui-primary-size,60px);line-height:1.15;font-weight:650;letter-spacing:-.055em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+[data-ui-primary-value] .primary-number{display:block;min-width:0;max-width:100%;overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-number{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}[data-ui-primary-value] button:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px;border-radius:3px}
+[data-ui-primary-value] .primary-value small{display:block;margin:8px 0 0;font-size:var(--ui-primary-unit-size,16px);line-height:1.4;font-weight:400;letter-spacing:-.03em;color:var(--secondary-text-color,#626a78)}
+[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid color-mix(in srgb,var(--_primary-tone) 55%,transparent);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-label{display:block;max-width:100%;min-height:0;margin-bottom:0;padding-block:0;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
+[data-ui-primary-value][data-density=compact] .primary-value{font-size:var(--ui-primary-size,46px)}
+[data-ui-primary-value][data-density=compact] .primary-value small{font-size:var(--ui-primary-unit-size,14px);margin-top:5px}
+`;}
+
+
+
+// Text is escaped. *Content options are trusted markup owned by the calling card.
+// action renders a native button; do not nest other controls in that variant.
+function uiMetric({icon='',iconContent='',title='',value,valueContent='',unit='',info='',infoContent='',compact=false,action=false,attrs={}}={}){
+ const missing=!valueContent&&(value==null||value==='');
+ const symbol=iconContent||(icon?`<ha-icon icon="${uiEscape(icon)}"></ha-icon>`:'');
+ const tag=action?'button':'div';
+ return `<${tag}${uiAttributes({...attrs,...(action?{type:'button'}:{}),'data-ui-metric':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}>
+  ${symbol?`<span class="ui-metric-icon" aria-hidden="true">${symbol}</span>`:''}
+  <div class="ui-metric-reading"><div class="ui-metric-title">${uiEscape(title)}</div><div class="ui-metric-value">${valueContent||uiEscape(missing?'—':value)}${!missing&&unit?` <span class="ui-metric-unit">${uiEscape(unit)}</span>`:''}</div></div>
+  ${infoContent||info!==''&&info!=null?`<div class="ui-metric-info">${infoContent||uiEscape(info)}</div>`:''}
+ </${tag}>`;
+}
+
+function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
+[data-ui-metric]{--_metric-tone:var(--ui-metric-tone,var(--primary-color,#2196f3));box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-content:start;align-items:start;min-width:0;padding:12px;border-radius:var(--ui-metric-radius,8px);background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--_metric-tone) 10%,transparent),color-mix(in srgb,var(--_metric-tone) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee);color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-metric]:has(.ui-metric-info){grid-template-rows:auto auto auto}
+[data-ui-metric] .ui-metric-icon{box-sizing:border-box;display:grid;place-items:center;grid-column:2;grid-row:1/span 2;width:26px;height:26px;border-radius:7px;color:var(--_metric-tone);background:transparent;transform:translate(4px,-4px)}
+[data-ui-metric] .ui-metric-icon svg,[data-ui-metric] .ui-metric-icon ha-icon{display:block;width:18px;height:18px;--mdc-icon-size:18px}
+[data-ui-metric] .ui-metric-icon svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+[data-ui-metric] .ui-metric-reading{display:contents}
+[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:1;min-width:0}
+[data-ui-metric]:not(:has(.ui-metric-icon)) :is(.ui-metric-title,.ui-metric-value){grid-column:1/-1}
+[data-ui-metric] .ui-metric-title,[data-ui-metric] .ui-metric-info{font-size:11px;line-height:1.4;font-weight:400;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-metric] .ui-metric-value{grid-column:1;grid-row:2;align-self:stretch;min-width:0;margin:0;font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ui-metric-unit{display:inline-block;margin-inline-start:4px;font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78)}
+[data-ui-metric] .ui-metric-info{grid-column:1/-1;grid-row:3;align-self:stretch;margin-top:6px;padding-top:8px;border-top:1px solid color-mix(in srgb,var(--_metric-tone) 8%,transparent)}
+[data-ui-metric][data-density=compact]{padding:8px;column-gap:6px}
+[data-ui-metric][data-density=compact] .ui-metric-icon{width:20px;height:20px;border-radius:6px;transform:translate(2px,-2px)}
+[data-ui-metric][data-density=compact] .ui-metric-icon svg,[data-ui-metric][data-density=compact] .ui-metric-icon ha-icon{width:16px;height:16px;--mdc-icon-size:16px}
+[data-ui-metric][data-density=compact] .ui-metric-value{font-size:20px}
+[data-ui-metric][data-density=compact] .ui-metric-info{margin-top:4px;padding-top:4px}
+[data-ui-metric][data-unavailable=true]{--_metric-tone:var(--secondary-text-color,#626a78)}
+button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:hover{filter:brightness(1.04)}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+[data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
+[data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
+@supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
+`;}
+
+
+function uiTabs({id,label,items,selected,className='',panelClassName='',variant=''}={}){
+ if(typeof id!=='string'||!id||!items?.length||items.some(item=>typeof item.value!=='string'||!item.value)||new Set(items.map(item=>item.value)).size!==items.length)throw Error('Tabs need an id and distinct text values.');
+ const active=items.find(item=>item.value===selected&&!item.disabled)??items.find(item=>!item.disabled);
+ const tabId=value=>`${id}-tab-${encodeURIComponent(value)}`,panelId=value=>`${id}-panel-${encodeURIComponent(value)}`;
+ const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'','data-ui-card-tabs':variant==='card'?true:null,role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
+ const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,'data-ui-card-tab-panel':variant==='card'?true:null,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
+ return bar+panels;
+}
+function bindUITabs({tabs,panels,onSelect=()=>{}}){
+ const buttons=[...tabs],sections=[...panels],cleanups=[];
+ const select=(value,{focus=false,notify=true}={})=>{
+  const target=buttons.find(tab=>tab.dataset.uiTab===value&&!tab.disabled);if(!target)return false;
+  for(const tab of buttons){const active=tab===target;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
+  for(const panel of sections)panel.hidden=panel.dataset.uiTabPanel!==value;
+  if(focus)target.focus({preventScroll:true});if(notify)onSelect(value,target);return true;
+ };
+ for(const tab of buttons){
+  const click=()=>select(tab.dataset.uiTab,{focus:true});
+  const keydown=e=>{
+   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+   e.preventDefault();e.stopPropagation();const enabled=buttons.filter(button=>!button.disabled),index=enabled.indexOf(tab);
+   const next=e.key==='Home'?0:e.key==='End'?enabled.length-1:(index+(e.key==='ArrowRight'?1:-1)+enabled.length)%enabled.length;
+   if(enabled[next])select(enabled[next].dataset.uiTab,{focus:true});
+  };
+  tab.onclick=click;tab.onkeydown=keydown;
+  cleanups.push(()=>{if(tab.onclick===click)tab.onclick=null;if(tab.onkeydown===keydown)tab.onkeydown=null;});
+ }
+ return {select,disconnect(){cleanups.splice(0).forEach(remove=>remove());}};
+}
+function uiTabsStyles(){return `
+[data-ui-tabs]{display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid var(--divider-color,#ddd)}
+[data-ui-tabs] [role="tab"]{flex:1;justify-content:center;min-width:0;min-height:36px;padding:8px 3px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--secondary-text-color,#666);white-space:nowrap}
+[data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
+[data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
+[data-ui-tab-panel][hidden]{display:none!important}
+[data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
+[data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
+[data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
+[data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
+`;}
+
+// Decorative header layers; all paint inherits the weather state's --tone.
+function observeCardMotion(host,onVisibility=()=>{}){
+ if(typeof document==='undefined'||typeof host.toggleAttribute!=='function')return ()=>{};
+ let visible=true;
+ const update=()=>{host.toggleAttribute('data-motion-paused',document.hidden||!visible);onVisibility();};
+ const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{visible=entries.some(entry=>entry.isIntersecting);update();}):null;
+ observer?.observe(host);document.addEventListener('visibilitychange',update);update();
+ return ()=>{observer?.disconnect();document.removeEventListener('visibilitychange',update);};
+}
+function headerAtmosphere(background){
+ if(background==='terrain')return '<div class="header-pattern" aria-hidden="true">'+Array.from({length:10},(_,n)=>`<i style="--n:${n}"></i>`).join('')+'</div>';
+ if(background==='hologram'||background==='ink')return '<div class="header-pattern" aria-hidden="true">'+'<i></i>'.repeat(background==='ink'?3:2)+'</div>';
+
+ if(!['aurora','clouds','isobars'].includes(background))return '';
+ let body='';
+ if(background==='aurora')body=Array.from({length:32},(_,i)=>`<i style="--star-x:${i*37%100}%;--star-y:${i*19%72}%;--star-duration:${2+i%5}s;--star-delay:${-i*.37}s"></i>`).join('');
+ if(background==='isobars')body='<svg class="weather-isobars" viewBox="0 0 600 340" preserveAspectRatio="none" focusable="false">'+Array.from({length:10},(_,i)=>`<path d="M-40 ${40+i*27}C100 ${-90+i*27} 235 ${270+i*10} 370 ${105+i*15}S580 ${-20+i*28} 650 ${85+i*29}"/>`).join('')+Array.from({length:4},(_,i)=>`<path class="weather-front" d="M-40 ${67+i*54}C100 ${-63+i*54} 235 ${280+i*20} 370 ${120+i*30}S580 ${8+i*56} 650 ${114+i*58}"/>`).join('')+'</svg>';
+ return `<div class="header-atmosphere" aria-hidden="true">${body}</div>`;
+}
+
+const headerAtmosphereStyles=`
+.header-atmosphere{position:absolute;inset:0;overflow:hidden;pointer-events:none;--sky-light:color-mix(in srgb,var(--tone) 42%,transparent)}
+.content:is([data-background=aurora],[data-background=clouds],[data-background=isobars]) :is(.scene-background,.header-background)::after{display:none}
+.content[data-background=aurora] :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 60% 20%,color-mix(in srgb,var(--tone) 32%,transparent),transparent 80%)}
+[data-background=aurora] .header-atmosphere::before,[data-background=aurora] .header-atmosphere::after{content:'';position:absolute;width:170%;height:72%;left:-35%;top:0;border-radius:50%;background:conic-gradient(from 75deg at 50% 100%,transparent,color-mix(in srgb,var(--tone) 70%,#58ddb6) 10deg,transparent 42deg);filter:blur(13px);animation:weather-aurora 13s ease-in-out infinite alternate;transform:rotate(-18deg)}
+[data-background=aurora] .header-atmosphere::after{top:20%;opacity:.7;animation-delay:-7s;animation-duration:17s;transform:rotate(15deg);background:conic-gradient(from 260deg at 50% 0%,transparent,color-mix(in srgb,var(--tone) 75%,#e1a0d9) 15deg,transparent 55deg)}
+[data-background=aurora] .header-atmosphere i{position:absolute;left:var(--star-x);top:var(--star-y);width:2px;height:2px;border-radius:50%;background:var(--tone);box-shadow:0 0 8px var(--tone);opacity:.55;animation:weather-star var(--star-duration) ease-in-out infinite alternate;animation-delay:var(--star-delay)}
+.content[data-background=clouds] :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 65% 20%,color-mix(in srgb,var(--tone) 42%,transparent),transparent 76%)}
+[data-background=clouds] .header-atmosphere::before,[data-background=clouds] .header-atmosphere::after{content:'';position:absolute;left:-40%;top:32%;width:180%;height:75%;background:radial-gradient(ellipse at 18% 53%,color-mix(in srgb,var(--tone) 42%,transparent),transparent 28%),radial-gradient(ellipse at 46% 40%,color-mix(in srgb,var(--tone) 33%,transparent),transparent 38%),radial-gradient(ellipse at 82% 62%,color-mix(in srgb,var(--tone) 44%,transparent),transparent 31%);animation:weather-clouds 8s ease-in-out infinite alternate}
+[data-background=clouds] .header-atmosphere::after{top:12%;opacity:.55;animation-duration:13s;animation-delay:-5s;animation-direction:alternate-reverse}
+.content[data-background=isobars] :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 50% 35%,color-mix(in srgb,var(--tone) 42%,transparent),transparent 70%)}
+.weather-isobars{position:absolute;width:155%;height:135%;left:-28%;top:-10%;fill:none;stroke:var(--tone);stroke-width:.8;opacity:.36}
+.weather-isobars .weather-front{stroke-width:2;stroke-dasharray:38 540;opacity:1;animation:weather-front 9s linear infinite}
+.weather-isobars .weather-front:nth-child(2n){animation-duration:13s;animation-delay:-5s}
+@keyframes weather-aurora{to{transform:translate(9%,20%) rotate(9deg) scale(1.16)}}
+@keyframes weather-star{from{opacity:.2}to{opacity:.9;transform:scale(1.4)}}
+@keyframes weather-clouds{0%{transform:translate(-16%,6%) scale(1);opacity:.6}50%{opacity:1}100%{transform:translate(22%,-16%) scale(1.16);opacity:.85}}
+@keyframes weather-front{to{stroke-dashoffset:-578}}
+.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere *,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::before,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::after{animation:none!important}
+:host([data-motion-paused]) *,:host([data-motion-paused]) *::before,:host([data-motion-paused]) *::after{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.header-atmosphere,.header-atmosphere *,.header-atmosphere::before,.header-atmosphere::after{animation:none!important}}
+
+.header-pattern{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.header-pattern i{position:absolute;display:block;pointer-events:none}
+.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::before,.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::after{display:none}
+[data-background=hologram] .header-pattern{perspective:380px;background:radial-gradient(ellipse at 50% 60%,color-mix(in srgb,var(--tone) 15%,transparent),transparent 70%)}
+[data-background=hologram] .header-pattern i:first-child{inset:-25%;background:repeating-linear-gradient(0deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px),repeating-linear-gradient(90deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px);transform:rotateX(52deg);transform-origin:50% 80%;animation:energy-background-grid 26s linear infinite}
+[data-background=hologram] .header-pattern i:last-child{inset:0;background:linear-gradient(180deg,transparent 25%,color-mix(in srgb,var(--tone) 14%,transparent) 48%,transparent 65%);animation:energy-background-scan 16s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i{width:100%;height:100%;left:-20%;top:-35%;border-radius:36% 64% 55% 45% / 65% 45% 55% 35%;background:radial-gradient(ellipse,color-mix(in srgb,var(--tone) 25%,transparent),transparent 70%);filter:blur(15px);animation:energy-background-ink 29s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i:nth-child(2){left:35%;top:-20%;opacity:.75;animation-delay:-14s;animation-duration:37s}
+[data-background=ink] .header-pattern i:nth-child(3){left:5%;top:25%;opacity:.45;animation-delay:-24s;animation-duration:41s}
+[data-background=terrain] .header-pattern i{width:calc(130px + var(--n)*38px);height:calc(80px + var(--n)*25px);left:65%;top:20%;border:1px solid color-mix(in srgb,var(--tone) 20%,transparent);border-radius:42% 58% 63% 37% / 52% 37% 63% 48%;transform:translate(-50%,-50%) rotate(-18deg);animation:energy-background-terrain 24s ease-in-out infinite alternate;animation-delay:calc(var(--n)*-1.5s)}
+@keyframes energy-background-grid{to{background-position:0 72px,0 72px}}
+@keyframes energy-background-scan{from{transform:translateY(-25%)}to{transform:translateY(25%)}}
+@keyframes energy-background-ink{from{transform:rotate(-12deg) scale(.9)}to{transform:translate(10%,8%) rotate(25deg) scale(1.15)}}
+@keyframes energy-background-terrain{from{translate:-2% -2%;rotate:-2deg}to{translate:3% 5%;rotate:5deg}}
+.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-pattern i{animation:none!important}
+:host([data-motion-paused]) .header-pattern i{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.header-pattern i{animation:none!important}}
+`;
+
+// Shared designs; each card supplies its own state color through --tone.
+const HEADER_BACKGROUNDS = [
+ {
+  "value": "lanes",
+  "label": "Energy Lanes"
+ },
+ {
+  "value": "halo",
+  "label": "Halo"
+ },
+ {
+  "value": "ribbon",
+  "label": "Silk Flow"
+ },
+ {
+  "value": "prism-glass",
+  "label": "Prism Glass"
+ },
+ {
+  "value": "eclipse",
+  "label": "Eclipse"
+ },
+ {
+  "value": "aurora",
+  "label": "Aurora sky"
+ },
+ {
+  "value": "clouds",
+  "label": "Cloud layers"
+ },
+ {
+  "value": "isobars",
+  "label": "Atmospheric flow"
+ },
+ {value:'hologram',label:'Holographic grid',labelNl:'Holografisch raster'},
+ {value:'ink',label:'Liquid ink',labelNl:'Vloeibare inkt'},
+ {value:'terrain',label:'Relief map',labelNl:'Reliëfkaart'}
+].map(item=>({...item,animated:['aurora','clouds','isobars','hologram','ink','terrain'].includes(item.value)}));
+function headerBackgroundOptions(nl){
+ return HEADER_BACKGROUNDS.map(item=>({value:item.value,label:`${nl?(item.labelNl??item.label):item.label} · ${nl?(item.animated?'Geanimeerd':'Statisch'):(item.animated?'Animated':'Static')}`}));
+}
+
+
+const headerBackgroundStyles = `
+:is(.scene-background,.header-background)::before,:is(.scene-background,.header-background)::after{content:"";position:absolute;z-index:-1;pointer-events:none;inset:auto;transform:none;border:0;box-shadow:none;border-radius:0;width:auto;height:auto}
+:where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::before{inset:0;background:linear-gradient(143deg,transparent 0 43%,color-mix(in srgb,var(--tone) 19%,transparent) 43.2% 70%,color-mix(in srgb,var(--tone) 5%,transparent) 70.2% 88%,transparent 88.2%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 11%,transparent),transparent 75%)}:where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::after{inset:20% -16% -30% 24%;transform:skewY(-36deg);background:repeating-linear-gradient(0deg,transparent 0 25px,color-mix(in srgb,var(--tone) 13%,transparent) 26px,transparent 27px 58px)}
+:where(.content[data-background="halo"]) :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 75% 68%,color-mix(in srgb,var(--tone) 20%,transparent),transparent 61%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 11%,transparent),transparent 65%)}:where(.content[data-background="halo"]) :is(.scene-background,.header-background)::after{width:88%;height:60%;right:-11%;bottom:20%;border:1px solid color-mix(in srgb,var(--tone) 39%,transparent);border-radius:50%;transform:rotate(-16deg);box-shadow:0 0 0 19px color-mix(in srgb,var(--tone) 4%,transparent),0 0 0 39px color-mix(in srgb,var(--tone) 3%,transparent),inset 0 0 45px color-mix(in srgb,var(--tone) 8%,transparent);background:radial-gradient(ellipse at 50% 50%,color-mix(in srgb,var(--tone) 7%,transparent),transparent 70%)}
+:where(.content[data-background="ribbon"]) :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 95% 32%,color-mix(in srgb,var(--tone) 24%,transparent),transparent 59%),linear-gradient(155deg,color-mix(in srgb,var(--tone) 10%,transparent),transparent 65%)}:where(.content[data-background="ribbon"]) :is(.scene-background,.header-background)::after{width:145%;height:60%;right:-32%;top:22%;border-radius:50%;transform:rotate(-21deg);border-top:1px solid color-mix(in srgb,var(--tone) 49%,transparent);background:linear-gradient(180deg,color-mix(in srgb,var(--tone) 25%,transparent),color-mix(in srgb,var(--tone) 3%,transparent) 65%,transparent);box-shadow:0 -16px 0 color-mix(in srgb,var(--tone) 5%,transparent),0 -35px 0 color-mix(in srgb,var(--tone) 3%,transparent)}
+:where(.content[data-background="prism-glass"]) :is(.scene-background,.header-background)::before{inset:0;background:linear-gradient(119deg,transparent 37%,color-mix(in srgb,var(--tone) 12%,transparent) 37.3%,color-mix(in srgb,var(--tone) 3%,transparent) 76%,transparent 76.3%),linear-gradient(34deg,transparent 42%,color-mix(in srgb,var(--tone) 11%,transparent) 42.3%,transparent 83%),radial-gradient(ellipse at 82% 30%,color-mix(in srgb,var(--tone) 20%,transparent),transparent 63%)}:where(.content[data-background="prism-glass"]) :is(.scene-background,.header-background)::after{inset:0;background:linear-gradient(119deg,transparent 37%,color-mix(in srgb,var(--tone) 23%,transparent) 37.2%,transparent 37.5%),linear-gradient(34deg,transparent 42%,color-mix(in srgb,var(--tone) 19%,transparent) 42.2%,transparent 42.5%)}
+:where(.content[data-background="eclipse"]) :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 82% 24%,color-mix(in srgb,var(--tone) 28%,transparent),transparent 57%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 5%,transparent),transparent 78%)}:where(.content[data-background="eclipse"]) :is(.scene-background,.header-background)::after{width:76%;height:auto;aspect-ratio:1;right:-5%;top:-12%;border-radius:50%;background:radial-gradient(circle at 47% 46%,color-mix(in srgb,var(--ha-card-background,var(--card-background-color,#fff)) 95%,transparent) 0 55%,color-mix(in srgb,var(--tone) 58%,transparent) 57%,color-mix(in srgb,var(--tone) 12%,transparent) 61%,transparent 70%)}
+`;
+
+// The backdrop belongs to the header region, never to the entire card or a tab.
+// Relative stops follow the header's intrinsic height, including wrapped content.
+const headerSceneStyles=`
+.header-region{position:relative;isolation:isolate;margin:calc(-1 * var(--eleven-card-padding,16px)) calc(-1 * var(--eleven-card-padding,16px)) 0;padding:var(--eleven-card-padding,16px) var(--eleven-card-padding,16px) 0}
+.header-region>.header-scene,.header-region>.scene{margin:0;padding-left:0;padding-right:0;padding-top:0;padding-bottom:12px;isolation:auto;overflow:visible}
+.header-region>.header-background,.header-region>.scene-background{position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;opacity:var(--header-background-opacity,1);
+--header-fade:linear-gradient(180deg,#000 0%,#000 25%,rgba(0,0,0,.9) 40%,rgba(0,0,0,.65) 55%,rgba(0,0,0,.32) 72%,rgba(0,0,0,.08) 88%,transparent 100%);
+-webkit-mask-image:var(--header-fade);mask-image:var(--header-fade)}
+`;
+
+
+const WEATHER_BACKGROUNDS=HEADER_BACKGROUNDS;
+const weatherBackgroundStyles=headerBackgroundStyles;
+
+
+const WEATHER_CONDITIONS = {
+ sunny:['Zonnig','Sunny','sun'], 'clear-night':['Heldere nacht','Clear night','night'],
+ partlycloudy:['Halfbewolkt','Partly cloudy','partly'], cloudy:['Bewolkt','Cloudy','cloud'],
+ rainy:['Regen','Rain','rain'], pouring:['Stortregen','Heavy rain','rain','pouring'],
+ lightning:['Onweer','Thunderstorm','storm','lightning'], 'lightning-rainy':['Onweer met regen','Thunderstorm with rain','storm'],
+ snowy:['Sneeuw','Snow','snow'], 'snowy-rainy':['Natte sneeuw','Sleet','snow','sleet'],
+ fog:['Mist','Fog','fog'], windy:['Winderig','Windy','wind'], 'windy-variant':['Bewolkt en winderig','Cloudy and windy','wind','wind-cloud'],
+ hail:['Hagel','Hail','snow','hail'], exceptional:['Uitzonderlijk weer','Exceptional weather','storm','exceptional'],
+};
+const weatherDutch = hass => String(hass?.locale?.language ?? hass?.language ?? 'en').startsWith('nl');
+const WEATHER_METRICS = {
+ wind_speed:['Wind','Wind','wind_speed_unit',1],wind_gust_speed:['Windstoten','Wind gusts','wind_speed_unit',1],
+ humidity:['Luchtvochtigheid','Humidity','%',0],pressure:['Luchtdruk','Pressure','pressure_unit',0],
+ apparent_temperature:['Gevoelstemperatuur','Feels like','temperature_unit',0],dew_point:['Dauwpunt','Dew point','temperature_unit',1],
+ visibility:['Zicht','Visibility','visibility_unit',1],cloud_coverage:['Bewolking','Cloud coverage','%',0],
+ uv_index:['UV-index','UV index','',1],wind_bearing:['Windrichting','Wind direction','°',0],
+};
+const WEATHER_FORECAST_FIELDS={
+ condition:['Weericoon','Weather icon'],temperature:['Temperatuur','Temperature'],templow:['Minimumtemperatuur (per dag)','Low temperature (daily)'],
+ precipitation_probability:['Neerslagkans','Precipitation probability'],precipitation:['Neerslaghoeveelheid','Precipitation amount'],
+ wind_speed:['Wind','Wind'],wind_gust_speed:['Windstoten','Wind gusts'],humidity:['Luchtvochtigheid','Humidity'],uv_index:['UV-index','UV index'],
+};
+function normalizeWeatherConfig(input={}) {
+ if (!input || typeof input !== 'object' || Array.isArray(input)) throw Error('Invalid weather configuration');
+ if (input.entity && (typeof input.entity !== 'string' || !/^weather\.[a-z0-9_]+$/.test(input.entity))) throw Error('Kies een weather-entiteit / Choose a weather entity');
+ const config={...input,type:input.type || 'custom:eleven-weather-card',forecast_type:input.forecast_type || 'auto',show_forecast:input.show_forecast !== false,forecast_count:input.forecast_count ?? 6};
+ if (!['auto','hourly','daily'].includes(config.forecast_type)) throw Error('Invalid forecast type');
+ if (!Number.isInteger(config.forecast_count) || config.forecast_count<3 || config.forecast_count>8) throw Error('Forecast count must be between 3 and 8');
+ config.compact=(input.compact??(input.density==='compact'))===true;
+ if(input.forecast_fields!=null&&(!Array.isArray(input.forecast_fields)||input.forecast_fields.some(key=>!Object.hasOwn(WEATHER_FORECAST_FIELDS,key))))throw Error('Invalid forecast fields');
+ config.forecast_fields=[...new Set(input.forecast_fields??['condition','temperature','templow','precipitation_probability'])];
+ for(const type of ['hourly','daily']){
+  const key='forecast_'+type+'_fields';
+  if(input[key]!=null){
+   if(!Array.isArray(input[key])||input[key].some(field=>!Object.hasOwn(WEATHER_FORECAST_FIELDS,field)))throw Error('Invalid '+type+' forecast fields');
+   config[key]=[...new Set(input[key])];
+  }else delete config[key];
+  for(const field of Object.keys(WEATHER_FORECAST_FIELDS).filter(field=>field!=='condition')){
+   const precision='forecast_'+type+'_'+field+'_decimals',value=input[precision];
+   config[precision]=value==null||value===''?null:Number.isFinite(Number(value))?Math.max(0,Math.min(3,Math.round(Number(value)))):null;
+  }
+ }
+ config.background=input.background||'lanes';
+ config.background_strength=input.background_strength==null||!Number.isFinite(Number(input.background_strength))?100:Math.max(0,Math.min(100,Number(input.background_strength)));
+ if(!WEATHER_BACKGROUNDS.some(option=>option.value===config.background))throw Error('Invalid weather background');
+ config.animate_icons=input.animate_icons!==false;
+ // Preserve the old combined animation switch until background motion is configured separately.
+ config.animate_background=input.animate_background??config.animate_icons;
+ for(const [key,fallback,min,max] of [['icon_scale',100,50,300],['icon_offset_x',0,-150,150],['icon_offset_y',0,-150,150]]){
+  const value=input[key];config[key]=value==null||value===''||!Number.isFinite(Number(value))?fallback:Math.max(min,Math.min(max,Number(value)));
+ }
+ config.icon_style=input.icon_style??'classic';
+ if(!['classic','glass','neon'].includes(config.icon_style))throw Error('Invalid weather icon style');
+ config.compact_forecast=input.compact_forecast??(input.show_forecast===false?'none':input.forecast_type==='daily'?'daily':'hourly');
+ if(!['hourly','daily','none'].includes(config.compact_forecast))throw Error('Invalid compact forecast');
+ config.metric_status=input.metric_status??'condition';config.metric_primary=input.metric_primary??'wind_speed';config.metric_secondary=input.metric_secondary??'humidity';
+ config.metric_status_icon=typeof input.metric_status_icon==='string'?input.metric_status_icon.trim():'';
+ for(const field of ['metric_status','metric_primary','metric_secondary']){
+  if(!['none','custom',...(field==='metric_status'?['condition']:[])].includes(config[field])&&!Object.hasOwn(WEATHER_METRICS,config[field]))throw Error('Invalid weather metric');
+  for(const suffix of ['entity','attribute','unit','icon'])config[field+'_'+suffix]=typeof input[field+'_'+suffix]==='string'?input[field+'_'+suffix].trim():'';
+  config[field+'_label']=typeof input[field+'_label']==='string'?input[field+'_label']:'';
+  config[field+'_show_unit']=input[field+'_show_unit']!==false;
+  const digits=input[field+'_decimals'];config[field+'_decimals']=digits==null||digits===''?null:Number.isFinite(Number(digits))?Math.max(0,Math.min(6,Math.round(Number(digits)))):null;
+ }
+ // An explicit tab list controls both densities. Omitted lists retain legacy behavior.
+ if(Array.isArray(input.tabs))config.tabs=['hourly','daily'].filter(tab=>input.tabs.includes(tab));
+ else delete config.tabs;
+ return config;
+}
+function weatherVisibleTabs(config={}){
+ if(Array.isArray(config.tabs))return config.tabs;
+ return config.compact?(config.compact_forecast==='none'?[]:[config.compact_forecast??'hourly']):config.show_forecast===false?[]:['hourly','daily'];
+}
+function weatherField(config,field,attributes,hass,available=true){
+ const key=config[field];if(key==='none')return null;
+ let metric;
+ if(key==='condition'){
+  metric={label:weatherDutch(hass)?'Weerstatus':'Weather conditions',value:weatherCondition(available?hass?.states?.[config.entity]?.state:'unknown',weatherDutch(hass)).label};
+ }else if(key==='custom'){
+  const id=config[field+'_entity'],entity=hass?.states?.[id],attribute=config[field+'_attribute'];
+  const valid=entity&&!['unknown','unavailable',''].includes(entity.state);
+  const value=valid?(attribute?entity.attributes?.[attribute]:entity.state):null;
+  const unit=config[field+'_show_unit']?(config[field+'_unit']||(!attribute?entity?.attributes?.unit_of_measurement:''))||'':'';
+  const numeric=value!=null&&typeof value!=='boolean'&&String(value).trim()!==''&&Number.isFinite(Number(value));
+  const text=value!=null&&typeof value!=='object'&&!['unknown','unavailable',''].includes(String(value))?String(value):'—';
+  metric={label:entity?.attributes?.friendly_name||id||(weatherDutch(hass)?'Eigen gegevens':'Custom data'),value:numeric?weatherNumber(value,hass,unit,config[field+'_decimals']??2):text,entity:id};
+ }else{
+  metric=weatherMetric(key,attributes,hass,available);if(!metric)return null;
+  const value=available?attributes[key]:null,digits=config[field+'_decimals'];
+  if(typeof value!=='string'||Number.isFinite(Number(value))){
+   const unitKey=WEATHER_METRICS[key][2],sourceUnit=unitKey.endsWith('_unit')?attributes[unitKey]:unitKey;
+   metric.value=weatherNumber(value,hass,config[field+'_show_unit']?(config[field+'_unit']||sourceUnit||''):'',digits??WEATHER_METRICS[key][3]);
+  }
+ }
+ metric.label=config[field+'_label']||metric.label;return metric;
+}
+function weatherMetric(key,attributes,hass,available=true) {
+ const definition=WEATHER_METRICS[key];if(!definition)return null;
+ const [nl,en,unitKey,digits]=definition,value=available?attributes[key]:null;
+ const unit=unitKey.endsWith('_unit')?(attributes[unitKey]??''):unitKey;
+ const bearing=key==='wind_bearing'&&typeof value==='string'&&/^(N|NNE|NE|ENE|E|ESE|SE|SSE|S|SSW|SW|WSW|W|WNW|NW|NNW)$/i.test(value);
+ return {label:weatherDutch(hass)?nl:en,value:bearing?value.toUpperCase():weatherNumber(value,hass,unit,digits)};
+}
+function weatherNumber(value,hass,unit='',digits=0) {
+ if (value == null || typeof value === 'boolean' || String(value).trim()==='' || !Number.isFinite(Number(value))) return '—';
+ const language=hass?.locale?.language ?? hass?.language ?? 'en';
+ let text;
+ try { text=new Intl.NumberFormat(language,{maximumFractionDigits:digits}).format(Number(value)); }
+ catch { text=String(Number(value)); }
+ return text + (unit ? (unit.startsWith('°') ? '' : ' ') + unit : '');
+}
+function weatherCondition(state,dutch) {
+ const data=WEATHER_CONDITIONS[state];
+ return {label:data?.[dutch?0:1] ?? (dutch?'Weer niet beschikbaar':'Weather unavailable'),kind:data?.[2] ?? 'unknown',iconKind:data?.[3]??data?.[2]??'unknown'};
+}
+function weatherForecastType(config,entity) {
+ if(Array.isArray(config.tabs)){
+  const flags=Number(entity?.attributes?.supported_features)||0;
+  const preferred=config.forecast_type==='auto'?(flags&2?'hourly':flags&1?'daily':'hourly'):config.forecast_type;
+  return config.tabs.includes(preferred)?preferred:(config.tabs[0]??preferred);
+ }
+ if(config.compact)return config.compact_forecast==='daily'?'daily':'hourly';
+ if (config.forecast_type !== 'auto') return config.forecast_type;
+ const flags=Number(entity?.attributes?.supported_features) || 0;
+ return flags & 2 ? 'hourly' : flags & 1 ? 'daily' : 'hourly';
+}
+function weatherForecastFields(config,type){return config['forecast_'+type+'_fields']??config.forecast_fields??['condition','temperature','templow','precipitation_probability'];}
+function weatherDayKey(value,hass){
+ const date=new Date(value);if(!Number.isFinite(date.getTime()))return '';
+ try{
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:hass?.config?.time_zone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);
+  return ['year','month','day'].map(type=>parts.find(part=>part.type===type)?.value).join('');
+ }catch{return date.toISOString().slice(0,10).replaceAll('-','');}
+}
+function weatherForecastRows(rows,count,now=Date.now(),type='hourly',hass) {
+ if (!Array.isArray(rows)) return [];
+ const today=type==='daily'?weatherDayKey(now,hass):null;
+ return rows.filter(row=>row && Number.isFinite(Date.parse(row.datetime)) && (type==='daily'?weatherDayKey(row.datetime,hass)>=today:Date.parse(row.datetime)>now-3600000))
+  .sort((a,b)=>Date.parse(a.datetime)-Date.parse(b.datetime)).slice(0,count);
+}
+function weatherDate(value,hass,type) {
+ const options=type==='hourly'?{hour:'2-digit',minute:'2-digit'}:{weekday:'short'};
+ try { return new Intl.DateTimeFormat(hass?.locale?.language ?? hass?.language ?? 'en',{...options,timeZone:hass?.config?.time_zone}).format(new Date(value)); }
+ catch { return '—'; }
+}
+
+// Liquid glass and Neon: complete icon families for HA weather conditions.
+let weatherStyledArtId=0;
+function weatherStyledArt(requestedKind,style,idPrefix='wx-styled'){
+ const kinds=['sun','night','partly','cloud','rain','pouring','lightning','storm','snow','sleet','hail','fog','wind','wind-cloud','exceptional'];
+ const kind=kinds.includes(requestedKind)?requestedKind:'unknown';
+ const id=idPrefix+'-'+(++weatherStyledArtId),paint=name=>`url(#${id}-${name})`;
+ const sun=`<g class="wxi-sun"><g class="wxi-rays" stroke="#ffd37b" stroke-width="3" stroke-linecap="round">${Array.from({length:12},(_,i)=>`<path transform="rotate(${i*30} 80 60)" d="M80 18v-7"/>`).join('')}</g><circle class="wxi-core" cx="80" cy="60" r="29" fill="${paint('sun')}" stroke="#ffe5ae"/><path class="wxi-highlight" d="M59 57a22 22 0 0 1 28-18" stroke="#fff7d4" stroke-width="3.5" stroke-linecap="round"/></g>`;
+ const cloud=`<g class="wxi-cloud-layer"><path class="wxi-cloud" d="M39 109C10 107 15 68 43 68C43 28 100 22 113 63C146 59 152 106 121 109Z" fill="${paint('cloud')}" stroke="#e1f2ff" stroke-width="1.6"/><path class="wxi-highlight" d="M50 66C53 41 91 39 101 60" stroke="#ffffffbe" stroke-width="3" stroke-linecap="round"/><path class="wxi-shadow" d="M33 95c20 10 63 12 95 0" stroke="#43689430" stroke-width="5"/></g>`;
+ const moon=`<g class="wxi-moon"><path class="wxi-core" d="M108 91C70 108 42 62 68 29C19 42 25 110 72 114C88 116 101 106 108 91Z" fill="${paint('moon')}" stroke="#e7e8ff" stroke-width="1.5"/><path class="wxi-highlight" d="M48 55C40 80 58 99 74 101" stroke="#fff9" stroke-width="3" stroke-linecap="round"/></g><g class="wxi-stars" fill="#e5dfff"><path d="m113 27 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/><circle cx="130" cy="73" r="2.3"/><circle cx="88" cy="15" r="1.7"/></g>`;
+ const rain=(heavy=false)=>`<g class="wxi-rain${heavy?' wxi-heavy':''}" stroke="#7bcaff" stroke-width="${heavy?5:4}" stroke-linecap="round">${(heavy?[38,59,80,101,122]:[49,80,111]).map((x,i)=>`<path class="wxi-drop" style="--wxi-delay:${-i*.4}s" d="m${x} 117-5 11"/>`).join('')}</g>`;
+ const snow=`<g class="wxi-snow" stroke="#cfecff" stroke-width="2" stroke-linecap="round">${[49,80,111].map((x,i)=>`<path class="wxi-flake" style="--wxi-delay:${-i*1.2}s" d="M${x} 117v14m-7-7h14m-12-5 10 10m-10 0 10-10"/>`).join('')}</g>`;
+ const hail='<g class="wxi-hail" fill="#d2ecff" stroke="#ecf7ff" stroke-width="1.5"><circle class="wxi-pellet" cx="48" cy="122" r="4"/><circle class="wxi-pellet" cx="80" cy="129" r="4"/><circle class="wxi-pellet" cx="112" cy="120" r="4"/></g>';
+ const bolt=`<path class="wxi-bolt" d="m89 94-24 28h17l-8 20 29-32H87l9-16Z" fill="${paint('sun')}" stroke="#ffe9ae"/>`;
+ const wind='<g class="wxi-wind" stroke="#9ad8ed" stroke-width="4" stroke-linecap="round"><path d="M24 56h76c25 0 25-25 7-25"/><path d="M18 78h106c24 0 24 25 5 25"/><path d="M38 101h45c21 0 21 23 4 23"/></g>';
+ const fog='<g class="wxi-fog" stroke="#b6cadc" stroke-width="4" stroke-linecap="round"><path d="M26 108h108m-94 13h80m-66 13h64"/></g>';
+ const warning=`<g class="wxi-warning"><path d="M73 28a8 8 0 0 1 14 0l49 86a8 8 0 0 1-7 12H31a8 8 0 0 1-7-12Z" fill="${paint('sun')}" fill-opacity=".3" stroke="#ffd37b" stroke-width="3"/><path d="M80 58v34m0 13v3" stroke="#ffe4a7" stroke-width="5" stroke-linecap="round"/></g>`;
+ const unknown='<g class="wxi-unknown" stroke="currentColor"><circle cx="80" cy="75" r="42" stroke-width="2" stroke-dasharray="4 7"/><path d="M67 64c0-20 27-20 27-2 0 12-14 10-14 24m0 12v2" stroke-width="4" stroke-linecap="round"/></g>';
+ const bodies={sun,night:moon,partly:`<g transform="translate(10 -5) scale(.85)">${sun}</g>`+cloud,cloud,rain:cloud+rain(),pouring:cloud+rain(true),lightning:cloud+bolt,storm:cloud+rain()+bolt,snow:cloud+snow,sleet:cloud+`<g class="wxi-sleet">${snow}${rain()}</g>`,hail:cloud+hail,fog:`<g transform="translate(15 0) scale(.82)">${cloud}</g>`+fog,wind,'wind-cloud':`<g transform="translate(21 -8) scale(.72)">${cloud}</g><g transform="translate(0 47) scale(1 .7)">${wind}</g>`,exceptional:warning,unknown};
+ const accent=kind==='unknown'?'#9da5b4':kind==='night'?'#b3a6ff':['rain','pouring'].includes(kind)?'#73c3ff':['snow','sleet','hail'].includes(kind)?'#a7e2ff':['lightning','storm'].includes(kind)?'#b1a0ff':['cloud','fog','wind','wind-cloud'].includes(kind)?'#98c5df':'#ffc760';
+ return `<svg class="weather-icon wxi-icon wxi-${style==='neon'?'neon':'glass'}" data-icon-kind="${kind}" style="--wxi-accent:${accent}" viewBox="0 0 160 150" fill="none" aria-hidden="true" focusable="false"><defs><radialGradient id="${id}-sun" cx=".3" cy=".2" r=".95"><stop stop-color="#fff5cb"/><stop offset=".45" stop-color="#ffd36f"/><stop offset="1" stop-color="#e58d30"/></radialGradient><linearGradient id="${id}-cloud" x2=".15" y2="1"><stop stop-color="#fff" stop-opacity=".95"/><stop offset=".45" stop-color="#d1e9ff" stop-opacity=".8"/><stop offset="1" stop-color="#668bab" stop-opacity=".7"/></linearGradient><linearGradient id="${id}-moon" x2=".6" y2="1"><stop stop-color="#f5edff"/><stop offset="1" stop-color="#8d8ad8"/></linearGradient><radialGradient id="${id}-halo"><stop stop-color="${accent}" stop-opacity=".6"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient></defs><circle class="wxi-halo" cx="80" cy="73" r="66" fill="${paint('halo')}"/><g class="wxi-body">${bodies[kind]}</g><path class="wxi-glint" d="m118 49 2 7 7 2-7 2-2 7-2-7-7-2 7-2Z" fill="#fff"/></svg>`;
+}
+const weatherStyledIconStyles=`
+.content:is([data-icon-style=glass],[data-icon-style=neon]) .hero{min-height:210px}.content:is([data-icon-style=glass],[data-icon-style=neon]) .art{inset:40px 0 0}.content:is([data-icon-style=glass],[data-icon-style=neon]) .art svg{width:210px;height:168px}
+@container(max-width:320px){.content:is([data-icon-style=glass],[data-icon-style=neon]) .hero{min-height:190px}.content:is([data-icon-style=glass],[data-icon-style=neon]) .art svg{width:180px;height:150px}}
+.content[data-compact=true]:is([data-icon-style=glass],[data-icon-style=neon]) .hero{min-height:132px}.content[data-compact=true]:is([data-icon-style=glass],[data-icon-style=neon]) .art{inset:38px 0 0}.content[data-compact=true]:is([data-icon-style=glass],[data-icon-style=neon]) .art svg{width:120px;height:94px}
+.content[data-dark=false] .wxi-icon{--wxi-stroke:#946500}.content[data-dark=false] .wxi-icon:is([data-icon-kind=cloud],[data-icon-kind=fog],[data-icon-kind=wind],[data-icon-kind=wind-cloud]){--wxi-stroke:#416c88}.content[data-dark=false] .wxi-icon:is([data-icon-kind=rain],[data-icon-kind=pouring],[data-icon-kind=snow],[data-icon-kind=sleet],[data-icon-kind=hail]){--wxi-stroke:#24799e}.content[data-dark=false] .wxi-icon:is([data-icon-kind=night],[data-icon-kind=lightning],[data-icon-kind=storm]){--wxi-stroke:#6e55ac}
+.wxi-icon{overflow:visible;color:var(--secondary-text-color,#9da5b4)}.wxi-glint{display:none}.wxi-rays{transform-origin:80px 60px;animation:wxi-spin 30s linear infinite}.wxi-cloud-layer{animation:wxi-float 6s ease-in-out infinite}.wxi-moon{animation:wxi-float 8s ease-in-out infinite}.wxi-stars{animation:wxi-twinkle 4s ease-in-out infinite alternate}.wxi-drop{animation:wxi-rain 1.6s linear infinite;animation-delay:var(--wxi-delay,0s)}.wxi-heavy .wxi-drop{animation-duration:1.05s}.wxi-bolt{animation:wxi-light 5s ease-in-out infinite}.wxi-flake{animation:wxi-snow 4s linear infinite;animation-delay:var(--wxi-delay,0s)}.wxi-pellet{animation:wxi-hail 2s ease-in infinite}.wxi-pellet:nth-child(2){animation-delay:-.7s}.wxi-pellet:nth-child(3){animation-delay:-1.3s}.wxi-fog{animation:wxi-fog 7s ease-in-out infinite}.wxi-wind{stroke-dasharray:85 160;animation:wxi-wind 4s linear infinite}
+.wxi-sleet .wxi-flake:nth-child(2),.wxi-sleet .wxi-drop:first-child,.wxi-sleet .wxi-drop:last-child{display:none}
+.wxi-glass .wxi-body{filter:drop-shadow(0 8px 5px #07162540)}.wxi-glass .wxi-glint{display:block;transform-origin:118px 58px;animation:wxi-glint 4s ease-in-out infinite}.wxi-glass .wxi-halo{opacity:.25}.wxi-glass .wxi-cloud{stroke-width:2.2}
+.wxi-neon .wxi-core,.wxi-neon .wxi-cloud{fill:transparent;stroke:var(--wxi-stroke,var(--wxi-accent));stroke-width:2.3;stroke-dasharray:180 24;animation:wxi-trace 9s linear infinite}.wxi-neon .wxi-body{filter:drop-shadow(0 0 4px var(--wxi-stroke,var(--wxi-accent)))}.wxi-neon .wxi-highlight{opacity:.25}.wxi-neon .wxi-shadow{display:none}.wxi-neon .wxi-halo{opacity:.18}.wxi-neon .wxi-rays{stroke:var(--wxi-stroke,var(--wxi-accent));stroke-width:2}.wxi-neon .wxi-rain,.wxi-neon .wxi-snow,.wxi-neon .wxi-wind,.wxi-neon .wxi-fog{stroke:var(--wxi-stroke,var(--wxi-accent))}.wxi-neon .wxi-warning path:first-child,.wxi-neon .wxi-pellet{fill:transparent}
+.wxi-icon:is([data-icon-kind=unknown],[data-icon-kind=exceptional]) .wxi-glint{display:none}
+@keyframes wxi-spin{to{transform:rotate(360deg)}}@keyframes wxi-float{50%{transform:translate(3px,-4px)}}@keyframes wxi-twinkle{to{opacity:.3}}@keyframes wxi-rain{0%{transform:translate(2px,-4px);opacity:0}20%,70%{opacity:1}100%{transform:translate(-4px,12px);opacity:0}}@keyframes wxi-light{0%,100%{opacity:.4}60%{opacity:1}}@keyframes wxi-glint{0%,70%,100%{opacity:.2;transform:scale(.55)}35%{opacity:.95;transform:scale(1.15)}}@keyframes wxi-trace{to{stroke-dashoffset:-204}}@keyframes wxi-snow{0%{transform:translate(-2px,-4px);opacity:0}20%,70%{opacity:1}100%{transform:translate(3px,8px);opacity:0}}@keyframes wxi-hail{0%,100%{transform:translateY(-4px);opacity:.3}65%{transform:translateY(8px);opacity:1}80%{transform:translateY(3px)}}@keyframes wxi-fog{50%{transform:translateX(5px);opacity:.55}}@keyframes wxi-wind{to{stroke-dashoffset:-245}}
+.content[data-animated=false] .wxi-icon *{animation:none!important}
+@media(prefers-reduced-motion:reduce){.wxi-icon *{animation:none!important}}
+`;
+
+﻿// Layered vector illustrations with CSS motion; unique paint IDs per instance.
+
+let weatherArtId=0;
+function weatherArt(kind,style='classic',iconKind=kind) {
+ if(style==='glass'||style==='neon')return weatherStyledArt(iconKind,style);
+ const id=`wx-${++weatherArtId}`,paint=name=>`url(#${id}-${name})`;
+ const sun=`<g class="wx-sun"><circle class="wx-corona" cx="70" cy="55" r="32" fill="${paint('glow')}"/><g class="wx-rays" stroke="#f8cd70" stroke-width="3.5" stroke-linecap="round"><path d="M70 14v-6m0 94v-6M29 55h-6m94 0h-6M41 26l-5-5m68 68-5-5M41 84l-5 5m68-68-5 5"/></g><circle cx="70" cy="55" r="25" fill="${paint('sun')}" stroke="#ffe5a3" stroke-width="1.5"/><path d="M51 53a20 20 0 0 1 25-17" stroke="#fff6d6" stroke-width="3" stroke-linecap="round" opacity=".8"/></g>`;
+ const cloud=`<g class="wx-cloud"><path d="M43 101a23 23 0 0 1 1-46 32 32 0 0 1 60-10 27 27 0 0 1 8 54H43z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/><path d="M47 62a26 26 0 0 1 49-11" stroke="#fff" stroke-opacity=".8" stroke-width="2.5" stroke-linecap="round"/><path d="M29 87c21 10 59 14 91 0" stroke="#65829f" stroke-opacity=".16" stroke-width="4" stroke-linecap="round"/></g>`;
+ const rain='<g class="wx-rain" stroke="#8dcfff" stroke-width="5" stroke-linecap="round"><path class="wx-drop wx-drop-one" d="m54 109-6 12"/><path class="wx-drop wx-drop-two" d="m80 109-6 12"/><path class="wx-drop wx-drop-three" d="m106 109-6 12"/></g>';
+ const snow='<g class="wx-snow" fill="#e0f7ff" stroke="#d0efff" stroke-width="1.5"><path class="wx-flake wx-drop-one" d="M52 108v12m-6-6h12m-10-4 8 8m-8 0 8-8"/><path class="wx-flake wx-drop-two" d="M80 116v12m-6-6h12m-10-4 8 8m-8 0 8-8"/><path class="wx-flake wx-drop-three" d="M108 106v12m-6-6h12m-10-4 8 8m-8 0 8-8"/></g>';
+ const night=`<g class="wx-moon"><path d="M102 91a39 39 0 0 1-38-64 40 40 0 1 0 38 64" fill="${paint('moon')}" stroke="#dce4ff" stroke-width="1.5"/><path d="M43 49a33 33 0 0 0 7 40" stroke="#f5f4ff" stroke-width="2.5" stroke-linecap="round" opacity=".6"/></g><g fill="#e6e6ff"><path class="wx-star wx-star-one" d="m114 24 2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/><path class="wx-star wx-star-two" d="m128 64 1.5 4.5L134 70l-4.5 1.5L128 76l-1.5-4.5L122 70l4.5-1.5z"/><circle class="wx-star wx-star-three" cx="93" cy="17" r="2"/></g>`;
+ const wind=`<g class="wx-wind" fill="none" stroke="${paint('wind')}" stroke-width="5" stroke-linecap="round"><path d="M25 54h70c23 0 23-27 5-27"/><path d="M19 76h106c22 0 22 27 4 27"/><path d="M39 99h43c20 0 20 26 2 26"/></g>`;
+ const fog='<g class="wx-fog" stroke="#c6dbe9" stroke-width="5" stroke-linecap="round"><path d="M30 110h100"/><path d="M43 122h74"/><path d="M52 134h63"/></g>';
+ const lightning=`<path class="wx-lightning" d="m84 94-20 27h15l-6 20 27-31H84l8-16z" fill="${paint('sun')}" stroke="#ffe9b1" stroke-width="1"/>`;
+ const unknown='<circle cx="80" cy="70" r="34" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 8"/><path d="M70 58c0-16 25-16 25 0 0 11-15 9-15 20m0 10v3" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
+ const body=kind==='sun'?sun:kind==='night'?night:kind==='wind'?wind:kind==='unknown'?unknown:(kind==='partly'?sun:'')+cloud+(kind==='rain'?rain:kind==='snow'?snow:kind==='storm'?rain+lightning:kind==='fog'?fog:'');
+ return `<svg class="weather-icon" viewBox="0 0 160 150" fill="none" aria-hidden="true" focusable="false"><defs><radialGradient id="${id}-glow"><stop stop-color="#ffd775" stop-opacity=".3"/><stop offset="1" stop-color="#ffd775" stop-opacity="0"/></radialGradient><linearGradient id="${id}-sun" x2=".3" y2="1"><stop stop-color="#fff0b4"/><stop offset=".5" stop-color="#f6ce6d"/><stop offset="1" stop-color="#eda743"/></linearGradient><linearGradient id="${id}-cloud" x2=".2" y2="1"><stop stop-color="#f8fbff"/><stop offset=".5" stop-color="#c8d9ea"/><stop offset="1" stop-color="#91aac2"/></linearGradient><linearGradient id="${id}-moon" x2=".6" y2="1"><stop stop-color="#f0edff"/><stop offset="1" stop-color="#9aadee"/></linearGradient><linearGradient id="${id}-wind"><stop stop-color="#88b1cb" stop-opacity=".6"/><stop offset="1" stop-color="#d4efff"/></linearGradient></defs>${body}</svg>`;
+}
+
+
+const weatherAtmosphere=headerAtmosphere;
+// Background selection never changes the header or illustration dimensions.
+const weatherAtmosphereStyles=headerAtmosphereStyles;
+
+
+
+
+
+const weatherStyles=`
+:host{display:block;min-width:0;container-type:inline-size;font:inherit}
+*{box-sizing:border-box}ha-card{display:block;overflow:hidden;border-radius:var(--ha-card-border-radius,12px);background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit}
+.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--tone:#536b82}.content[data-dark=true]{--tone:#a8c9eb}
+.content[data-kind=sun],.content[data-kind=partly]{--tone:#946800}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--tone:#f2c451}
+.content[data-kind=rain]{--tone:#427fac}.content[data-dark=true][data-kind=rain]{--tone:#82b8e8}
+.content[data-kind=night],.content[data-kind=storm]{--tone:#6553a3}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--tone:#aca3f1}
+.content[data-kind=snow]{--tone:#45858c}.content[data-dark=true][data-kind=snow]{--tone:#a2dce6}
+.scene{position:relative;isolation:isolate;margin:-16px -16px 0;padding:16px 16px 16px;overflow:visible}
+.hero{min-height:160px;position:relative;display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:12px;align-content:start;padding-top:6px}
+.temperature{font-size:76px;font-weight:500;line-height:1.15;letter-spacing:-.065em;font-variant-numeric:tabular-nums;margin-top:-20px}.temperature .unit{font-size:.53em;letter-spacing:-.03em;margin-left:2px}
+header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:color-mix(in srgb,var(--tone) 88%,#fff);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
+.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:drop-shadow(0 8px 14px color-mix(in srgb,var(--tone) 25%,transparent))}
+button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(--secondary-background-color,#eee);border-radius:7px;padding:12px}.status{display:flex;gap:12px;align-items:center;width:100%;text-align:left;border:0;min-height:0;margin:16px 0 0}.status-icon{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:10px;color:var(--tone);background:color-mix(in srgb,var(--tone) 13%,transparent)}.status-icon svg{width:30px;height:30px}.status strong{font-size:13px;line-height:1.4;font-weight:600}.status small{display:block;font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0}.metrics:has(.metric:only-child){grid-template-columns:minmax(0,1fr)}.metric{min-width:0;display:grid;grid-template-rows:auto auto;gap:2px;align-content:start}.metric dt{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin:0;overflow-wrap:anywhere}.metric dd{font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:0;overflow-wrap:anywhere}
+.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--tone)}
+.notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.retry{background:transparent;color:var(--primary-color,#2196f3);border:0;min-height:32px;padding:4px 0}.status:focus-visible,.retry:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
+@container(max-width:320px){.hero{min-height:150px}.temperature{font-size:65px;margin-top:-17px}header{margin-top:-17px;padding-top:14px}.art svg{height:100px}.forecast-list{grid-auto-columns:minmax(46px,1fr)}}
+@supports(grid-template-rows:subgrid){.metrics{grid-template-rows:auto auto;row-gap:2px}.metric{grid-row:span 2;grid-template-rows:subgrid}}
+.forecast-panel{padding-top:16px}.forecast-panel[hidden]{display:none!important}
+.metric-entity{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;text-align:start;max-width:100%;overflow-wrap:anywhere}.metric-entity:hover{color:var(--primary-color)}.metric-entity:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px;border-radius:3px}
+.status>span:last-child{min-width:0;overflow-wrap:anywhere}.status-label{display:block;font-size:11px;line-height:1.4;color:var(--secondary-text-color);margin-bottom:2px}.status-data strong{font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums}.status-icon ha-icon{--mdc-icon-size:22px}
+.content[data-compact=true] .hero{min-height:112px}
+.content[data-compact=true] .temperature{font-size:64px;margin-top:-16px}
+.content[data-compact=true] header{padding-top:14px;margin-top:-16px}
+.content[data-compact=true] .art{inset:38px 0 0}
+.content[data-compact=true] .art svg{height:74px;width:100px;filter:drop-shadow(0 5px 10px color-mix(in srgb,var(--tone) 20%,transparent))}
+.content[data-compact=true] .scene{padding-bottom:12px}
+.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}
+.content[data-compact=true] .status{padding:10px;gap:10px;margin-top:12px}
+.content[data-compact=true] .status-data strong{font-size:22px}
+.content[data-compact=true] .status-icon{width:32px;height:32px;border-radius:8px}
+.content[data-compact=true] .status-icon svg{width:26px;height:26px}
+.content[data-compact=true] .metrics{column-gap:12px}
+.content[data-compact=true] .metric{padding:10px}
+.content[data-compact=true] .metric dd{font-size:22px}
+.content[data-compact=true] .forecast{margin-top:12px}
+.content[data-compact=true] .forecast-panel{padding-top:12px}
+.content[data-compact=true] .forecast-list svg{width:32px;height:30px;margin:2px auto}
+@container(max-width:320px){.content[data-compact=true] .hero{min-height:104px}.content[data-compact=true] .art svg{height:66px}.content[data-compact=true] .temperature{font-size:56px;margin-top:-14px}.content[data-compact=true] header{margin-top:-14px;padding-top:12px}}
+.forecast-extra{font-size:11px;line-height:1.4;margin-top:5px;color:var(--primary-text-color)}.forecast-label{display:block;overflow-wrap:anywhere;font-size:10px;color:var(--secondary-text-color)}
+${weatherBackgroundStyles}
+
+.wx-rays{transform-origin:70px 55px}.wx-corona{transform-origin:70px 55px}
+@media(prefers-reduced-motion:no-preference){
+ .content[data-animated=true] .wx-rays{animation:wx-rotate 24s linear infinite}
+ .content[data-animated=true] .wx-corona{animation:wx-glow 5s ease-in-out infinite}
+ .content[data-animated=true] .wx-cloud{animation:wx-float 6s ease-in-out infinite}
+ .content[data-animated=true] .wx-drop{animation:wx-rain 1.5s linear infinite}
+ .content[data-animated=true] .wx-flake{animation:wx-snow 4s ease-in-out infinite}
+ .content[data-animated=true] .wx-drop-two{animation-delay:-.5s}
+ .content[data-animated=true] .wx-drop-three{animation-delay:-1s}
+ .content[data-animated=true] .wx-moon{animation:wx-float 7s ease-in-out infinite}
+ .content[data-animated=true] .wx-star{animation:wx-twinkle 4s ease-in-out infinite}
+ .content[data-animated=true] .wx-star-two{animation-delay:-1.5s}
+ .content[data-animated=true] .wx-star-three{animation-delay:-2.5s}
+ .content[data-animated=true] .wx-wind path{stroke-dasharray:90 160;animation:wx-wind 4s linear infinite}
+ .content[data-animated=true] .wx-wind path:nth-child(2){animation-delay:-1.2s}
+ .content[data-animated=true] .wx-wind path:nth-child(3){animation-delay:-2.4s}
+ .content[data-animated=true] .wx-fog{animation:wx-fog 7s ease-in-out infinite}
+ .content[data-animated=true] .wx-lightning{animation:wx-lightning 5s ease-in-out infinite}
+}
+@keyframes wx-rotate{to{transform:rotate(360deg)}}
+@keyframes wx-glow{50%{transform:scale(1.12);opacity:.6}}
+@keyframes wx-float{50%{transform:translate(3px,-2px)}}
+@keyframes wx-rain{0%{transform:translate(2px,-3px);opacity:0}15%,75%{opacity:1}100%{transform:translate(-4px,12px);opacity:0}}
+@keyframes wx-snow{0%{transform:translate(-2px,-2px);opacity:0}20%,70%{opacity:1}100%{transform:translate(4px,9px);opacity:0}}
+@keyframes wx-twinkle{50%{opacity:.35}}
+@keyframes wx-wind{to{stroke-dashoffset:-250}}
+@keyframes wx-fog{50%{transform:translateX(5px);opacity:.55}}
+@keyframes wx-lightning{0%,50%,100%{opacity:.4}70%,80%{opacity:1}}
+${weatherAtmosphereStyles}
+${weatherStyledIconStyles}
+${headerSceneStyles}
+`;
+
+// Retain live nodes, focus, scroll offsets and running SVG animations on telemetry updates.
+function patchWeatherDOM(root,markup){
+ const template=document.createElement('template');template.innerHTML=markup;
+ const key=node=>node.nodeType===1?node.localName+'|'+(node.getAttribute('data-weather-key')??node.getAttribute('data-ui-tab')??node.getAttribute('data-ui-tab-panel')??node.getAttribute('data-forecast-field')??node.getAttribute('class')?.split(' ')[0]??''):String(node.nodeType);
+ const patch=(parent,incoming)=>{
+  let cursor=parent.firstChild;
+  for(const next of [...incoming.childNodes]){
+   let current=cursor;
+   if(!current||key(current)!==key(next)){
+    current=cursor?.nextSibling;
+    while(current&&key(current)!==key(next))current=current.nextSibling;
+    if(current)parent.insertBefore(current,cursor);else{current=next.cloneNode(true);parent.insertBefore(current,cursor);}
+   }
+   if(!current.isEqualNode(next)){
+    if(current.nodeType===3)current.nodeValue=next.nodeValue;
+    else if(current.nodeType===1){
+     for(const attribute of [...current.attributes])if(!next.hasAttribute(attribute.name))current.removeAttribute(attribute.name);
+     for(const attribute of [...next.attributes])if(current.getAttribute(attribute.name)!==attribute.value)current.setAttribute(attribute.name,attribute.value);
+     patch(current,next);
+    }
+   }
+   cursor=current.nextSibling;
+  }
+  while(cursor){const next=cursor.nextSibling;parent.removeChild(cursor);cursor=next;}
+ };
+ patch(root,template.content);
+}
+
+
+
+
+const weatherEditorLabels={entity:['Weerentiteit','Weather entity'],title:['Kaartnaam (toegankelijkheid)','Card name (accessibility)'],background_strength:['Achtergrondsterkte','Background intensity'],background:['Achtergrond','Background'],animate_icons:['Weericonen animeren','Animate weather icons'],compact:['Compacte weergave','Compact layout'],tabs:['Zichtbare tabbladen','Visible tabs'],forecast_type:['Standaardtabblad','Default tab'],forecast_count:['Aantal voorspellingen','Forecast count']};
+weatherEditorLabels.metric_status_icon=['Icoon (optioneel)','Icon (optional)'];
+weatherEditorLabels.icon_scale=['Grootte weericoon','Weather icon size'];
+weatherEditorLabels.icon_offset_x=['Horizontale positie weericoon','Weather icon horizontal position'];
+weatherEditorLabels.icon_offset_y=['Verticale positie weericoon','Weather icon vertical position'];
+weatherEditorLabels.icon_style=['Icoonstijl','Icon style'];
+weatherEditorLabels.forecast_fields=['Velden in weersverwachting','Forecast fields'];
+weatherEditorLabels.animate_background=['Achtergrond animeren','Animate background'];
+for(const type of ['hourly','daily']){
+ weatherEditorLabels['forecast_'+type+'_fields']=['Zichtbare velden','Visible fields'];
+ for(const [field,labels] of Object.entries(WEATHER_FORECAST_FIELDS))if(field!=='condition')weatherEditorLabels['forecast_'+type+'_'+field+'_decimals']=[labels[0]+' · decimalen',labels[1]+' · decimals'];
+}
+for(const field of ['metric_status','metric_primary','metric_secondary'])for(const [suffix,labels] of Object.entries({
+ icon:['Icoon (optioneel)','Icon (optional)'],source:['Gegevensbron','Data source'],entity:['Entiteit','Entity'],label:['Label (optioneel)','Label (optional)'],attribute:['Attribuut (optioneel)','Attribute (optional)'],unit:['Eigen eenheid (optioneel)','Custom unit (optional)'],show_unit:['Eenheid tonen','Show unit'],decimals:['Decimalen (optioneel)','Decimal places (optional)'],
+}))weatherEditorLabels[suffix==='source'?field:field+'_'+suffix]=labels;
+
+class WeatherEditor extends HTMLElement{
+ constructor(){super();this.attachShadow({mode:'open'});}
+ setConfig(config){this._config=normalizeWeatherConfig(config);this._render();}
+ set hass(hass){this._hass=hass;this._render();}get hass(){return this._hass;}
+ _schema(nl){
+  const config=this._config,text=name=>({name,selector:{text:{}}}),boolean=name=>({name,selector:{boolean:{}}});
+  const select=(name,options,multiple=false)=>({name,selector:{select:{mode:multiple?'list':'dropdown',multiple,options}}});
+  const number=(name,min,max)=>({name,selector:{number:{min,max,step:1,mode:'box'}}});
+  const slider=(name,min,max,step,unit)=>({name,selector:{number:{min,max,step,mode:'slider',unit_of_measurement:unit}}});
+  const group=(name,title,schema,expanded=false)=>({type:'expandable',name,title,flatten:true,expanded,schema});
+  const metrics=[{value:'none',label:nl?'Niet tonen':'Hide'},{value:'custom',label:nl?'Eigen entiteit':'Custom entity'},...Object.entries(WEATHER_METRICS).map(([value,labels])=>({value,label:labels[nl?0:1]}))];
+  const schema=[group('general',nl?'Algemeen':'General',[text('title'),{name:'entity',required:true,selector:{entity:{domain:'weather'}}}],true),
+   group('weather_icon',nl?'Weericoon':'Weather icon',[slider('icon_scale',50,300,5,'%'),slider('icon_offset_x',-150,150,1,'px'),slider('icon_offset_y',-150,150,1,'px')]),
+   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',headerBackgroundOptions(nl)),{name:'background_strength',selector:{number:{min:0,max:100,step:5,mode:'slider',unit_of_measurement:'%'}}},select('icon_style',[{value:'classic',label:nl?'Klassiek':'Classic'},{value:'glass',label:'Liquid glass'},{value:'neon',label:'Neon'}]),boolean('animate_background'),boolean('animate_icons')])];
+  for(const [field,title] of [['metric_status',nl?'Breed gegevensveld':'Wide data field'],['metric_primary',nl?'Gegevensveld links':'Left data field'],['metric_secondary',nl?'Gegevensveld rechts':'Right data field']]){
+   const fields=[select(field,field==='metric_status'?[...metrics.slice(0,2),{value:'condition',label:nl?'Weerstatus':'Weather conditions'},...metrics.slice(2)]:metrics)];
+   if(config[field]!=='none')fields.push(...(config[field]==='custom'?[{name:field+'_entity',selector:{entity:{}}},text(field+'_attribute')]:[]),text(field+'_label'),boolean(field+'_show_unit'),...(config[field+'_show_unit']?[text(field+'_unit')]:[]),number(field+'_decimals',0,6));
+   if(config[field]!=='none')fields.push({name:field+'_icon',selector:{icon:{}}});
+   schema.push(group(field+'_settings',title,fields));
+  }
+  const choices=[{value:'hourly',label:nl?'Per uur':'Hourly'},{value:'daily',label:nl?'Per dag':'Daily'}],visible=weatherVisibleTabs(config);
+  schema.push(group('tab_settings',nl?'Weersverwachting':'Forecast',[select('tabs',choices,true),...(visible.length?[...(visible.length>1?[select('forecast_type',[{value:'auto',label:nl?'Automatisch':'Automatic'},...choices.filter(choice=>visible.includes(choice.value))])]:[]),number('forecast_count',3,8)]:[])],true));
+  for(const type of visible){
+   const fields=weatherForecastFields(config,type),options=Object.entries(WEATHER_FORECAST_FIELDS).filter(([field])=>type==='daily'||field!=='templow').map(([value,labels])=>({value,label:labels[nl?0:1]}));
+   schema.push(group('forecast_'+type+'_settings',type==='hourly'?(nl?'Verwachting per uur':'Hourly forecast'):(nl?'Verwachting per dag':'Daily forecast'),[
+    select('forecast_'+type+'_fields',options,true),...fields.filter(field=>field!=='condition'&&(type==='daily'||field!=='templow')).map(field=>number('forecast_'+type+'_'+field+'_decimals',0,3)),
+   ]));
+  }
+  return schema;
+ }
+ _helper(item,nl){
+  const name=item.name,helpers={
+   title:nl?'Naam voor toegankelijkheid; verschijnt niet als zichtbare titel.':'Name for accessibility; not shown as a visible title.',
+   entity:nl?'Kies je Home Assistant-weerentiteit voor temperatuur, weerstatus en verwachting.':'Choose your Home Assistant weather entity for temperature, conditions and forecasts.',
+   icon_scale:nl?'Vergroot het grote weericoon binnen de vaste headerhoogte. De andere iconen blijven even groot.':'Scale the large weather icon within the fixed header height. Other icons keep their size.',
+   icon_offset_x:nl?'Negatief = naar links, positief = naar rechts. Nul plaatst het icoon horizontaal in het midden van de kaart.':'Negative moves left, positive moves right. Zero centers the icon horizontally in the card.',
+   icon_offset_y:nl?'Negatief = omhoog, positief = omlaag. De headerhoogte blijft gelijk.':'Negative moves up, positive moves down. Header height stays fixed.',
+   compact:nl?'Kleinere afbeeldingruimte en gegevensvlakken. Je tabkeuze blijft behouden.':'Smaller illustration area and data panels. Your tab selection is preserved.',
+   background:nl?'Kies een van de vijf vertrouwde achtergronden of Aurora sky, Cloud layers en Atmospheric flow met extra animatie. Kleuren volgen de weerstatus.':'Choose one of the five familiar backgrounds or Aurora sky, Cloud layers and Atmospheric flow with extra animation. Colors follow weather conditions.',
+   animate_icons:nl?'Animatie stopt ook bij geen verbinding, ontbrekende gegevens of de voorkeur voor minder beweging.':'Animation also stops when offline, data is missing or reduced motion is preferred.',
+   animate_background:nl?'Onafhankelijk van de weericonen. Animatie pauzeert buiten beeld en bij een verborgen browsertabblad.':'Independent of weather icons. Animation pauses outside the viewport and in hidden browser tabs.',
+   icon_style:nl?'Dezelfde stijl voor de header, het statusveld en de verwachting. Liquid glass en Neon hebben iconen voor alle 15 weerstatussen, plus ontbrekende gegevens.':'The same style for the header, status field and forecast. Liquid glass and Neon cover all 15 weather conditions, plus missing data.',
+   tabs:nl?'Kies welke tabbladen zichtbaar zijn, ook in compact. Leeg = geen verwachting. Je weerentiteit moet de gekozen verwachting ondersteunen.':'Choose visible tabs, including in compact. Empty means no forecast. Your weather entity must support the selected forecast.',
+   forecast_type:nl?'Dit tabblad opent bij het laden van de kaart. Automatisch kiest een ondersteunde verwachting uit de zichtbare tabs.':'Opens when the card loads. Automatic chooses a supported forecast from the visible tabs.',
+   forecast_count:nl?'Aantal uren of dagen, van 3 tot 8. Op een smalle kaart kun je horizontaal scrollen.':'Number of hours or days, from 3 to 8. Narrow cards can scroll horizontally.',
+   forecast_fields:nl?'Kies de gegevens per uur en dag. Tijd of dag blijft zichtbaar. Minimumtemperatuur geldt alleen per dag. Ontbrekende gegevens tonen een streepje; een leeg veld zorgt niet voor een lege rij.':'Choose hourly and daily data. Time or day remains visible. Low temperature applies to daily forecasts only. Missing values show a dash; hidden fields leave no empty row.',
+  };
+  if(helpers[name])return helpers[name];
+  if(/^forecast_(hourly|daily)_fields$/.test(name))return nl?'Kies de velden voor deze verwachting. Wijzig de volgorde onderaan. Leeg toont alleen tijd of dag. Niet aangeleverde waarden tonen een streepje.':'Choose fields for this forecast. Change their order below. Empty shows time or day only. Unsupported values show a dash.';
+  if(/^forecast_.*_decimals$/.test(name))return nl?'Leeg = automatisch. Kies 0 tot 3 decimalen voor dit veld.':'Empty uses automatic precision. Choose 0 to 3 decimal places for this field.';
+  if(name.endsWith('_label'))return nl?'Leeg = de naam van de weerwaarde of entiteit.':'Empty uses the weather metric or entity name.';
+  if(name.endsWith('_attribute'))return nl?'Leeg = de entiteitwaarde. Vul anders de exacte attribuutnaam in.':'Empty uses the entity state. Otherwise enter the exact attribute name.';
+  if(name.endsWith('_unit'))return nl?'Leeg = de broneenheid. Bij een attribuut wordt geen eenheid aangenomen.':'Empty uses the source unit. Attribute values have no assumed unit.';
+  if(name.endsWith('_decimals'))return nl?'Leeg = automatisch. Alleen voor numerieke waarden.':'Empty uses automatic formatting. Numeric values only.';
+ }
+ _render(){
+  if(!this._config||!this._hass)return;
+  if(!this._form){
+   this.shadowRoot.innerHTML='<style>:host,ha-form{display:block;min-width:0}p{font-size:12px;line-height:1.5;color:var(--secondary-text-color);margin:0 0 12px}details{margin-top:12px;border:1px solid var(--divider-color);border-radius:10px;padding:12px}summary{cursor:pointer;font-weight:500}.order-row{display:flex;align-items:center;gap:6px;margin-top:8px}.order-row span{flex:1;min-width:0;overflow-wrap:anywhere}button{min-width:36px;min-height:36px;border:0;border-radius:6px;background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer}button:disabled{opacity:.35;cursor:default}button:focus-visible,summary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}</style><p></p><ha-form></ha-form><div class="forecast-order"></div>';
+   this._form=this.shadowRoot.querySelector('ha-form');
+   this._form.addEventListener('value-changed',event=>{
+    event.stopPropagation();const next={...this._config};
+    for(const key of Object.keys(weatherEditorLabels))if(Object.hasOwn(event.detail.value,key))next[key]=event.detail.value[key];
+    this._config=normalizeWeatherConfig(next);this._render();
+    this._emit();
+   });
+  }
+  const nl=weatherDutch(this._hass),schema=this._schema(nl),key=JSON.stringify([nl,schema]);
+  this.shadowRoot.querySelector('p').textContent=nl?'Stel je weerbron, weergave en gegevensvelden in. Kies zelf welke verwachtingstabbladen zichtbaar zijn.':'Configure your weather source, appearance and data fields. Choose which forecast tabs are visible.';
+  this._form.hass=this._hass;
+  if(this._schemaKey!==key){this._schemaKey=key;this._form.schema=schema;this._form.computeLabel=item=>weatherEditorLabels[item.name]?.[nl?0:1]??item.name;this._form.computeHelper=item=>this._helper(item,nl);}
+  this._form.data={...this._config,tabs:weatherVisibleTabs(this._config),...Object.fromEntries(['hourly','daily'].map(type=>['forecast_'+type+'_fields',weatherForecastFields(this._config,type)]))};
+  this._renderOrder(nl);
+ }
+ _emit(){this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:structuredClone(this._config)},bubbles:true,composed:true}));}
+ _renderOrder(nl){
+  const root=this.shadowRoot.querySelector('.forecast-order'),types=weatherVisibleTabs(this._config),signature=JSON.stringify([nl,types,...types.map(type=>weatherForecastFields(this._config,type))]);
+  if(signature===this._orderSignature)return;this._orderSignature=signature;
+  const open=new Set([...root.querySelectorAll('details[open]')].map(node=>node.dataset.type));root.replaceChildren();
+  for(const type of types){
+   const fields=weatherForecastFields(this._config,type).filter(field=>type==='daily'||field!=='templow');if(fields.length<2)continue;
+   const details=document.createElement('details');details.dataset.type=type;details.open=open.has(type);
+   const summary=document.createElement('summary');summary.textContent=(nl?'Volgorde · ':'Order · ')+(type==='hourly'?(nl?'Per uur':'Hourly'):(nl?'Per dag':'Daily'));details.append(summary);
+   for(const [index,field] of fields.entries()){
+    const row=document.createElement('div');row.className='order-row';const label=document.createElement('span');label.textContent=WEATHER_FORECAST_FIELDS[field][nl?0:1];row.append(label);
+    for(const delta of [-1,1]){
+     const button=document.createElement('button');button.type='button';button.textContent=delta<0?'↑':'↓';button.disabled=index+delta<0||index+delta>=fields.length;button.dataset.field=field;button.dataset.direction=String(delta);
+     button.setAttribute('aria-label',label.textContent+' '+(delta<0?(nl?'omhoog':'move up'):(nl?'omlaag':'move down')));
+     button.onclick=()=>{const next=[...fields];[next[index],next[index+delta]]=[next[index+delta],next[index]];this._config=normalizeWeatherConfig({...this._config,['forecast_'+type+'_fields']:next});this._render();this._emit();const selector='details[data-type="'+type+'"] button[data-field="'+field+'"]';const preferred=this.shadowRoot.querySelector(selector+'[data-direction="'+delta+'"]');(preferred&&!preferred.disabled?preferred:this.shadowRoot.querySelector(selector+':not(:disabled)'))?.focus();};row.append(button);
+    }
+    details.append(row);
+   }
+   root.append(details);
+  }
+ }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+class WeatherCard extends HTMLElement {
+ constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._forecast=[];this._iconCache=new Map();}
+ static async getConfigElement(){if(!customElements.get('eleven-weather-editor'))customElements.define('eleven-weather-editor',WeatherEditor);return document.createElement('eleven-weather-editor');}
+ static getStubConfig(hass){return {entity:Object.keys(hass?.states??{}).find(id=>id.startsWith('weather.'))??'',tabs:['hourly','daily']};}
+ setConfig(config){
+  const next=normalizeWeatherConfig(config),previous=this._config;
+  if(!previous||previous.entity!==next.entity||previous.forecast_type!==next.forecast_type||!weatherVisibleTabs(next).includes(this._forecastSelection))this._forecastSelection=null;
+  this._config=next;this._syncForecast();this._ensureForecastClock();this._render();
+ }
+ set hass(hass){this._hass=hass;this._syncForecast();this._render();}
+ get hass(){return this._hass;}
+ connectedCallback(){this._attached=true;this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>{this._ensureForecastClock();this._render();});this._syncForecast();this._ensureForecastClock();this._render();}
+ disconnectedCallback(){this._attached=false;this._motionCleanup?.();this._motionCleanup=null;clearInterval(this._forecastClock);this._forecastClock=null;this._stopForecast();this._tabs?.disconnect();this._key=null;}
+ _ensureForecastClock(){
+  const active=this._attached&&!!this._config?.entity&&this._forecastEnabled()&&(typeof document==='undefined'||!document.hidden);
+  if(!active){clearInterval(this._forecastClock);this._forecastClock=null;return;}
+  if(!this._forecastClock){this._forecastClock=setInterval(()=>this._render(),60000);this._forecastClock.unref?.();}
+ }
+ _weatherArt(kind,style,iconKind,slot){
+  const signature=kind+'|'+style+'|'+iconKind,cached=this._iconCache.get(slot);
+  if(cached?.signature===signature)return cached.markup;
+  const markup=weatherArt(kind,style,iconKind);this._iconCache.set(slot,{signature,markup});
+  if(this._iconCache.size>32)this._iconCache.delete(this._iconCache.keys().next().value);
+  return markup;
+ }
+ getCardSize(){return (this._forecastEnabled()?9:7)-(this._config?.compact?1:0);}
+ getGridOptions(){return {columns:12,min_columns:6,rows:this.getCardSize(),min_rows:3};}
+ _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
+ _forecastEnabled(){return weatherVisibleTabs(this._config).length>0;}
+ _stopForecast(){this._generation++;try{this._unsubscribe?.();}catch{}this._unsubscribe=null;}
+ _statusMarkup(attributes,available,state,nl){
+  const metric=weatherField(this._config,'metric_status',attributes,this._hass,available);if(!metric)return '';
+  const condition=this._config.metric_status==='condition',id=metric.entity||(this._config.metric_status==='custom'?'':this._config.entity);
+  const label=condition?this._config.metric_status_label:metric.label;
+  const plain=weatherField({...this._config,metric_status_show_unit:false},'metric_status',attributes,this._hass,available),split=metric.value.startsWith(plain.value);
+  const value=plain.value==='\u2014'?null:split?plain.value:metric.value,unit=split?metric.value.slice(plain.value.length).trim():'';
+  const icon=this._config.metric_status_icon?`<ha-icon icon="${uiEscape(this._config.metric_status_icon)}"></ha-icon>`:this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'status');
+  return uiMetric({title:label||metric.label,value,unit,iconContent:icon,compact:this._config.compact,action:!!id,info:this._offline()?(nl?'Geen verbinding · laatst ontvangen gegevens':'Offline · last received readings'):'',attrs:{class:'weather-status', 'data-status-entity':id||'', 'aria-label':(label?label+': ':'')+metric.value}});
+ }
+ _metricsMarkup(attributes,available){
+  const icons={wind_speed:'mdi:weather-windy',humidity:'mdi:water-percent',pressure:'mdi:gauge',visibility:'mdi:eye-outline',uv_index:'mdi:sun-wireless-outline',cloud_coverage:'mdi:weather-cloudy',wind_gust_speed:'mdi:weather-windy',dew_point:'mdi:thermometer-water',temperature:'mdi:thermometer'};
+  const metrics=['metric_primary','metric_secondary'].map(field=>{
+   const metric=weatherField(this._config,field,attributes,this._hass,available);if(!metric)return '';
+   const plain=weatherField({...this._config,[field+'_show_unit']:false},field,attributes,this._hass,available),split=metric.value.startsWith(plain.value);
+   return uiMetric({title:metric.label,value:plain.value==='\u2014'?null:split?plain.value:metric.value,unit:split?metric.value.slice(plain.value.length).trim():'',icon:this._config[field+'_icon']||icons[this._config[field]]||'mdi:chart-box-outline',compact:this._config.compact,action:!!(metric.entity||(this._config[field]==='custom'?'':this._config.entity)),attrs:{'data-entity':metric.entity||(this._config[field]==='custom'?'':this._config.entity)||'','data-weather-field':field}});
+  }).filter(Boolean);
+  return metrics.length?'<div class="weather-metrics" data-ui-metric-grid style="--ui-metric-columns:'+metrics.length+'">'+metrics.join('')+'</div>':'';
+ }
+ _syncForecast(){
+  if(!this._config||!this._hass||!this._attached)return;
+  const entity=this._hass.states?.[this._config.entity],type=this._forecastSelection??weatherForecastType(this._config,entity),connection=this._hass.connection;
+  const key=JSON.stringify([this._config.entity,type,this._forecastEnabled(),this._offline()]);
+  if(this._key===key&&this._connection===connection)return;
+  this._stopForecast();this._key=key;this._connection=connection;
+  this._forecast=[];this._forecastStatus='loading';this._forecastType=type;
+  if(!this._forecastEnabled()||!this._config.entity||this._offline())return;
+  if(typeof connection?.subscribeMessage!=='function'){this._forecastStatus='error';return;}
+  const generation=this._generation;
+  const fail=()=>{if(!this._attached||generation!==this._generation)return;this._forecastStatus='error';this._render();};
+  try {
+   Promise.resolve(connection.subscribeMessage(payload=>{
+    if(!this._attached||generation!==this._generation)return;
+    this._forecastStatus=Array.isArray(payload?.forecast)?'ready':'error';
+    this._forecast=Array.isArray(payload?.forecast)?payload.forecast:[];this._render();
+   },{type:'weather/subscribe_forecast',entity_id:this._config.entity,forecast_type:type})).then(unsubscribe=>{
+    if(typeof unsubscribe!=='function')return;
+    if(!this._attached||generation!==this._generation){try{unsubscribe();}catch{}}else this._unsubscribe=unsubscribe;
+   },fail);
+  }catch{fail();}
+ }
+ _forecastMarkup(nl,attributes){
+  if(!this._forecastEnabled())return '';
+  const heading=this._forecastType==='daily'?(nl?'Komende dagen':'Coming days'):(nl?'Komende uren':'Coming hours');
+  const rows=weatherForecastRows(this._forecast,this._config.forecast_count,Date.now(),this._forecastType,this._hass);
+  let body;
+  if(this._offline())body=`<p class="notice">${nl?'Verwachting niet beschikbaar zonder verbinding.':'Forecast unavailable while offline.'}</p>`;
+  else if(this._forecastStatus==='error')body=`<p class="notice" role="status">${nl?'Verwachting niet beschikbaar.':'Forecast unavailable.'}</p><button class="retry">${nl?'Opnieuw proberen':'Retry'}</button>`;
+  else if(this._forecastStatus==='loading')body=`<p class="notice" role="status">${nl?'Verwachting laden…':'Loading forecast…'}</p>`;
+  else if(!rows.length)body=`<p class="notice">${nl?'Geen verwachting beschikbaar.':'No forecast available.'}</p>`;
+  else body=`<ol class="forecast-list" tabindex="0" aria-label="${heading}">${rows.map(row=>{
+   const state=weatherCondition(row.condition,nl);
+   const when=weatherDate(row.datetime,this._hass,this._forecastType);
+   const fields=weatherForecastFields(this._config,this._forecastType).map(key=>{
+    if(key==='condition')return '<span data-forecast-field="condition" role="img" aria-label="'+uiEscape(state.label)+'">'+this._weatherArt(state.kind,this._config.icon_style,state.iconKind,row.datetime)+'</span>';
+    if(key==='templow'&&this._forecastType!=='daily')return '';
+    const units={temperature:attributes.temperature_unit||'°C',templow:attributes.temperature_unit||'°C',precipitation_probability:'%',precipitation:attributes.precipitation_unit||'',wind_speed:attributes.wind_speed_unit||'',wind_gust_speed:attributes.wind_speed_unit||'',humidity:'%',uv_index:''};
+    const label=WEATHER_FORECAST_FIELDS[key][nl?0:1],value=weatherNumber(row[key],this._hass,units[key],this._config['forecast_'+this._forecastType+'_'+key+'_decimals']??(['precipitation','wind_speed','wind_gust_speed','uv_index'].includes(key)?1:0));
+    const className=key==='temperature'?'forecast-value':key==='templow'?'forecast-low':key==='precipitation_probability'?'rain-chance':'forecast-extra';
+    return '<div class="'+className+'" data-forecast-field="'+key+'" aria-label="'+uiEscape(label)+'" title="'+uiEscape(label)+'">'+(!['temperature','templow','precipitation_probability'].includes(key)?'<span class="forecast-label">'+uiEscape(label)+'</span>':'')+uiEscape(value)+'</div>';
+   }).join('');
+   return '<li data-weather-key="'+uiEscape(row.datetime)+'"><time datetime="'+uiEscape(row.datetime)+'">'+uiEscape(when)+'</time>'+fields+'</li>';
+  }).join('')}</ol>`;
+  if(weatherVisibleTabs(this._config).length===1)return `<section class="forecast" aria-label="${heading}">${body}</section>`;
+  const items=[{value:'hourly',label:nl?'Per uur':'Hourly'},{value:'daily',label:nl?'Per dag':'Daily'}].filter(item=>weatherVisibleTabs(this._config).includes(item.value)).map(item=>({...item,content:item.value===this._forecastType?body:''}));
+  return `<section class="forecast" aria-label="${nl?'Weersverwachting':'Weather forecast'}">${uiTabs({id:'weather-forecast',label:nl?'Weersverwachting':'Weather forecast',items,selected:this._forecastType,panelClassName:'forecast-panel'})}</section>`;
+ }
+ _render(){
+  if(!this._config)return;
+  const hass=this._hass,nl=weatherDutch(hass),entity=hass?.states?.[this._config.entity],attributes=entity?.attributes??{};
+  const available=entity&&!['unknown','unavailable'].includes(entity.state),state=weatherCondition(available?entity.state:'unknown',nl);
+  const signature=JSON.stringify([this._config,entity,weatherForecastRows(this._forecast,this._config.forecast_count,Date.now(),this._forecastType,hass),this._forecastStatus,this._forecastType,hass?.themes?.darkMode,hass?.locale,hass?.language,hass?.config?.time_zone,this._offline(),...['metric_status','metric_primary','metric_secondary'].map(field=>this._config[field]==='custom'?hass?.states?.[this._config[field+'_entity']]:null)]);
+  if(signature===this._signature)return;this._signature=signature;
+  const focusedTab=this.shadowRoot.activeElement?.dataset?.uiTab;
+  const focusedEntity=this.shadowRoot.activeElement?.dataset?.entity,focusedStatus=this.shadowRoot.activeElement?.classList.contains('weather-status');
+  const number=(value,unit='',digits=0)=>weatherNumber(available?value:null,hass,unit,digits);
+  const unit=attributes.temperature_unit||'°C';
+  patchWeatherDOM(this.shadowRoot,`<style>${uiButtonStyles()}${uiTabsStyles()}${weatherStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}
+.weather-status{margin-top:16px}.weather-metrics{margin:0}.header-region{--ui-metric-tone:var(--tone)}.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}.content[data-compact=true] .weather-status{margin-top:12px}.hero{padding-top:0;grid-template-columns:minmax(0,1fr)}.hero .temperature{max-width:50%;position:relative;z-index:1}.content[data-icon-style] .hero>.art{inset:0 auto 0 50%;width:50%;transform:translate(calc(-50% + var(--weather-icon-x,0px)),var(--weather-icon-y,0px)) scale(var(--weather-icon-scale,1));transform-origin:center;min-width:0}.hero .art svg{max-width:100%}.hero .temperature{margin-top:0;font-size:inherit;letter-spacing:inherit}.content[data-compact=true] .hero .temperature{margin-top:0}
+</style><ha-card aria-label="${uiEscape(this._config.title||(nl?'Het weer':'Weather'))}"><div class="content" style="--header-background-opacity:${this._config.background_strength/100};--weather-icon-scale:${this._config.icon_scale/100};--weather-icon-x:${this._config.icon_offset_x}px;--weather-icon-y:${this._config.icon_offset_y}px" data-background="${this._config.background}" data-icon-style="${this._config.icon_style}" data-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_icons&&!this._offline()}" data-background-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_background&&!this._offline()}" data-compact="${this._config.compact}" data-kind="${state.kind}" data-dark="${!!hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${weatherAtmosphere(this._config.background)}</div><div class="scene"><div class="hero">${uiPrimaryValue({value:available?number(attributes.temperature):null,unit,subtitle:attributes.apparent_temperature!=null&&available?(nl?'Voelt als ':'Feels like ')+number(attributes.apparent_temperature,unit):'',compact:this._config.compact,attrs:{class:'temperature'}})}<div class="art">${this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'hero')}</div></div>${this._statusMarkup(attributes,available,state,nl)}</div>${this._metricsMarkup(attributes,available)}</div>${!this._config.entity?`<p class="notice">${nl?'Kies een weerentiteit in de configuratie.':'Choose a weather entity in the editor.'}</p>`:`${this._forecastMarkup(nl,attributes)}`}</div></ha-card>`);
+  this._tabs?.disconnect();
+  this._tabs=bindUITabs({tabs:this.shadowRoot.querySelectorAll('[data-ui-tab]'),panels:this.shadowRoot.querySelectorAll('[data-ui-tab-panel]'),onSelect:value=>{
+   this._forecastSelection=value;this._syncForecast();this._render();
+   this.shadowRoot.querySelector(`[data-ui-tab="${value}"]`)?.focus({preventScroll:true});
+  }});
+  if(focusedTab)this.shadowRoot.querySelector(`[data-ui-tab="${focusedTab}"]`)?.focus({preventScroll:true});
+  if(focusedEntity)[...this.shadowRoot.querySelectorAll('[data-entity]')].find(button=>button.dataset.entity===focusedEntity)?.focus({preventScroll:true});
+  if(focusedStatus)this.shadowRoot.querySelector('.weather-status')?.focus({preventScroll:true});
+  if(!this._eventsBound){
+   this._eventsBound=true;
+   this.shadowRoot.addEventListener('click',event=>{
+    const target=event.target.closest?.('[data-status-entity],[data-entity],.retry');if(!target)return;
+    if(target.classList.contains('retry')){this._key=null;this._syncForecast();this._render();return;}
+    const id=target.dataset.statusEntity||target.dataset.entity;
+    if(id&&!target.disabled)this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}));
+   });
+  }
+ }
+}
+
+if(!customElements.get('eleven-weather-card'))customElements.define('eleven-weather-card',WeatherCard);
+window.customCards=window.customCards||[];
+if(!window.customCards.some(card=>card.type==='eleven-weather-card'))window.customCards.push({type:'eleven-weather-card',name:'Eleven Weather (beta)',description:'Compact current weather and forecast with state-aware illustrations.',preview:true});
+})();
+
+;
+// Eleven Car (beta) - self-contained standalone module
+(()=>{
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
+// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
+function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function uiAttributes(values={}){
+ return Object.entries(values).map(([key,value])=>{
+  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
+  if(value==null)return '';
+  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
+  return ` ${key}="${uiEscape(value)}"`;
+ }).join('');
+}
+function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
+ const classes=className?` class="${uiEscape(className)}"`:'';
+ const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
+ return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
+}
+function uiButtonStyles(){return `
+[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
+[data-ui-button="icon"]{width:32px;height:32px}
+[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
+[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
+[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
+[data-ui-button]:disabled{opacity:.35;cursor:default}
+[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
+[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
+[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
+[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
+`;}
+
+
+// The caller formats measurements and translates the subtitle. All text is escaped.
+function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',attrs={}}={}){
+ const missing=value==null||value==='';
+ const number=uiEscape(missing?'—':value);
+ const label=subtitle!==''&&subtitle!=null?(subtitleEntity?`<button type="button" class="primary-label" data-entity="${uiEscape(subtitleEntity)}">${uiEscape(subtitle)}</button>`:`<div class="primary-label">${uiEscape(subtitle)}</div>`):'';
+ return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
+}
+
+function uiPrimaryValueStyles(){return `
+[data-ui-primary-value]{--_primary-tone:var(--ui-primary-tone,var(--tone,var(--primary-color,#2196f3)));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-primary-value] .primary-value{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin:0;font-size:var(--ui-primary-size,60px);line-height:1.15;font-weight:650;letter-spacing:-.055em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+[data-ui-primary-value] .primary-number{display:block;min-width:0;max-width:100%;overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-number{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}[data-ui-primary-value] button:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px;border-radius:3px}
+[data-ui-primary-value] .primary-value small{display:block;margin:8px 0 0;font-size:var(--ui-primary-unit-size,16px);line-height:1.4;font-weight:400;letter-spacing:-.03em;color:var(--secondary-text-color,#626a78)}
+[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid color-mix(in srgb,var(--_primary-tone) 55%,transparent);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-label{display:block;max-width:100%;min-height:0;margin-bottom:0;padding-block:0;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
+[data-ui-primary-value][data-density=compact] .primary-value{font-size:var(--ui-primary-size,46px)}
+[data-ui-primary-value][data-density=compact] .primary-value small{font-size:var(--ui-primary-unit-size,14px);margin-top:5px}
+`;}
+
+
+
+// Text is escaped. *Content options are trusted markup owned by the calling card.
+// action renders a native button; do not nest other controls in that variant.
+function uiMetric({icon='',iconContent='',title='',value,valueContent='',unit='',info='',infoContent='',compact=false,action=false,attrs={}}={}){
+ const missing=!valueContent&&(value==null||value==='');
+ const symbol=iconContent||(icon?`<ha-icon icon="${uiEscape(icon)}"></ha-icon>`:'');
+ const tag=action?'button':'div';
+ return `<${tag}${uiAttributes({...attrs,...(action?{type:'button'}:{}),'data-ui-metric':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}>
+  ${symbol?`<span class="ui-metric-icon" aria-hidden="true">${symbol}</span>`:''}
+  <div class="ui-metric-reading"><div class="ui-metric-title">${uiEscape(title)}</div><div class="ui-metric-value">${valueContent||uiEscape(missing?'—':value)}${!missing&&unit?` <span class="ui-metric-unit">${uiEscape(unit)}</span>`:''}</div></div>
+  ${infoContent||info!==''&&info!=null?`<div class="ui-metric-info">${infoContent||uiEscape(info)}</div>`:''}
+ </${tag}>`;
+}
+
+function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
+[data-ui-metric]{--_metric-tone:var(--ui-metric-tone,var(--primary-color,#2196f3));box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-content:start;align-items:start;min-width:0;padding:12px;border-radius:var(--ui-metric-radius,8px);background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--_metric-tone) 10%,transparent),color-mix(in srgb,var(--_metric-tone) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee);color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-metric]:has(.ui-metric-info){grid-template-rows:auto auto auto}
+[data-ui-metric] .ui-metric-icon{box-sizing:border-box;display:grid;place-items:center;grid-column:2;grid-row:1/span 2;width:26px;height:26px;border-radius:7px;color:var(--_metric-tone);background:transparent;transform:translate(4px,-4px)}
+[data-ui-metric] .ui-metric-icon svg,[data-ui-metric] .ui-metric-icon ha-icon{display:block;width:18px;height:18px;--mdc-icon-size:18px}
+[data-ui-metric] .ui-metric-icon svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+[data-ui-metric] .ui-metric-reading{display:contents}
+[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:1;min-width:0}
+[data-ui-metric]:not(:has(.ui-metric-icon)) :is(.ui-metric-title,.ui-metric-value){grid-column:1/-1}
+[data-ui-metric] .ui-metric-title,[data-ui-metric] .ui-metric-info{font-size:11px;line-height:1.4;font-weight:400;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-metric] .ui-metric-value{grid-column:1;grid-row:2;align-self:stretch;min-width:0;margin:0;font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ui-metric-unit{display:inline-block;margin-inline-start:4px;font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78)}
+[data-ui-metric] .ui-metric-info{grid-column:1/-1;grid-row:3;align-self:stretch;margin-top:6px;padding-top:8px;border-top:1px solid color-mix(in srgb,var(--_metric-tone) 8%,transparent)}
+[data-ui-metric][data-density=compact]{padding:8px;column-gap:6px}
+[data-ui-metric][data-density=compact] .ui-metric-icon{width:20px;height:20px;border-radius:6px;transform:translate(2px,-2px)}
+[data-ui-metric][data-density=compact] .ui-metric-icon svg,[data-ui-metric][data-density=compact] .ui-metric-icon ha-icon{width:16px;height:16px;--mdc-icon-size:16px}
+[data-ui-metric][data-density=compact] .ui-metric-value{font-size:20px}
+[data-ui-metric][data-density=compact] .ui-metric-info{margin-top:4px;padding-top:4px}
+[data-ui-metric][data-unavailable=true]{--_metric-tone:var(--secondary-text-color,#626a78)}
+button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:hover{filter:brightness(1.04)}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+[data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
+[data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
+@supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
+`;}
+
+
+function uiTabs({id,label,items,selected,className='',panelClassName='',variant=''}={}){
+ if(typeof id!=='string'||!id||!items?.length||items.some(item=>typeof item.value!=='string'||!item.value)||new Set(items.map(item=>item.value)).size!==items.length)throw Error('Tabs need an id and distinct text values.');
+ const active=items.find(item=>item.value===selected&&!item.disabled)??items.find(item=>!item.disabled);
+ const tabId=value=>`${id}-tab-${encodeURIComponent(value)}`,panelId=value=>`${id}-panel-${encodeURIComponent(value)}`;
+ const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'','data-ui-card-tabs':variant==='card'?true:null,role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
+ const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,'data-ui-card-tab-panel':variant==='card'?true:null,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
+ return bar+panels;
+}
+function bindUITabs({tabs,panels,onSelect=()=>{}}){
+ const buttons=[...tabs],sections=[...panels],cleanups=[];
+ const select=(value,{focus=false,notify=true}={})=>{
+  const target=buttons.find(tab=>tab.dataset.uiTab===value&&!tab.disabled);if(!target)return false;
+  for(const tab of buttons){const active=tab===target;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
+  for(const panel of sections)panel.hidden=panel.dataset.uiTabPanel!==value;
+  if(focus)target.focus({preventScroll:true});if(notify)onSelect(value,target);return true;
+ };
+ for(const tab of buttons){
+  const click=()=>select(tab.dataset.uiTab,{focus:true});
+  const keydown=e=>{
+   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+   e.preventDefault();e.stopPropagation();const enabled=buttons.filter(button=>!button.disabled),index=enabled.indexOf(tab);
+   const next=e.key==='Home'?0:e.key==='End'?enabled.length-1:(index+(e.key==='ArrowRight'?1:-1)+enabled.length)%enabled.length;
+   if(enabled[next])select(enabled[next].dataset.uiTab,{focus:true});
+  };
+  tab.onclick=click;tab.onkeydown=keydown;
+  cleanups.push(()=>{if(tab.onclick===click)tab.onclick=null;if(tab.onkeydown===keydown)tab.onkeydown=null;});
+ }
+ return {select,disconnect(){cleanups.splice(0).forEach(remove=>remove());}};
+}
+function uiTabsStyles(){return `
+[data-ui-tabs]{display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid var(--divider-color,#ddd)}
+[data-ui-tabs] [role="tab"]{flex:1;justify-content:center;min-width:0;min-height:36px;padding:8px 3px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--secondary-text-color,#666);white-space:nowrap}
+[data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
+[data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
+[data-ui-tab-panel][hidden]{display:none!important}
+[data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
+[data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
+[data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
+[data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
+`;}
+
+
+const entityTabText=value=>typeof value==='string'?value.trim():'';
+const entityTabClamp=(value,fallback,min,max)=>value!==''&&value!=null&&Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
+function normalizeEntityTabs(input,maxDecimals=6){
+ const used=new Set();return (Array.isArray(input)?input:[]).filter(tab=>tab&&typeof tab==='object').map((tab,index)=>{
+  let id=/^custom-[a-z0-9_-]+$/.test(tab.id)?tab.id:'custom-'+(index+1);let n=1;while(used.has(id))id='custom-'+(index+1)+'-'+n++;used.add(id);
+  return {id,title:typeof tab.title==='string'?tab.title:'',show:tab.show!==false,entities:(Array.isArray(tab.entities)?tab.entities:[]).map(row=>{
+   row=typeof row==='string'?{entity:row}:row??{};
+   return {entity:entityTabText(row.entity),name:typeof row.name==='string'?row.name:'',attribute:entityTabText(row.attribute),unit:entityTabText(row.unit),show_unit:row.show_unit!==false,decimals:row.decimals==null||row.decimals===''?null:Math.round(entityTabClamp(row.decimals,2,0,maxDecimals))};
+  })};
+ });
+}
+
+function entityTabReading(row,hass){
+ const entity=hass?.states?.[row.entity];
+ if(!entity||entity.state==null||['','unknown','unavailable'].includes(String(entity.state).trim()))return '—';
+ const raw=row.attribute?entity.attributes?.[row.attribute]:entity.state;
+ if(raw==null||typeof raw==='object')return '—';
+ const unit=row.show_unit===false?'':row.unit||(row.attribute?'':entity.attributes?.unit_of_measurement);
+ let value=String(raw);
+ if(value.trim()!==''&&Number.isFinite(Number(value))){
+  try{value=new Intl.NumberFormat(hass?.locale?.language??hass?.language??'en',{maximumFractionDigits:row.decimals??2,...(row.decimals!=null?{minimumFractionDigits:row.decimals}:{})}).format(Number(value));}catch{value=String(Number(value));}
+ }else if(!row.attribute&&typeof hass?.formatEntityState==='function')return hass.formatEntityState(entity);
+ return value+(unit?' '+unit:'');
+}
+function entityTabContent(tab,hass,nl){
+ const rows=tab.entities.filter(row=>row.entity);
+ if(!rows.length)return '<p class="energy-detail-note">'+(nl?'Voeg entiteiten toe aan dit tabblad in de kaartconfiguratie.':'Add entities to this tab in the card configuration.')+'</p>';
+ return '<dl class="energy-grid-metrics">'+rows.map(row=>{
+  const label=row.name||hass?.states?.[row.entity]?.attributes?.friendly_name||row.entity;
+  return '<div><dt>'+uiEscape(label)+'</dt><dd><button type="button" class="energy-entity-value" data-entity="'+uiEscape(row.entity)+'">'+uiEscape(entityTabReading(row,hass))+'</button></dd></div>';
+ }).join('')+'</dl>';
+}
+
+// Adapter supplies _config, _hass and _setCustomTabs().
+const customTabsEditor=Base=>class extends Base{
+ _customAction(action,index,rowIndex){
+  const tabs=this._config.custom_tabs.map(tab=>({...tab,entities:tab.entities.map(row=>({...row}))}));
+  const move=(list,from,to)=>{if(to>=0&&to<list.length)[list[from],list[to]]=[list[to],list[from]];};
+  if(action==='tab-add'){let n=1;while(tabs.some(tab=>tab.id==='custom-'+n))n++;tabs.push({id:'custom-'+n,title:'',show:true,entities:[]});}
+  if(action==='tab-remove')tabs.splice(index,1);
+  if(action==='tab-up')move(tabs,index,index-1);if(action==='tab-down')move(tabs,index,index+1);
+  if(action==='row-add')tabs[index].entities.push({entity:''});
+  if(action==='row-remove')tabs[index].entities.splice(rowIndex,1);
+  if(action==='row-up')move(tabs[index].entities,rowIndex,rowIndex-1);if(action==='row-down')move(tabs[index].entities,rowIndex,rowIndex+1);
+  this._setCustomTabs(tabs);
+  if(action==='tab-add')this.shadowRoot.querySelector('.custom-tabs').lastElementChild.open=true;
+  if(action==='row-add')this.shadowRoot.querySelector('.custom-tabs').children[index].querySelector('.tab-entities').lastElementChild.open=true;
+ }
+ _renderCustomTabs(nl){
+  const container=this.shadowRoot.querySelector('.custom-tabs'),tabs=this._config.custom_tabs;
+  this.shadowRoot.querySelector('h3').textContent=nl?'Eigen tabbladen':'Custom tabs';
+  this.shadowRoot.querySelector('.tabs-help').textContent=nl?'Voeg je eigen tabbladen en entiteiten toe, ook in compacte weergave. Entiteiten tonen altijd hun actuele waarde.':'Add your own tabs and entities, including compact layouts. Entities always show their current value.';
+  const add=this.shadowRoot.querySelector('[data-action=tab-add]');add.textContent=nl?'Tabblad toevoegen':'Add tab';
+  const buttons=(actions)=>actions.map(([action,label])=>`<button type="button" data-action="${action}">${label}</button>`).join('');
+  for(const element of [...container.children])if(!tabs.some(tab=>tab.id===element.dataset.tabId))element.remove();
+  tabs.forEach((tab,index)=>{
+   let element=[...container.children].find(el=>el.dataset.tabId===tab.id);
+   if(!element){element=document.createElement('details');element.dataset.tabId=tab.id;element.innerHTML='<summary></summary><div class="tab-body"><ha-form class="tab-form"></ha-form><div class="tab-entities"></div><div class="actions">'+buttons([['row-add',nl?'Entiteit toevoegen':'Add entity'],['tab-up',nl?'Omhoog':'Move up'],['tab-down',nl?'Omlaag':'Move down'],['tab-remove',nl?'Tabblad verwijderen':'Remove tab']])+'</div></div>';
+    element.querySelector('.tab-form').addEventListener('value-changed',event=>{event.stopPropagation();const i=Number(element.dataset.index),next=this._config.custom_tabs.map((item,j)=>j===i?{...item,...event.detail.value}:item);this._setCustomTabs(next);});
+    element.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(!button)return;this._customAction(button.dataset.action,Number(element.dataset.index),Number(button.closest('[data-row]')?.dataset.row));});
+   }
+   element.dataset.index=index;
+   // Moving an already-positioned node disconnects its focused input.
+   if(container.children[index]!==element)container.insertBefore(element,container.children[index]??null);
+   element.querySelector('summary').textContent=tab.title||(nl?'Eigen tabblad ':'Custom tab ')+(index+1);
+   Object.assign(element.querySelector('.tab-form'),{hass:this._hass,data:tab,schema:[{name:'title',selector:{text:{}}},{name:'show',selector:{boolean:{}}}],computeLabel:item=>item.name==='title'?(nl?'Naam tabblad':'Tab name'):(nl?'Tabblad tonen':'Show tab')});
+   element.querySelector('[data-action=tab-up]').disabled=index===0;element.querySelector('[data-action=tab-down]').disabled=index===tabs.length-1;
+   const rows=element.querySelector('.tab-entities');while(rows.children.length>tab.entities.length)rows.lastElementChild.remove();
+   tab.entities.forEach((row,rowIndex)=>{
+    let rowElement=rows.children[rowIndex];
+    if(!rowElement){rowElement=document.createElement('details');rowElement.innerHTML='<summary></summary><div class="tab-body"><ha-form></ha-form><div class="actions">'+buttons([['row-up',nl?'Omhoog':'Move up'],['row-down',nl?'Omlaag':'Move down'],['row-remove',nl?'Verwijderen':'Remove']])+'</div></div>';rows.append(rowElement);
+     rowElement.querySelector('ha-form').addEventListener('value-changed',event=>{event.stopPropagation();const i=Number(element.dataset.index),r=Number(rowElement.dataset.row),next=this._config.custom_tabs.map((item,j)=>j===i?{...item,entities:item.entities.map((value,k)=>k===r?{...value,...event.detail.value}:value)}:item);this._setCustomTabs(next);});
+    }
+    rowElement.dataset.row=rowIndex;rowElement.querySelector('summary').textContent=row.name||this._hass.states?.[row.entity]?.attributes?.friendly_name||row.entity||(nl?'Nieuwe entiteit':'New entity');
+    const rowLabels={entity:nl?'Entiteit':'Entity',name:nl?'Label (optioneel)':'Label (optional)',attribute:nl?'Attribuut (optioneel)':'Attribute (optional)',unit:nl?'Eigen eenheid (optioneel)':'Custom unit (optional)',show_unit:nl?'Eenheid tonen':'Show unit',decimals:nl?'Decimalen (optioneel)':'Decimal places (optional)'};
+    Object.assign(rowElement.querySelector('ha-form'),{hass:this._hass,data:row,schema:[{name:'entity',selector:{entity:{}}},...['name','attribute'].map(name=>({name,selector:{text:{}}})),{name:'show_unit',selector:{boolean:{}}},...(row.show_unit?[{name:'unit',selector:{text:{}}}]:[]),{name:'decimals',selector:{number:{min:0,max:this._customTabMaxDecimals??6,step:1,mode:'box'}}}],computeLabel:item=>rowLabels[item.name]});
+    rowElement.querySelector('[data-action=row-up]').disabled=rowIndex===0;rowElement.querySelector('[data-action=row-down]').disabled=rowIndex===tab.entities.length-1;
+   });
+  });
+  const actionLabels={'row-add':nl?'Entiteit toevoegen':'Add entity','tab-up':nl?'Omhoog':'Move up','tab-down':nl?'Omlaag':'Move down','tab-remove':nl?'Tabblad verwijderen':'Remove tab','row-up':nl?'Omhoog':'Move up','row-down':nl?'Omlaag':'Move down','row-remove':nl?'Verwijderen':'Remove'};
+  for(const button of container.querySelectorAll('[data-action]'))button.textContent=actionLabels[button.dataset.action];
+ }
+};
+
+// Decorative header layers; all paint inherits the weather state's --tone.
+function observeCardMotion(host,onVisibility=()=>{}){
+ if(typeof document==='undefined'||typeof host.toggleAttribute!=='function')return ()=>{};
+ let visible=true;
+ const update=()=>{host.toggleAttribute('data-motion-paused',document.hidden||!visible);onVisibility();};
+ const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{visible=entries.some(entry=>entry.isIntersecting);update();}):null;
+ observer?.observe(host);document.addEventListener('visibilitychange',update);update();
+ return ()=>{observer?.disconnect();document.removeEventListener('visibilitychange',update);};
+}
+function headerAtmosphere(background){
+ if(background==='terrain')return '<div class="header-pattern" aria-hidden="true">'+Array.from({length:10},(_,n)=>`<i style="--n:${n}"></i>`).join('')+'</div>';
+ if(background==='hologram'||background==='ink')return '<div class="header-pattern" aria-hidden="true">'+'<i></i>'.repeat(background==='ink'?3:2)+'</div>';
+
+ if(!['aurora','clouds','isobars'].includes(background))return '';
+ let body='';
+ if(background==='aurora')body=Array.from({length:32},(_,i)=>`<i style="--star-x:${i*37%100}%;--star-y:${i*19%72}%;--star-duration:${2+i%5}s;--star-delay:${-i*.37}s"></i>`).join('');
+ if(background==='isobars')body='<svg class="weather-isobars" viewBox="0 0 600 340" preserveAspectRatio="none" focusable="false">'+Array.from({length:10},(_,i)=>`<path d="M-40 ${40+i*27}C100 ${-90+i*27} 235 ${270+i*10} 370 ${105+i*15}S580 ${-20+i*28} 650 ${85+i*29}"/>`).join('')+Array.from({length:4},(_,i)=>`<path class="weather-front" d="M-40 ${67+i*54}C100 ${-63+i*54} 235 ${280+i*20} 370 ${120+i*30}S580 ${8+i*56} 650 ${114+i*58}"/>`).join('')+'</svg>';
+ return `<div class="header-atmosphere" aria-hidden="true">${body}</div>`;
+}
+
+const headerAtmosphereStyles=`
+.header-atmosphere{position:absolute;inset:0;overflow:hidden;pointer-events:none;--sky-light:color-mix(in srgb,var(--tone) 42%,transparent)}
+.content:is([data-background=aurora],[data-background=clouds],[data-background=isobars]) :is(.scene-background,.header-background)::after{display:none}
+.content[data-background=aurora] :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 60% 20%,color-mix(in srgb,var(--tone) 32%,transparent),transparent 80%)}
+[data-background=aurora] .header-atmosphere::before,[data-background=aurora] .header-atmosphere::after{content:'';position:absolute;width:170%;height:72%;left:-35%;top:0;border-radius:50%;background:conic-gradient(from 75deg at 50% 100%,transparent,color-mix(in srgb,var(--tone) 70%,#58ddb6) 10deg,transparent 42deg);filter:blur(13px);animation:weather-aurora 13s ease-in-out infinite alternate;transform:rotate(-18deg)}
+[data-background=aurora] .header-atmosphere::after{top:20%;opacity:.7;animation-delay:-7s;animation-duration:17s;transform:rotate(15deg);background:conic-gradient(from 260deg at 50% 0%,transparent,color-mix(in srgb,var(--tone) 75%,#e1a0d9) 15deg,transparent 55deg)}
+[data-background=aurora] .header-atmosphere i{position:absolute;left:var(--star-x);top:var(--star-y);width:2px;height:2px;border-radius:50%;background:var(--tone);box-shadow:0 0 8px var(--tone);opacity:.55;animation:weather-star var(--star-duration) ease-in-out infinite alternate;animation-delay:var(--star-delay)}
+.content[data-background=clouds] :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 65% 20%,color-mix(in srgb,var(--tone) 42%,transparent),transparent 76%)}
+[data-background=clouds] .header-atmosphere::before,[data-background=clouds] .header-atmosphere::after{content:'';position:absolute;left:-40%;top:32%;width:180%;height:75%;background:radial-gradient(ellipse at 18% 53%,color-mix(in srgb,var(--tone) 42%,transparent),transparent 28%),radial-gradient(ellipse at 46% 40%,color-mix(in srgb,var(--tone) 33%,transparent),transparent 38%),radial-gradient(ellipse at 82% 62%,color-mix(in srgb,var(--tone) 44%,transparent),transparent 31%);animation:weather-clouds 8s ease-in-out infinite alternate}
+[data-background=clouds] .header-atmosphere::after{top:12%;opacity:.55;animation-duration:13s;animation-delay:-5s;animation-direction:alternate-reverse}
+.content[data-background=isobars] :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 50% 35%,color-mix(in srgb,var(--tone) 42%,transparent),transparent 70%)}
+.weather-isobars{position:absolute;width:155%;height:135%;left:-28%;top:-10%;fill:none;stroke:var(--tone);stroke-width:.8;opacity:.36}
+.weather-isobars .weather-front{stroke-width:2;stroke-dasharray:38 540;opacity:1;animation:weather-front 9s linear infinite}
+.weather-isobars .weather-front:nth-child(2n){animation-duration:13s;animation-delay:-5s}
+@keyframes weather-aurora{to{transform:translate(9%,20%) rotate(9deg) scale(1.16)}}
+@keyframes weather-star{from{opacity:.2}to{opacity:.9;transform:scale(1.4)}}
+@keyframes weather-clouds{0%{transform:translate(-16%,6%) scale(1);opacity:.6}50%{opacity:1}100%{transform:translate(22%,-16%) scale(1.16);opacity:.85}}
+@keyframes weather-front{to{stroke-dashoffset:-578}}
+.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere *,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::before,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::after{animation:none!important}
+:host([data-motion-paused]) *,:host([data-motion-paused]) *::before,:host([data-motion-paused]) *::after{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.header-atmosphere,.header-atmosphere *,.header-atmosphere::before,.header-atmosphere::after{animation:none!important}}
+
+.header-pattern{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.header-pattern i{position:absolute;display:block;pointer-events:none}
+.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::before,.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::after{display:none}
+[data-background=hologram] .header-pattern{perspective:380px;background:radial-gradient(ellipse at 50% 60%,color-mix(in srgb,var(--tone) 15%,transparent),transparent 70%)}
+[data-background=hologram] .header-pattern i:first-child{inset:-25%;background:repeating-linear-gradient(0deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px),repeating-linear-gradient(90deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px);transform:rotateX(52deg);transform-origin:50% 80%;animation:energy-background-grid 26s linear infinite}
+[data-background=hologram] .header-pattern i:last-child{inset:0;background:linear-gradient(180deg,transparent 25%,color-mix(in srgb,var(--tone) 14%,transparent) 48%,transparent 65%);animation:energy-background-scan 16s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i{width:100%;height:100%;left:-20%;top:-35%;border-radius:36% 64% 55% 45% / 65% 45% 55% 35%;background:radial-gradient(ellipse,color-mix(in srgb,var(--tone) 25%,transparent),transparent 70%);filter:blur(15px);animation:energy-background-ink 29s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i:nth-child(2){left:35%;top:-20%;opacity:.75;animation-delay:-14s;animation-duration:37s}
+[data-background=ink] .header-pattern i:nth-child(3){left:5%;top:25%;opacity:.45;animation-delay:-24s;animation-duration:41s}
+[data-background=terrain] .header-pattern i{width:calc(130px + var(--n)*38px);height:calc(80px + var(--n)*25px);left:65%;top:20%;border:1px solid color-mix(in srgb,var(--tone) 20%,transparent);border-radius:42% 58% 63% 37% / 52% 37% 63% 48%;transform:translate(-50%,-50%) rotate(-18deg);animation:energy-background-terrain 24s ease-in-out infinite alternate;animation-delay:calc(var(--n)*-1.5s)}
+@keyframes energy-background-grid{to{background-position:0 72px,0 72px}}
+@keyframes energy-background-scan{from{transform:translateY(-25%)}to{transform:translateY(25%)}}
+@keyframes energy-background-ink{from{transform:rotate(-12deg) scale(.9)}to{transform:translate(10%,8%) rotate(25deg) scale(1.15)}}
+@keyframes energy-background-terrain{from{translate:-2% -2%;rotate:-2deg}to{translate:3% 5%;rotate:5deg}}
+.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-pattern i{animation:none!important}
+:host([data-motion-paused]) .header-pattern i{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.header-pattern i{animation:none!important}}
+`;
+
+// Shared designs; each card supplies its own state color through --tone.
+const HEADER_BACKGROUNDS = [
+ {
+  "value": "lanes",
+  "label": "Energy Lanes"
+ },
+ {
+  "value": "halo",
+  "label": "Halo"
+ },
+ {
+  "value": "ribbon",
+  "label": "Silk Flow"
+ },
+ {
+  "value": "prism-glass",
+  "label": "Prism Glass"
+ },
+ {
+  "value": "eclipse",
+  "label": "Eclipse"
+ },
+ {
+  "value": "aurora",
+  "label": "Aurora sky"
+ },
+ {
+  "value": "clouds",
+  "label": "Cloud layers"
+ },
+ {
+  "value": "isobars",
+  "label": "Atmospheric flow"
+ },
+ {value:'hologram',label:'Holographic grid',labelNl:'Holografisch raster'},
+ {value:'ink',label:'Liquid ink',labelNl:'Vloeibare inkt'},
+ {value:'terrain',label:'Relief map',labelNl:'Reliëfkaart'}
+].map(item=>({...item,animated:['aurora','clouds','isobars','hologram','ink','terrain'].includes(item.value)}));
+function headerBackgroundOptions(nl){
+ return HEADER_BACKGROUNDS.map(item=>({value:item.value,label:`${nl?(item.labelNl??item.label):item.label} · ${nl?(item.animated?'Geanimeerd':'Statisch'):(item.animated?'Animated':'Static')}`}));
+}
+
+
+const headerBackgroundStyles = `
+:is(.scene-background,.header-background)::before,:is(.scene-background,.header-background)::after{content:"";position:absolute;z-index:-1;pointer-events:none;inset:auto;transform:none;border:0;box-shadow:none;border-radius:0;width:auto;height:auto}
+:where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::before{inset:0;background:linear-gradient(143deg,transparent 0 43%,color-mix(in srgb,var(--tone) 19%,transparent) 43.2% 70%,color-mix(in srgb,var(--tone) 5%,transparent) 70.2% 88%,transparent 88.2%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 11%,transparent),transparent 75%)}:where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::after{inset:20% -16% -30% 24%;transform:skewY(-36deg);background:repeating-linear-gradient(0deg,transparent 0 25px,color-mix(in srgb,var(--tone) 13%,transparent) 26px,transparent 27px 58px)}
+:where(.content[data-background="halo"]) :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 75% 68%,color-mix(in srgb,var(--tone) 20%,transparent),transparent 61%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 11%,transparent),transparent 65%)}:where(.content[data-background="halo"]) :is(.scene-background,.header-background)::after{width:88%;height:60%;right:-11%;bottom:20%;border:1px solid color-mix(in srgb,var(--tone) 39%,transparent);border-radius:50%;transform:rotate(-16deg);box-shadow:0 0 0 19px color-mix(in srgb,var(--tone) 4%,transparent),0 0 0 39px color-mix(in srgb,var(--tone) 3%,transparent),inset 0 0 45px color-mix(in srgb,var(--tone) 8%,transparent);background:radial-gradient(ellipse at 50% 50%,color-mix(in srgb,var(--tone) 7%,transparent),transparent 70%)}
+:where(.content[data-background="ribbon"]) :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 95% 32%,color-mix(in srgb,var(--tone) 24%,transparent),transparent 59%),linear-gradient(155deg,color-mix(in srgb,var(--tone) 10%,transparent),transparent 65%)}:where(.content[data-background="ribbon"]) :is(.scene-background,.header-background)::after{width:145%;height:60%;right:-32%;top:22%;border-radius:50%;transform:rotate(-21deg);border-top:1px solid color-mix(in srgb,var(--tone) 49%,transparent);background:linear-gradient(180deg,color-mix(in srgb,var(--tone) 25%,transparent),color-mix(in srgb,var(--tone) 3%,transparent) 65%,transparent);box-shadow:0 -16px 0 color-mix(in srgb,var(--tone) 5%,transparent),0 -35px 0 color-mix(in srgb,var(--tone) 3%,transparent)}
+:where(.content[data-background="prism-glass"]) :is(.scene-background,.header-background)::before{inset:0;background:linear-gradient(119deg,transparent 37%,color-mix(in srgb,var(--tone) 12%,transparent) 37.3%,color-mix(in srgb,var(--tone) 3%,transparent) 76%,transparent 76.3%),linear-gradient(34deg,transparent 42%,color-mix(in srgb,var(--tone) 11%,transparent) 42.3%,transparent 83%),radial-gradient(ellipse at 82% 30%,color-mix(in srgb,var(--tone) 20%,transparent),transparent 63%)}:where(.content[data-background="prism-glass"]) :is(.scene-background,.header-background)::after{inset:0;background:linear-gradient(119deg,transparent 37%,color-mix(in srgb,var(--tone) 23%,transparent) 37.2%,transparent 37.5%),linear-gradient(34deg,transparent 42%,color-mix(in srgb,var(--tone) 19%,transparent) 42.2%,transparent 42.5%)}
+:where(.content[data-background="eclipse"]) :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 82% 24%,color-mix(in srgb,var(--tone) 28%,transparent),transparent 57%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 5%,transparent),transparent 78%)}:where(.content[data-background="eclipse"]) :is(.scene-background,.header-background)::after{width:76%;height:auto;aspect-ratio:1;right:-5%;top:-12%;border-radius:50%;background:radial-gradient(circle at 47% 46%,color-mix(in srgb,var(--ha-card-background,var(--card-background-color,#fff)) 95%,transparent) 0 55%,color-mix(in srgb,var(--tone) 58%,transparent) 57%,color-mix(in srgb,var(--tone) 12%,transparent) 61%,transparent 70%)}
+`;
+
+// The backdrop belongs to the header region, never to the entire card or a tab.
+// Relative stops follow the header's intrinsic height, including wrapped content.
+const headerSceneStyles=`
+.header-region{position:relative;isolation:isolate;margin:calc(-1 * var(--eleven-card-padding,16px)) calc(-1 * var(--eleven-card-padding,16px)) 0;padding:var(--eleven-card-padding,16px) var(--eleven-card-padding,16px) 0}
+.header-region>.header-scene,.header-region>.scene{margin:0;padding-left:0;padding-right:0;padding-top:0;padding-bottom:12px;isolation:auto;overflow:visible}
+.header-region>.header-background,.header-region>.scene-background{position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;opacity:var(--header-background-opacity,1);
+--header-fade:linear-gradient(180deg,#000 0%,#000 25%,rgba(0,0,0,.9) 40%,rgba(0,0,0,.65) 55%,rgba(0,0,0,.32) 72%,rgba(0,0,0,.08) 88%,transparent 100%);
+-webkit-mask-image:var(--header-fade);mask-image:var(--header-fade)}
+`;
+
+
+// Domain-neutral SVG renderer. Adapters own data, geometry, colors and annotations.
+function graphLineStyle(style, width = 3.5) {
+  return {style, width, dash: style === 'dashed' ? '8 7' : style === 'dotted' ? '1 7' : 'none', cap: style === 'dashed' ? 'butt' : 'round'};
+}
+const graphAttribute = value => String(value).replace(/[&"<>]/g, c => ({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[c]));
+class SharedGraph {
+  static hoverGroup(host) {
+    return host._config?.sync_hover === false ? null : (host._config?.hover_sync_group?.trim() || 'default');
+  }
+  static hoverState() {
+    const key = Symbol.for('eleven-cards.hover-sync.v1');
+    const target = globalThis.window ?? globalThis;
+    return target[key] ??= new Map();
+  }
+  static connectHover(host, receive) {
+    this.disconnectHover(host);
+    host._receiveSharedHover = receive;
+    host._sharedHoverListener = event => {
+      const {source, group, timestamp} = event.detail;
+      if (source !== host && host.isConnected && group === this.hoverGroup(host)) receive(timestamp);
+    };
+    window.addEventListener('eleven-cards:hover-sync', host._sharedHoverListener);
+    // Scroll does not cross shadow roots: listen in every enclosing tree.
+    host._sharedScrollTargets = [window];
+    for (let root = host.getRootNode?.(); root && root !== window; root = root.host?.getRootNode()) {
+      host._sharedScrollTargets.push(root);
+    }
+    host._sharedScrollListener = event => {
+      if (event?.composedPath?.().some(node => node?.classList?.contains('tooltip'))) return;
+      host._hideTooltip();
+    };
+    for (const target of host._sharedScrollTargets) target.addEventListener('scroll', host._sharedScrollListener, true);
+    window.addEventListener('resize', host._sharedScrollListener);
+  }
+  static tooltipInView(host) {
+    const chart = host.shadowRoot?.querySelector('.chart');
+    const box = chart?.getBoundingClientRect?.();
+    if (!box) return true;
+    const bottom = box.bottom ?? box.top + box.height, right = box.right ?? box.left + box.width;
+    if (bottom <= 0 || right <= 0 || box.top >= (window.innerHeight ?? Infinity) || box.left >= (window.innerWidth ?? Infinity)) return false;
+    // Respect nested scrolling/clipping containers, including HA's shadow trees.
+    for (let node = host; node; node = node.parentElement ?? node.getRootNode?.().host) {
+      if (!node.getBoundingClientRect || !globalThis.getComputedStyle) continue;
+      const style = getComputedStyle(node), clipX = /auto|scroll|hidden|clip/.test(style.overflowX), clipY = /auto|scroll|hidden|clip/.test(style.overflowY);
+      if (!clipX && !clipY) continue;
+      const bounds = node.getBoundingClientRect();
+      if ((clipY && (bottom <= bounds.top || box.top >= bounds.bottom)) || (clipX && (right <= bounds.left || box.left >= bounds.right))) return false;
+    }
+    return true;
+  }
+  static tooltipStyles() {
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static publishHover(host, timestamp) {
+    const group = this.hoverGroup(host);
+    if (!group || !host.isConnected || !Number.isFinite(timestamp)) return;
+    this.hoverState().set(group, {source: host, timestamp});
+    window.dispatchEvent(new CustomEvent('eleven-cards:hover-sync', {detail: {source: host, group, timestamp}}));
+  }
+  static clearHover(host) {
+    for (const [group, active] of this.hoverState()) {
+      if (active.source !== host) continue;
+      this.hoverState().delete(group);
+      window.dispatchEvent(new CustomEvent('eleven-cards:hover-sync', {detail: {source: host, group, timestamp: null}}));
+    }
+  }
+  static hoverSourceInEvent(host, event) {
+    const active = this.hoverState().get(this.hoverGroup(host));
+    return Boolean(active && event.composedPath().includes(active.source));
+  }
+  static restoreHover(host) {
+    if (!host.isConnected) return;
+    const active = this.hoverState().get(this.hoverGroup(host));
+    if (active && host.isConnected) host._receiveSharedHover?.(active.timestamp);
+  }
+  static disconnectHover(host) {
+    this.clearHover(host);
+    if (host._sharedHoverListener) globalThis.window?.removeEventListener('eleven-cards:hover-sync', host._sharedHoverListener);
+    for (const target of host._sharedScrollTargets ?? []) target.removeEventListener('scroll', host._sharedScrollListener, true);
+    globalThis.window?.removeEventListener('resize', host._sharedScrollListener);
+    host._sharedScrollTargets = [];
+    host._sharedScrollListener = null;
+    host._sharedHoverListener = null;
+    host._receiveSharedHover = null;
+  }
+  static interpolation(value, fallback = 'smooth') {
+    const mode = value == null || value === '' ? fallback : value;
+    if (!['smooth', 'linear', 'step'].includes(mode)) throw new Error('line_interpolation');
+    return mode;
+  }
+  static path(points, mode = 'smooth', end) {
+    mode = this.interpolation(mode);
+    let path = '', previous = null;
+    for (const [x, y] of points) {
+      if (!Number.isFinite(y)) {
+        if (previous && end !== undefined) path += ` H ${x}`;
+        previous = null;
+        continue;
+      }
+      if (!previous) path += `${path ? ' ' : ''}M ${x} ${y}`;
+      else if (mode === 'linear') path += ` L ${x} ${y}`;
+      else if (mode === 'step') path += ` H ${x} V ${y}`;
+      else {
+        const middle = (previous[0] + x) / 2;
+        path += ` C ${middle} ${previous[1]}, ${middle} ${y}, ${x} ${y}`;
+      }
+      previous = [x, y];
+    }
+    if (previous && end !== undefined) path += ` H ${end}`;
+    return path;
+  }
+  render(host, {viewBox, defs = '', before = '', after = '', fills = [], lines = []}) {
+    const previous = host.shadowRoot.querySelector('.chart-enter')?.getAnimations?.().find(a => a.animationName === 'chart-reveal' && a.playState !== 'finished' && Number(a.currentTime ?? 0) < 650);
+    this.progress = Number(previous?.currentTime ?? 0);
+    this.entering = Boolean(host.isConnected && (!this.loaded || previous) && lines.some(p => p.d));
+    if (host.isConnected && lines.some(p => p.d)) this.loaded = true;
+    const areas = fills.filter(p => p.d).map(p => `<path d="${graphAttribute(p.d)}" class="${graphAttribute(p.className)}"${p.fill ? ` fill="${graphAttribute(p.fill)}"` : ''}${p.opacity != null ? ` fill-opacity="${p.opacity}"` : ''}${p.mask ? ` mask="${graphAttribute(p.mask)}"` : ''}/>`).join('');
+    const paths = lines.filter(p => p.d).map(p => {
+      const a = p.appearance;
+      const stroke = p.inlineStyle ? `style="stroke:${graphAttribute(a.stroke)};stroke-width:${a.width};stroke-dasharray:${a.dash};stroke-linecap:${a.cap}"` : `stroke="${graphAttribute(a.stroke)}" stroke-width="${a.width}" stroke-dasharray="${a.dash}" stroke-linecap="${a.cap}"`;
+      return `<path d="${graphAttribute(p.d)}" class="${graphAttribute(p.className)}"${p.entity ? ` data-entity="${graphAttribute(p.entity)}"` : ''} ${stroke}/>`;
+    }).join('');
+    return `<svg viewBox="${viewBox}" preserveAspectRatio="none" aria-hidden="true">${defs}${before}<g class="chart-series${this.entering ? ' chart-enter' : ''}">${areas}${paths}</g>${after}</svg>`;
+  }
+  restore(host) {
+    if (this.entering && this.progress > 0) {
+      const animation = host.shadowRoot.querySelector('.chart-enter')?.getAnimations?.().find(a => a.animationName === 'chart-reveal');
+      if (animation) animation.currentTime = this.progress;
+    }
+  }
+}
+function graphStyles() {
+  return `
+      .price-line, .series-line { fill: none; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+      .chart-enter { animation: chart-reveal 650ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+      @keyframes chart-reveal {
+        from { clip-path: inset(0 100% 0 0); }
+        to { clip-path: inset(0 0 0 0); }
+      }
+      .hover-dot { position: absolute; z-index: 2; width: 12px; height: 12px; box-sizing: border-box; border: 3px solid; border-radius: 50%; transform: translate(-50%, -50%); background: var(--card-background-color); pointer-events: none; }
+      @media (prefers-reduced-motion: reduce) { .chart-enter { animation: none; } }
+  `;
+}
+
+
+
+
+// Selectable header backgrounds; colors describe charging state independently of design.
+const EVCC_BACKGROUNDS=HEADER_BACKGROUNDS;
+const evccBackgroundStyles = `
+ .content{--tone-charging:#896400;--tone-planned:#4455ad;--tone-waiting:#386c9b;--tone-done:#277441;--tone-off:#656975;--tone-disconnected:#616b79;--tone-unknown:#777d87;--tone:var(--tone-unknown);--evcc-glow:var(--tone);--status-accent:var(--tone)}
+ .content[data-theme=dark]{--tone-charging:#f2c451;--tone-planned:#8fa5ff;--tone-waiting:#82b8e8;--tone-done:#7ed79c;--tone-off:#a7a9b2;--tone-disconnected:#9199a5;--tone-unknown:#858992}
+ .content[data-tone=charging]{--tone:var(--tone-charging)}.content[data-tone=planned]{--tone:var(--tone-planned)}.content[data-tone=waiting]{--tone:var(--tone-waiting)}.content[data-tone=done]{--tone:var(--tone-done)}.content[data-tone=off]{--tone:var(--tone-off)}.content[data-tone=disconnected]{--tone:var(--tone-disconnected)}.content[data-tone=unknown]{--tone:var(--tone-unknown)}
+ .content[data-tone]{--evcc-glow:var(--tone);--status-accent:var(--tone)}
+ ha-card{overflow:hidden}.header-scene{position:relative;isolation:isolate;overflow:hidden;margin:-16px -16px 0;padding:16px 16px 16px}
+ .gallery-top{margin:0;padding:0;background:none;border:0}.header-scene .status-line{position:relative;margin:16px 0 0;background:var(--secondary-background-color,#eee);border:0;box-shadow:none}
+
+ .header-background::before,.header-background::after{content:'';position:absolute;pointer-events:none;z-index:-1}
+ header{position:relative;z-index:1}header h2{color:color-mix(in srgb,var(--tone) 88%,#fff)}.hero{background:none}.car-stage::before{background:none}.car-stage::after{content:none}
+ .content[data-tone=disconnected] .header-background::before,.content[data-tone=disconnected] .header-background::after{opacity:.38}
+ .content[data-tone=unknown] .header-background::before,.content[data-tone=unknown] .header-background::after{opacity:.16}
+
+${headerBackgroundStyles}
+:where(.content[data-background="ribbon"]) .car-stage::after{opacity:.3}
+:where(.content[data-background="prism-glass"]) .car-stage::after,:where(.content[data-background="eclipse"]) .car-stage::after{opacity:.2}
+${headerAtmosphereStyles}
+ .content[data-tone=disconnected] .header-atmosphere{opacity:.38}.content[data-tone=unknown] .header-atmosphere{opacity:.16}
+
+${headerSceneStyles}
+`;
+
+
+// Home Assistant remains the source of truth; unknown values are never zero.
+const EVCC_FIELDS = {
+ connected: ['Aangesloten', 'Connected', 'binary_sensor'],
+ charging: ['Laden', 'Charging', 'binary_sensor'],
+ vehicle: ['Auto', 'Vehicle', ['select', 'sensor']],
+ soc: ['Accu', 'Battery', 'sensor'],
+ target_soc: ['Laaddoel', 'Charge target', ['sensor', 'number']],
+ range: ['Actieradius', 'Range', 'sensor'],
+ mode: ['Laadmodus', 'Charge mode', ['select', 'sensor']],
+ power: ['Laadvermogen', 'Charge power', 'sensor'],
+ remaining_duration: ['Resterende laadtijd', 'Time remaining', 'sensor'],
+ charged_energy: ['Geladen energie', 'Charged energy', 'sensor'],
+ remaining_energy: ['Resterende energie', 'Energy remaining', 'sensor'],
+ session_price: ['Sessiekosten', 'Session cost', 'sensor'],
+ session_price_per_kwh: ['Gemiddelde laadprijs', 'Average charge price', 'sensor'],
+ solar_percentage: ['Zonne-aandeel sessie', 'Session solar share', 'sensor'],
+ solar_share: ['Solar share', 'Solar share', 'number'],
+ charge_duration: ['Laadduur', 'Charge duration', 'sensor'],
+ current: ['Laadstroom', 'Charge current', 'sensor'],
+ phases: ['Actieve fasen', 'Active phases', 'sensor'],
+ pv_action: ['Zonneladen: actie', 'Solar charging: action', 'sensor'],
+ pv_remaining: ['Zonneladen: wachttijd', 'Solar charging: delay', 'sensor'],
+ vehicle_limit_soc: ['Acculimiet auto', 'Vehicle charge limit', 'sensor'],
+ co2: ['CO₂-uitstoot sessie', 'Session CO₂ intensity', 'sensor'],
+ enabled: ['Laden vrijgegeven', 'Charging enabled', 'binary_sensor'],
+ smart_cost_active: ['Slim laden actief', 'Smart charging active', 'binary_sensor'],
+ plan_active: ['Laadplanning actief', 'Charging plan active', 'binary_sensor'],
+};
+
+// Stable ha-evcc keys, independent of translated friendly names. Order is
+// intentional: effective targets take precedence over configured limits.
+const EVCC_KEYS = {
+ connected: ['connected'], charging: ['charging'], vehicle: ['vehicle_name'],
+ soc: ['vehicle_soc'], target_soc: ['effective_limit_soc', 'limit_soc'],
+ range: ['vehicle_range'], mode: ['mode'], power: ['charge_power'],
+ remaining_duration: ['charge_remaining_duration'], charged_energy: ['charged_energy'],
+ remaining_energy: ['charge_remaining_energy'], session_price: ['session_price'],
+ session_price_per_kwh: ['session_price_per_kwh'], solar_percentage: ['session_solar_percentage'],
+ solar_share: ['solar_share'],
+ charge_duration: ['charge_duration'], current: ['charge_current'], phases: ['phases_active'],
+ pv_action: ['pv_action_value', 'pv_action'], pv_remaining: ['pv_remaining'],
+ vehicle_limit_soc: ['vehicle_limit_soc'], co2: ['session_co2_per_kwh'],
+ enabled: ['enabled'], smart_cost_active: ['smart_cost_active'],
+ plan_active: ['plan_active'],
+};
+
+function normalizeEvccConfig(input = {}) {
+ if (!input || typeof input !== 'object' || Array.isArray(input)) throw Error('Invalid EVCC configuration / Ongeldige EVCC-configuratie');
+ if (input.entities != null && (typeof input.entities !== 'object' || Array.isArray(input.entities))) throw Error('Invalid entities / Ongeldige entiteiten');
+ const config = {...input, type: input.type || 'custom:eleven-car-card', entities: {...input.entities}};
+ config.compact = (input.compact??(input.density==='compact')) === true;
+ config.animate_background = input.animate_background !== false;
+ config.background_strength=input.background_strength==null||!Number.isFinite(Number(input.background_strength))?100:Math.max(0,Math.min(100,Number(input.background_strength)));
+ config.background = input.background || 'lanes';
+ if (!EVCC_BACKGROUNDS.some(option => option.value === config.background)) throw Error('Invalid background / Ongeldige achtergrond');
+ for (const key of ['show_plan', 'vehicle_id', 'config_entry_id', 'schedule_script', 'vehicle_name']) delete config[key];
+ const imageScale = input.image_scale == null || input.image_scale === '' ? 100 : Number(input.image_scale);
+ if (!Number.isFinite(imageScale) || imageScale < 50 || imageScale > 300) throw Error('Image size must be between 50 and 300% / Afbeeldingsgrootte moet tussen 50 en 300% liggen');
+ config.image_scale = imageScale;
+ const imageOffsetY = input.image_offset_y == null || input.image_offset_y === '' ? 0 : Number(input.image_offset_y);
+ if (!Number.isFinite(imageOffsetY) || imageOffsetY < -150 || imageOffsetY > 150) throw Error('Image vertical position must be between -150 and 150 px / Verticale positie moet tussen -150 en 150 px liggen');
+ config.image_offset_y = imageOffsetY;
+ for (const key of ['plan_time', 'plan_soc', 'plan_start', 'plan_end']) delete config.entities[key];
+ for (const [key, domains] of [['entity', 'sensor'], ['image_entity', 'image'], ...Object.entries(EVCC_FIELDS).map(([key, value]) => [key, value[2]])]) {
+  const value = ['entity', 'image_entity'].includes(key) ? input[key] : config.entities?.[key];
+  if (value != null && value !== '' && (typeof value !== 'string' || !/^[a-z_]+\.[a-z0-9_]+$/.test(value) || ![domains].flat().includes(value.split('.')[0]))) throw Error(`Invalid entity: ${key} / Ongeldige entiteit: ${key}`);
+ }
+ for (const key of ['show_session', 'show_details', 'show_controls']) config[key] = input[key] !== false;
+ return config;
+}
+
+const registryKey = entry => entry?.platform === 'evcc_intg' && entry.unique_id?.startsWith('evcc_intg.') ? entry.unique_id.slice('evcc_intg.'.length) : null;
+function evccLoadpoints(hass, registry = []) {
+ const ids = new Set(registry.filter(entry => !entry.disabled_by && registryKey(entry)?.endsWith('_charge_power')).map(entry => entry.entity_id));
+ for (const id of Object.keys(hass?.states ?? {})) if (/^sensor\..*evcc.*_charge_power$/.test(id)) ids.add(id);
+ return [...ids].filter(id => id.startsWith('sensor.') && hass?.states?.[id]).sort();
+}
+
+function resolveEvccEntities(config, hass, registry = [], {allowFallback = true} = {}) {
+ const states = hass?.states ?? {}, anchor = registry.find(entry => entry.entity_id === config.entity);
+ const objectId = registryKey(anchor) ?? config.entity?.split('.')[1];
+ const prefix = objectId?.endsWith('_charge_power') ? objectId.slice(0, -'_charge_power'.length) : null;
+ const result = {};
+ for (const [field, definition] of Object.entries(EVCC_FIELDS)) {
+  if (config.entities?.[field]) { result[field] = config.entities[field]; continue; }
+  if (!prefix) continue;
+  for (const suffix of EVCC_KEYS[field]) {
+   for (const domain of [definition[2]].flat()) {
+    const matches = registry.filter(entry => !entry.disabled_by && registryKey(entry) === `${prefix}_${suffix}` && entry.entity_id.startsWith(domain + '.') && anchor?.config_entry_id && entry.config_entry_id === anchor.config_entry_id);
+    // Do not resolve an ambiguous registry key or fall back to another device.
+    if (matches.length > 1) continue;
+    // Registry data must establish ownership before a conventional ID is used.
+    const id = matches[0]?.entity_id ?? (allowFallback && !registry.length ? `${domain}.${prefix}_${suffix}` : null);
+    if (states[id]) { result[field] = id; break; }
+   }
+   if (result[field]) break;
+  }
+ }
+ if (config.entity && !config.entities?.power) result.power = config.entity;
+ return result;
+}
+
+// Cache one registry read per connection, shared by card and visual editor.
+const evccRegistries = new WeakMap();
+function loadEvccRegistry(hass) {
+ const connection = hass?.connection ?? hass?.callWS;
+ if (!connection || typeof hass?.callWS !== 'function') return Promise.resolve([]);
+ if (!evccRegistries.has(connection)) {
+  const request = Promise.resolve().then(() => hass.callWS({type: 'config/entity_registry/list'})).catch(() => { evccRegistries.delete(connection); return []; });
+  evccRegistries.set(connection, request);
+ }
+ return evccRegistries.get(connection);
+}
+
+function evccBoolean(entity) {
+ if (!evccAvailable(entity)) return null;
+ if (['on', 'true'].includes(entity.state)) return true;
+ if (['off', 'false'].includes(entity.state)) return false;
+ return null;
+}
+
+function evccStatus(entities, states) {
+ const connected = evccBoolean(states[entities.connected]), charging = evccBoolean(states[entities.charging]);
+ if (charging === true) return 'charging';
+ if (connected === false) return 'disconnected';
+ if (connected === true && charging === false) return 'connected';
+ return 'unknown';
+}
+
+function evccPercent(entity) {
+ const number = evccNumber(entity), unit = entity?.attributes?.unit_of_measurement;
+ return number != null && number >= 0 && number <= 100 && (!unit || unit === '%') ? number : null;
+}
+
+function evccVehicleName(entity) {
+ if (!evccAvailable(entity)) return null;
+ const value = String(entity.state).trim();
+ return /^(?:[-_\s]*(?:none|null|unknown|unavailable)[-_\s]*|not available)$/i.test(value) ? null : (entity.attributes?.vehicle?.name || value);
+}
+
+function evccModeOptions(entity) {
+ return evccAvailable(entity) && Array.isArray(entity.attributes?.options) ? entity.attributes.options.filter(option => typeof option === 'string' && option.length > 0) : [];
+}
+
+function evccSolarRange(entity) {
+ if (evccPercent(entity) == null) return null;
+ const min = Number(entity.attributes?.min ?? 0), max = Number(entity.attributes?.max ?? 100), step = Number(entity.attributes?.step ?? 10);
+ return Number.isFinite(min) && Number.isFinite(max) && Number.isFinite(step) && min >= 0 && max <= 100 && min < max && step > 0 && step <= max - min ? {min, max, step} : null;
+}
+
+function evccValidSolarValue(entity, value) {
+ const range = evccSolarRange(entity);
+ return !!range && typeof value === 'number' && Number.isFinite(value) && value >= range.min && value <= range.max && Math.abs((value - range.min) / range.step - Math.round((value - range.min) / range.step)) < 1e-6;
+}
+
+function formatEvccValue(field, entity, hass) {
+ if (!evccAvailable(entity)) return null;
+ const language = hass?.locale?.language ?? hass?.language ?? 'en', dutch = language.startsWith('nl');
+ const unit = entity.attributes?.unit_of_measurement;
+ if (['remaining_duration', 'charge_duration'].includes(field)) return evccDuration(entity, language) ?? (evccNumber(entity) != null && evccNumber(entity) >= 0 ? `${entity.state}${unit ? ' ' + unit : ''}` : null);
+ if (field === 'pv_remaining' && entity.attributes?.device_class === 'timestamp') {
+  const time = Date.parse(entity.state);
+  if (!Number.isFinite(time) || time <= 0) return null;
+  return new Intl.DateTimeFormat(language, {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: hass?.config?.time_zone ?? 'UTC'}).format(time);
+ }
+ if (['connected', 'charging', 'enabled', 'smart_cost_active', 'plan_active'].includes(field)) {
+  const value = evccBoolean(entity);
+  return value == null ? null : value ? (dutch ? 'Ja' : 'Yes') : (dutch ? 'Nee' : 'No');
+ }
+ if (['soc', 'target_soc', 'vehicle_limit_soc', 'solar_percentage', 'solar_share'].includes(field) && evccPercent(entity) == null) return null;
+ if (field === 'mode') return ({off: ['Off', 'Off'], pv: ['Zon', 'Solar'], minpv: ['Min + zon', 'Min + solar'], now: ['Snel', 'Fast'], smart: ['Smart', 'Smart']})[entity.state]?.[dutch ? 0 : 1] ?? entity.state;
+ const number = evccNumber(entity);
+ if (number != null) {
+  const converted = field === 'power' && unit === 'W' ? number / 1000 : number;
+  const displayUnit = field === 'power' && unit === 'W' ? 'kW' : unit;
+  const digits = field === 'session_price_per_kwh' ? 3 : ['soc', 'target_soc', 'solar_percentage', 'solar_share', 'range', 'phases', 'vehicle_limit_soc'].includes(field) ? 0 : 2;
+  return new Intl.NumberFormat(language, {maximumFractionDigits: digits, minimumFractionDigits: field === 'session_price' ? 2 : 0}).format(converted) + (displayUnit ? ' ' + displayUnit : '');
+ }
+ return hass?.formatEntityState?.(entity) ?? entity.state;
+}
+
+function evccNumber(entity) {
+ const value = entity?.state;
+ if (value == null || String(value).trim() === '' || ['unknown', 'unavailable'].includes(value)) return null;
+ const number = Number(value);
+ return Number.isFinite(number) ? number : null;
+}
+
+function evccAvailable(entity) {
+ return entity?.state != null && !['unknown', 'unavailable', ''].includes(String(entity.state));
+}
+
+function evccDuration(entity, language = 'en') {
+ const value = evccNumber(entity);
+ if (value == null || value < 0) return null;
+ const unit = entity.attributes?.unit_of_measurement;
+ const factors = {s: 1, sec: 1, min: 60, h: 3600, ms: .001};
+ if (!(unit in factors)) return null;
+ const minutes = Math.round(value * factors[unit] / 60);
+ const hours = Math.floor(minutes / 60);
+ return hours ? `${hours} ${language.startsWith('nl') ? 'u' : 'h'} ${minutes % 60} min` : `${minutes} min`;
+}
+
+// Image entities expose a tokenized entity_picture; never embed credentials or
+// manufacture an unauthenticated /api/image_proxy URL.
+function evccImageUrl(entity, hass) {
+ if (!evccAvailable(entity)) return null;
+ const picture = entity.attributes?.entity_picture;
+ if (typeof picture !== 'string' || !picture.trim()) return null;
+ if (picture.startsWith('/') && !picture.startsWith('//')) return hass?.hassUrl ? hass.hassUrl(picture) : picture;
+ try {
+  const url = new URL(picture);
+  return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+ } catch { return null; }
+}
+
+
+function evccSeconds(entity) {
+ const number = evccNumber(entity), factor = {s: 1, sec: 1, min: 60, h: 3600, ms: .001}[entity?.attributes?.unit_of_measurement];
+ return number != null && number >= 0 && factor != null ? number * factor : null;
+}
+function evccPvSeconds(entity, now) {
+ if (!evccAvailable(entity)) return null;
+ if (entity.attributes?.device_class === 'timestamp') {
+  const deadline = Date.parse(entity.state);
+  return Number.isFinite(deadline) && deadline > 0 ? Math.max(0, Math.ceil((deadline - now) / 1000)) : null;
+ }
+ return evccSeconds(entity);
+}
+function evccChargingView(entities, states, {offline = false, dutch = false, now = Date.now()} = {}) {
+ const entity = field => states[entities[field]], status = offline ? 'unknown' : evccStatus(entities, states);
+ const text = (nl, en) => dutch ? nl : en;
+ const result = (kind, title, reason, icon, tone = ({solar:'charging',countdown:'waiting',connected:'off'}[kind] ?? kind)) => ({kind, title, reason, icon, status, tone});
+ if (status === 'unknown') return result('unknown', text('Status onbekend', 'Status unknown'), text('Wacht op actuele gegevens van EVCC', 'Waiting for current EVCC data'), 'mdi:help-circle-outline');
+ if (status === 'disconnected') return result('disconnected', text('Niet aangesloten', 'Disconnected'), text('Sluit de laadkabel aan om te laden', 'Connect the cable to charge'), 'mdi:ev-plug-type2');
+ const soc = evccPercent(entity('soc')), target = evccPercent(entity('target_soc'));
+ const mode = entity('mode')?.state, solar = ['pv', 'minpv'].includes(mode);
+ const action = String(entity('pv_action')?.state ?? '').toLowerCase();
+ const seconds = evccPvSeconds(entity('pv_remaining'), now);
+ const clock = seconds != null ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '';
+ if (status !== 'charging' && soc != null && target > 0 && soc >= target) return result('done', text('Laaddoel bereikt', 'Charge target reached'), text('Auto aangesloten · laden voltooid', 'Vehicle connected · charging complete'), 'mdi:check-circle-outline');
+ if (mode === 'off' && status !== 'charging') return result('connected', text('Laden uitgeschakeld', 'Charging switched off'), text('Laadmodus staat op Off', 'Charge mode is Off'), 'mdi:pause-circle-outline');
+ // Only the explicit planActive signal identifies a currently active plan slot.
+ // effectivePlanTime / planActiveAlt merely indicate that a plan exists.
+ if (status === 'charging' && evccBoolean(entity('plan_active')) === true) return result('charging', text('Laden', 'Charging'), text('Volgens laadplanning', 'According to charging plan'), 'mdi:calendar-clock', 'planned');
+ if (seconds > 0 && ((action === 'enable' && status !== 'charging') || (action === 'disable' && status === 'charging'))) {
+  const enabling = action === 'enable';
+  return result(enabling ? 'countdown' : (solar ? 'solar' : 'charging'), text(enabling ? 'Wachten op laden' : 'Laden', enabling ? 'Waiting to charge' : 'Charging'), text(enabling ? `Start over ${clock}` : `Stopt over ${clock}`, enabling ? `Starts in ${clock}` : `Stops in ${clock}`), 'mdi:timer-outline');
+ }
+ if (status === 'charging') return result(solar ? 'solar' : 'charging', text('Laden', 'Charging'), text('EVCC regelt het laden', 'EVCC controls charging'), 'mdi:lightning-bolt');
+ if (['smart','now','pv','minpv'].includes(mode)) return result('waiting', text('Wachten op laden', 'Waiting to charge'), text('Auto aangesloten · laden nog niet gestart', 'Vehicle connected · charging has not started'), 'mdi:timer-sand');
+ return result('connected', text('Aangesloten · laadt niet', 'Connected · not charging'), text('Wacht op vrijgave of de auto', 'Waiting for charging permission or the vehicle'), 'mdi:pause-circle-outline');
+}
+function evccFinishTime(entity, view, hass, observedAt, now) {
+ const seconds = evccSeconds(entity);
+ if (!['solar', 'charging'].includes(view.kind) || view.status !== 'charging' || seconds == null || seconds <= 0) return null;
+ const reported = Date.parse(entity?.last_updated), base = Number.isFinite(reported) ? reported : observedAt;
+ const end = base + seconds * 1000;
+ if (!Number.isFinite(end) || end <= now) return null;
+ return new Intl.DateTimeFormat(hass.locale?.language ?? hass.language ?? 'en', {hour: '2-digit', minute: '2-digit', timeZone: hass.config?.time_zone ?? 'UTC'}).format(end);
+}
+function evccEnergySplit(energy, percentage) {
+ const amount = evccNumber(energy), share = evccPercent(percentage), unit = energy?.attributes?.unit_of_measurement;
+ if (amount == null || amount < 0 || share == null || !['Wh', 'kWh'].includes(unit)) return null;
+ const total = amount / (unit === 'Wh' ? 1000 : 1), solar = total * share / 100;
+ return {solar, other: total - solar};
+}
+
+
+
+// Close each known interval independently so Recorder gaps remain empty.
+function evccHistoryArea(points, baseline) {
+ const areas = []; let segment = [];
+ const close = () => {
+  if (segment.length > 1) areas.push(`${SharedGraph.path(segment, 'step')} L ${segment.at(-1)[0]} ${baseline} H ${segment[0][0]} Z`);
+  segment = [];
+ };
+ for (const point of points) { if (Number.isFinite(point[1])) segment.push(point); else close(); }
+ close(); return areas.join(' ');
+}
+
+function evccSessionWindow(response, id, now) {
+ if (!Array.isArray(response?.[0])) return null;
+ const rows = response[0].filter(row => !row.entity_id || row.entity_id === id).map(row => ({time: Date.parse(row.last_changed ?? row.last_updated), state: row.state})).filter(row => Number.isFinite(row.time) && row.time > 0 && row.time <= now).sort((a,b) => a.time-b.time);
+ let start = null, end = null, previous;
+ for (const row of rows) {
+  if (['on','true'].includes(row.state)) {
+   if (previous !== true) { start = row.time; end = null; }
+   previous = true;
+  } else if (['off','false'].includes(row.state)) {
+   if (previous === true && start != null) end = row.time;
+   previous = false;
+  } else { start = null; end = null; previous = undefined; }
+ }
+ if (start == null) return null;
+ const finish = previous === true ? now : end;
+ return finish > start ? {start, end: finish, active: previous === true} : null;
+}
+
+function evccHistoryPoints(response, id, unit, start, end) {
+ if (!['W', 'kW'].includes(unit) || !Array.isArray(response) || !Array.isArray(response[0])) return [];
+ const values = response[0].filter(item => !item.entity_id || item.entity_id === id).map(item => {
+  const time = Date.parse(item.last_updated ?? item.last_changed), raw = item.state;
+  const value = raw != null && String(raw).trim() !== '' && Number.isFinite(Number(raw)) && Number(raw) >= 0 ? Number(raw) / (unit === 'W' ? 1000 : 1) : null;
+  return {time, value};
+ }).filter(item => Number.isFinite(item.time) && item.time <= end).sort((a, b) => a.time - b.time);
+ const previous = values.filter(item => item.time <= start).at(-1), points = values.filter(item => item.time > start);
+ if (previous) points.unshift({...previous, time: start});
+ if (points.length && points.at(-1).time < end) points.push({...points.at(-1), time: end});
+ return points;
+}
+const evccHistoryMethods = {
+ _resetHistory() {
+  this._historyVersion = (this._historyVersion || 0) + 1; this._historyKey = null; this._historyConnectionKey = null; this._historySession = null; this._historyMissingSession = false; this._historyData = []; this._historyLoading = false; this._historyError = false; this._historyRequestedAt = 0; this._historyIndex = null;
+ },
+ _syncHistory() {
+  if (!this.isConnected || this._offline() || !this._config?.show_session || this._activeTab !== 'session') return;
+  const id = this._entities.power, unit = this._hass.states?.[id]?.attributes?.unit_of_measurement;
+  const key = `${id}|${unit}`;
+  const connectedId = this._entities.connected, connected = this._hass.states?.[connectedId];
+  const connectionKey = `${connectedId}|${connected?.state}|${connected?.last_changed}`;
+  if (this._historyKey !== key || this._historyConnectionKey !== connectionKey) { this._resetHistory(); this._historyKey = key; this._historyConnectionKey = connectionKey; }
+  if (!id || !['W', 'kW'].includes(unit) || typeof this._hass.callApi !== 'function' || this._historyLoading || Date.now() - this._historyRequestedAt < 60000) return;
+  const version = this._historyVersion, now = Date.now();
+  this._historyRequestedAt = now; this._historyLoading = true; this._historyRevision = (this._historyRevision || 0) + 1;
+  const request = (entity, start, end, significant = '0') => {
+   const params = new URLSearchParams({filter_entity_id: entity, end_time: new Date(end).toISOString(), minimal_response: '', no_attributes: '', significant_changes_only: significant});
+   return this._hass.callApi('GET', `history/period/${encodeURIComponent(new Date(start).toISOString())}?${params}`);
+  };
+  let timeout;
+  const load = async () => {
+   let session = this._historySession;
+   if (!session && connectedId) {
+    // Connection history includes pauses and survives reopening the dashboard.
+    session = evccSessionWindow(await request(connectedId, 0, now, '1'), connectedId, now);
+    if (version !== this._historyVersion) return;
+    const changed = Date.parse(connected?.last_changed);
+    // Recorder can lag behind the current connection state. Do not cache a
+    // previous session as the new one, or extend an unplugged session to now.
+    let recorderCurrent = true;
+    if (['on','true'].includes(connected?.state) && session && (!session.active || changed > session.start)) { session = null; recorderCurrent = false; }
+    if (!session) recorderCurrent = false;
+    if (!session && ['on','true'].includes(connected?.state) && changed > 0 && changed < now) session = {start: changed, end: now, active: true};
+    // A newer live disconnect means Recorder has not stored the latest cycle.
+    // Its start is unknown: wait for discovery instead of caching an older end.
+    if (['off','false'].includes(connected?.state) && session && !session.active && changed > session.end && changed <= now) {
+     session = null; recorderCurrent = false;
+    }
+    if (['off','false'].includes(connected?.state) && session?.active) {
+     session = changed > session.start && changed <= now ? {...session, end: changed, active: false} : null;
+     recorderCurrent = false;
+    }
+    // Provisional live-state windows must retry Recorder discovery.
+    this._historySession = recorderCurrent ? session : null;
+   }
+   if (!session) return {points: [], range: null};
+   const start = session.start, end = session.active ? now : session.end;
+   const response = await request(id, start, end);
+   return {points: evccHistoryPoints(response, id, unit, start, end), range: {start, end}};
+  };
+  Promise.race([Promise.resolve().then(load), new Promise((_, reject) => { timeout = setTimeout(() => reject(Error('history timeout')), 10000); })]).then(result => {
+   if (version !== this._historyVersion) return;
+   this._historyData = result.points; this._historyRange = result.range; this._historyMissingSession = !result.range; this._historyError = false;
+  }).catch(() => { if (version === this._historyVersion) { this._historyError = true; this._historyData = []; } }).finally(() => {
+   clearTimeout(timeout);
+   if (version !== this._historyVersion) return;
+   this._historyLoading = false; this._historyRevision++; this._render();
+  });
+  this._render();
+ },
+ _historyMarkup(dutch) {
+  if (!this._entities.power) return '';
+  const title = dutch ? 'Laadverloop' : 'Charging power';
+  const points = this._historyData ?? [];
+  if (!points.some(point => point.value != null)) return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><p class="notice">${this._historyLoading ? (dutch ? 'Laadverloop laden…' : 'Loading charge history…') : this._historyMissingSession ? (dutch ? 'Sessiebegin niet beschikbaar. Controleer de historie van de aangesloten-sensor.' : 'Session start unavailable. Check the connection sensor history.') : (dutch ? 'Geen vermogenshistorie beschikbaar.' : 'No power history available.')}</p></div>`;
+  const {start, end} = this._historyRange, max = Math.max(2, Math.ceil(points.reduce((maximum, p) => Math.max(maximum, p.value ?? 0), 0) / 2) * 2);
+  const x = time => 38 + (time - start) / (end - start) * 256, y = value => value == null ? NaN : 100 - value / max * 88;
+  const graph = this._historyGraph ??= new SharedGraph();
+  const coordinates = points.map(p => [x(p.time), y(p.value)]);
+  const svg = graph.render({shadowRoot: this.shadowRoot, isConnected: false}, {viewBox: '0 0 300 120', defs: '<defs><linearGradient id="evcc-power-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--primary-color,#2196f3)" stop-opacity=".22"/><stop offset="100%" stop-color="var(--primary-color,#2196f3)" stop-opacity="0"/></linearGradient></defs>', before: '<path class="grid-line" d="M38 12H294M38 56H294"/><path class="grid-line grid-zero" d="M38 100H294"/>', fills: [{d: evccHistoryArea(coordinates, 100), className: 'power-area', fill: 'url(#evcc-power-fade)'}], lines: [{d: SharedGraph.path(coordinates, 'step'), className: 'series-line', appearance: {...graphLineStyle('solid', 2), stroke: 'var(--primary-color,#2196f3)'}}], after: '<path class="cursor" hidden/>'});
+  const format = time => new Intl.DateTimeFormat(this._hass.locale?.language ?? this._hass.language ?? 'en', {...(end-start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(time);
+  this._historyGeometry = {x, y, points};
+  return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><div class="plot" tabindex="0" role="group" aria-label="${dutch ? 'Laadvermogen. Gebruik links en rechts voor meetpunten.' : 'Charging power. Use left and right for readings.'}">${svg}<span class="point hover-dot" aria-hidden="true" hidden></span>${[max, max / 2, 0].map((value, index) => `<span class="axis-y" style="top:${10 + index * 36.6667}%">${value}</span>`).join('')}<div class="tooltip" hidden><strong></strong><span><i style="--series-color:var(--primary-color)"></i><b>${dutch ? 'Laadvermogen' : 'Charging power'} <em class="tooltip-value"></em></b></span></div></div><div class="chart-axis">${[start, (start + end) / 2, end].map(time => `<span>${uiEscape(format(time))}</span>`).join('')}</div><p class="sr-only chart-readout" aria-live="polite"></p></div>`;
+ },
+ _bindHistory() {
+  const plot = this.shadowRoot.querySelector('.plot');
+  if (!plot) return;
+  const {points, x, y} = this._historyGeometry, tooltip = plot.querySelector('.tooltip');
+  const hide = () => { tooltip.hidden = true; plot.querySelector('.cursor').setAttribute('hidden', ''); plot.querySelector('.point').setAttribute('hidden', ''); };
+  const select = index => {
+   this._historyIndex = Math.max(0, Math.min(points.length - 1, index));
+   const point = points[this._historyIndex];
+   if (point.value == null) { hide(); return; }
+   const cursor = plot.querySelector('.cursor'), dot = plot.querySelector('.point');
+   cursor.removeAttribute('hidden'); dot.removeAttribute('hidden'); cursor.setAttribute('d', `M${x(point.time)} 12V100`); dot.style.left = `${x(point.time) / 300 * 100}%`; dot.style.top = `${y(point.value) / 120 * 100}%`;
+   const language = this._hass.locale?.language ?? this._hass.language ?? 'en';
+   tooltip.hidden = false; tooltip.querySelector('strong').textContent = new Intl.DateTimeFormat(language, {...(this._historyRange.end-this._historyRange.start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(point.time);
+   tooltip.querySelector('.tooltip-value').textContent = new Intl.NumberFormat(language, {maximumFractionDigits: 2}).format(point.value) + ' kW';
+   tooltip.style.left = x(point.time) < 166 ? 'auto' : '38px'; tooltip.style.right = x(point.time) < 166 ? '6px' : 'auto';
+   this.shadowRoot.querySelector('.chart-readout').textContent = tooltip.textContent;
+  };
+  plot.addEventListener('pointermove', event => {
+   const rect = plot.getBoundingClientRect(), position = (event.clientX - rect.left) / rect.width * 300;
+   select(points.reduce((best, point, index) => Math.abs(x(point.time) - position) < Math.abs(x(points[best].time) - position) ? index : best, 0));
+  });
+  plot.addEventListener('pointerleave', hide); plot.addEventListener('blur', hide);
+  plot.addEventListener('focus', () => select(this._historyIndex ?? points.length - 1));
+  plot.addEventListener('keydown', event => {
+   const index = this._historyIndex ?? points.length - 1;
+   const next = {ArrowLeft: index - 1, ArrowRight: index + 1, Home: 0, End: points.length - 1}[event.key];
+   if (event.key === 'Escape') hide();
+   if (next != null) { event.preventDefault(); select(next); }
+  });
+ },
+};
+
+
+
+const solarDutch = hass => String(hass?.locale?.language ?? hass?.language ?? 'en').startsWith('nl');
+function evccSolarHint(value, dutch) {
+ if (value == null) return dutch ? 'Instelling niet beschikbaar.' : 'Setting unavailable.';
+ if (value === 0) return dutch ? 'Start zodra er zonne-overschot is.' : 'Start as soon as solar surplus is available.';
+ if (value === 100) return dutch ? 'Start bij voldoende zonne-overschot voor het minimale laadvermogen.' : 'Start when solar surplus covers the minimum charging power.';
+ return dutch ? `Minimaal ${value}% van het minimale laadvermogen uit zonne-overschot.` : `At least ${value}% of the minimum charging power from solar surplus.`;
+}
+
+const evccSolarMethods = {
+ _cancelSolar() {
+  clearTimeout(this._solarTimer); this._solarVersion = (this._solarVersion || 0) + 1;
+  this._pendingSolar = null; this._solarDraft = null; this._solarEditing = false;
+ },
+ _solarValue(value) { return value==null?'\u2014':uiEscape(value)+' <span class="ui-metric-unit">%</span>'; },
+ _solarMarkup(dutch) {
+  const id = this._entities.solar_share;
+  if (!id || !['pv', 'minpv', 'smart'].includes(this._hass.states?.[this._entities.mode]?.state)) return '';
+  const entity = this._hass.states?.[id], range = evccSolarRange(entity), current = evccPercent(entity);
+  const value = this._pendingSolar?.value ?? this._solarDraft ?? current;
+  const disabled = !range || this._offline() || !!this._pendingSolar || typeof this._hass.callService !== 'function';
+  const label = dutch ? 'Zonnevoorkeur' : 'Solar preference';
+  return `<div class="solar-setting"><dl class="metrics solar-metric"><div><dt><label for="solar-share">${label}</label></dt><dd><output for="solar-share" data-solar-output>${this._config.show_controls ? this._solarValue(value) : this._reading('solar_share', dutch)}</output>${this._config.show_controls ? `<input id="solar-share" type="range" data-solar-share min="${range?.min ?? 0}" max="${range?.max ?? 100}" step="${range?.step ?? 10}" value="${value ?? 0}" aria-label="${label}" aria-valuetext="${uiEscape(value == null ? (dutch ? 'Niet beschikbaar' : 'Unavailable') : value + '%')}" aria-describedby="solar-preference-description"${disabled ? ' disabled' : ''}>` : ''}</dd></div></dl><span id="solar-preference-description" class="sr-only">${dutch ? 'Minimum aandeel zon' : 'Minimum solar share'}</span><p id="solar-hint" class="solar-hint" hidden>${uiEscape(evccSolarHint(value, dutch))}</p>${this._pendingSolar ? `<p class="notice" role="status">${dutch ? 'Solar share instellen…' : 'Setting solar share…'}</p>` : ''}${this._solarError ? `<p class="notice error" role="alert">${uiEscape(this._solarError)}</p>` : ''}</div>`;
+ },
+ _bindSolar() {
+  const input = this.shadowRoot.querySelector('[data-solar-share]');
+  if (!input) return;
+  const progress = () => input.style.setProperty('--solar-position', ((Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min)) * 100) + '%');
+  progress();
+  input.addEventListener('input', progress);
+  input.addEventListener('pointerdown', () => { if (!input.disabled) this._solarEditing = true; });
+  input.addEventListener('input', () => {
+   this._solarDraft = Number(input.value);
+   this.shadowRoot.querySelector('[data-solar-output]').innerHTML = this._solarValue(input.value);
+   this.shadowRoot.querySelector('.solar-hint').textContent = evccSolarHint(this._solarDraft, solarDutch(this._hass));
+   input.setAttribute('aria-valuetext', input.value + '%');
+  });
+  input.addEventListener('change', () => { this._solarEditing = false; this._changeSolar(Number(input.value)); });
+  const release = () => { if (this._solarEditing) { this._solarEditing = false; this._solarDraft = null; this._solarVersion++; this._render(); } };
+  input.addEventListener('pointercancel', release);
+  input.addEventListener('blur', release);
+  // A click without changing the value must also release deferred telemetry.
+  input.addEventListener('pointerup', () => { setTimeout(release, 0); });
+ },
+ async _changeSolar(value) {
+  const id = this._entities.solar_share, entity = this._hass.states?.[id];
+  if (this._pendingSolar) return;
+  this._solarDraft = null;
+  if (!this._config.show_controls || this._offline() || !id?.startsWith('number.') || !evccValidSolarValue(entity, value) || typeof this._hass.callService !== 'function') { this._solarVersion++; this._render(); return; }
+  if (evccPercent(entity) === value) { this._solarVersion++; this._render(); return; }
+  const version = ++this._solarVersion;
+  this._pendingSolar = {entity: id, value}; this._solarError = null; this._render();
+  this._solarTimer = setTimeout(() => {
+   if (this._solarVersion !== version) return;
+   this._cancelSolar(); this._solarError = solarDutch(this._hass) ? 'Geen bevestiging van solar share ontvangen. Controleer EVCC voordat je opnieuw probeert.' : 'No solar share confirmation received. Check EVCC before retrying.'; this._render();
+  }, 15000);
+  try { await this._hass.callService('number', 'set_value', {entity_id: id, value}); }
+  catch (error) {
+   if (this._solarVersion !== version) return;
+   this._cancelSolar(); this._solarError = (solarDutch(this._hass) ? 'Solar share wijzigen mislukt: ' : 'Could not change solar share: ') + (error?.message || error); this._render();
+  }
+ },
+};
+
+// State symbols and battery charging motion shared by the dashboard card and preview.
+const paths={
+ solar:'<g class="sun-rays"><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></g><circle cx="12" cy="12" r="4"/>',
+ charging:'<path d="m13 2-8 12h6l-1 8 9-13h-6z"/>',
+ waiting:'<path d="M7 3h10M7 21h10M8 3v5l8 8v5M16 3v5l-8 8v5"/><path d="M10 6h4m-4 12h4"/>',
+ countdown:'<circle cx="12" cy="13" r="8"/><path d="M10 2h4m-2 0v3"/><path class="clock-hand" d="M12 13V8"/>',
+ connected:'<path d="M8 3v5m8-5v5M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/>',
+ disconnected:'<g class="plug-top"><path d="M8 2v4m8-4v4M6 6h12v3a6 6 0 0 1-12 0z"/></g><g class="plug-bottom"><path d="M9 19h6m-3 0v3"/></g>',
+ done:'<path class="check-mark" d="m5 12 4.5 4.5L19 7"/>',
+ unknown:'<circle class="dot dot-one" cx="5" cy="12" r="1"/><circle class="dot dot-two" cx="12" cy="12" r="1"/><circle class="dot dot-three" cx="19" cy="12" r="1"/>',
+};
+function statusSymbol(state){return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[state]??paths.unknown}</svg>`;}
+function powerMotion(entity,{maxKw=11,speed=1}={}){
+ maxKw=Number.isFinite(maxKw)&&maxKw>0?maxKw:11;speed=Number.isFinite(speed)&&speed>0?speed:1;
+ const raw=entity?.state,unit=entity?.attributes?.unit_of_measurement;
+ const valid=raw!=null&&String(raw).trim()!==''&&Number.isFinite(Number(raw))&&['W','kW'].includes(unit);
+ const kw=valid?Math.max(0,Math.min(maxKw,Number(raw)/(unit==='W'?1000:1))):null;
+ return {kw,seconds:(12-10*(kw??0)/maxKw)/speed,moving:kw!=null&&kw>0};
+}
+const galleryStatusStyles=`
+ .content{--status-accent:var(--primary-color)}
+ .content[data-view=solar],.content[data-view=done]{--status-accent:var(--success-color,#6aaa63)}
+ .content[data-view=waiting],.content[data-view=countdown],.content[data-view=unknown]{--status-accent:var(--warning-color,var(--primary-color))}
+ .content[data-view=connected]{--status-accent:var(--info-color,#579dd1)}
+ .content[data-view=disconnected]{--status-accent:var(--secondary-text-color)}
+ .status-line{gap:12px;min-height:0;padding:12px;box-sizing:border-box;align-items:center}.status-line>div:not(.status-symbol){min-width:0}.status-line strong{font-size:13px;line-height:1.4}.status-line p{font-size:11px;line-height:1.4;margin-top:2px}
+ .status-symbol{display:grid;place-items:center;position:relative;isolation:isolate;overflow:hidden;flex:0 0 38px;width:38px;height:38px;box-sizing:border-box;border-radius:10px;background:color-mix(in srgb,var(--status-accent) 13%,transparent);color:var(--status-accent)}
+ .status-symbol svg{display:block;width:22px;height:22px;position:relative;z-index:1}.status-symbol::after{content:none}
+ .car-stage::before{animation:none!important}
+ .live-readings{align-items:stretch}.live-readings>div{display:grid;grid-template-rows:auto auto auto;gap:2px;align-content:start;box-sizing:border-box;min-height:0;padding:12px}
+ .live-readings .eyebrow{font-size:11px;line-height:1.4;margin:0}.live-readings .live-value{font-size:24px;line-height:1.25;font-weight:650;margin:0;letter-spacing:-.03em}.live-readings .live-sub{font-size:11px;line-height:24px;align-self:stretch;min-height:24px;margin:0}
+ @supports(grid-template-rows:subgrid){.live-readings{grid-template-rows:auto auto auto;row-gap:2px}.live-readings>div{grid-row:span 3;grid-template-rows:subgrid}}
+ .battery-track{height:12px;border-radius:7px;background:color-mix(in srgb,var(--secondary-background-color) 80%,var(--ha-card-background,var(--card-background-color,#fff)));isolation:isolate}
+ .battery-fill{position:relative;overflow:hidden;isolation:isolate;border-radius:7px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color,#2196f3) 85%,#fff),var(--primary-color,#2196f3))}
+ .target-marker{top:-3px;height:18px;z-index:3;pointer-events:none}
+ .battery-fill::before{content:none;position:absolute;inset:0 auto 0 0;width:42%;border-radius:inherit;pointer-events:none;background:linear-gradient(105deg,transparent 0%,#ffffff22 20%,#ffffffbb 43%,#fffffff2 52%,#ffffff88 63%,transparent 100%)}
+ @media(prefers-reduced-motion:no-preference){
+  .content:is([data-tone=charging],[data-tone=planned]) .battery-fill::before{content:'';animation:battery-sweep var(--power-duration,6s) linear infinite;animation-play-state:var(--power-motion,paused);animation-delay:var(--power-delay,0s)}
+ }
+ @keyframes battery-sweep{0%{transform:translateX(-110%);opacity:0}8%{opacity:1}90%{opacity:1}100%{transform:translateX(250%);opacity:0}}
+ :host([data-motion=paused]) *,:host([data-motion=paused]) ::before,:host([data-motion=paused]) ::after{animation-play-state:paused!important}
+`;
+
+const evccGalleryStyles=`
+ .gallery-top{position:relative;isolation:isolate;margin:-16px -16px 16px;padding:16px 16px 0;background:linear-gradient(150deg,color-mix(in srgb,var(--evcc-glow) 5%,transparent),color-mix(in srgb,var(--evcc-glow) 5%,transparent) 36%,color-mix(in srgb,var(--evcc-glow) 14%,transparent) 36.2%,color-mix(in srgb,var(--evcc-glow) 4%,transparent) 78%,transparent 78.2%)}
+ .hero{position:relative;isolation:isolate;padding:6px 16px 0;margin:0 -16px;background:none}
+ .car-name{font-size:11px;text-transform:uppercase;letter-spacing:.12em}.car-stage{display:block;min-height:268px;padding:0}.car-stage::before{inset:50px -16px 0;background:radial-gradient(ellipse at 65% 65%,color-mix(in srgb,var(--evcc-glow) 23%,transparent),transparent 69%)}.car-stage::after{bottom:18px;left:10%;right:2%}
+ .battery-row{position:relative;z-index:1;gap:0;pointer-events:none}.battery-row button{pointer-events:auto}.battery-value{font-size:76px;font-weight:500;letter-spacing:-.065em;line-height:1.15}.battery-meta{margin-top:1px}.range,.target{font-size:11px}
+ .picture{position:absolute;right:-12px;bottom:0;width:86%;height:145px;min-height:0}.picture img{width:112%;height:145px;margin-left:-12%}.battery-track{height:3px}.hero>.battery-track{margin-top:0}
+ .status-line{padding:10px 12px;background:var(--secondary-background-color);border:0;border-radius:7px;margin-bottom:8px}
+ .live-readings{gap:16px;border:0;padding:0}.live-readings>div{padding:10px 12px;background:var(--secondary-background-color);border:0;border-radius:7px}.live-value{font-size:24px}
+ .mode-options{margin-top:0}.solar-setting{margin-top:16px;padding:12px;background:var(--secondary-background-color);border-radius:7px}.solar-setting-head{gap:10px;align-items:center}.solar-setting-head label{display:flex;align-items:center;gap:9px;min-width:0;font-size:11px}.solar-setting-head ha-icon{--mdc-icon-size:18px;flex:none;padding:7px;border-radius:50%;background:color-mix(in srgb,var(--primary-color) 12%,transparent);color:var(--primary-color)}.solar-title{display:flex;flex-direction:column;gap:1px}.solar-title strong{font-size:11px;font-weight:600;line-height:1.4;color:var(--primary-text-color)}.solar-title small{font-size:10px;line-height:1.4;color:var(--secondary-text-color)}.solar-setting-head output{flex:none;color:var(--primary-color);font-size:18px;font-weight:600;letter-spacing:-.02em;padding:5px 8px;border-radius:6px;background:var(--ha-card-background)}
+ input[data-solar-share]{appearance:none;-webkit-appearance:none;height:36px;margin:6px 0 0;background:transparent;--solar-position:60%;--solar-track:color-mix(in srgb,var(--secondary-background-color) 80%,var(--ha-card-background,var(--card-background-color,#fff)));touch-action:pan-y}
+ input[data-solar-share]::-webkit-slider-runnable-track{height:12px;border-radius:7px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color) 85%,#fff),var(--primary-color)) left / var(--solar-position) 100% no-repeat,var(--solar-track)}
+ input[data-solar-share]::-moz-range-track{height:12px;border-radius:7px;background:var(--solar-track)}input[data-solar-share]::-moz-range-progress{height:12px;border-radius:7px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color) 85%,#fff),var(--primary-color))}
+ input[data-solar-share]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:16px;height:22px;border-radius:5px;background:var(--ha-card-background,var(--card-background-color,#fff));border:2px solid var(--primary-color);box-shadow:0 1px 3px #0002;margin-top:-5px}
+ input[data-solar-share]::-moz-range-thumb{box-sizing:border-box;width:16px;height:22px;border-radius:5px;background:var(--ha-card-background,var(--card-background-color,#fff));border:2px solid var(--primary-color);box-shadow:0 1px 3px #0002}
+ .solar-setting-head output{padding:0;border-radius:0;background:transparent;font-variant-numeric:tabular-nums}
+ .solar-scale{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:10px;color:var(--secondary-text-color);margin:0 1px 10px;font-variant-numeric:tabular-nums}.solar-scale span:first-child,.solar-scale span:last-child{display:flex;flex-direction:column;gap:1px}.solar-scale span:last-child{text-align:right}.solar-scale b{font-size:10px;font-weight:400;color:var(--primary-text-color)}.solar-hint{line-height:1.5;padding-top:10px;border-top:1px solid var(--divider-color)}
+ .solar-setting{padding:0;background:transparent;border:0;border-radius:0}.solar-scale{margin-bottom:0}
+ .car-stage{min-height:264px}.session-summary [data-field=solar_percentage]{grid-column:1;grid-row:3}
+ @container(max-width:320px){.battery-value{font-size:65px}.car-stage{min-height:246px}.picture{width:94%;height:125px}.picture img{height:125px}}
+
+.plot{height:112px}.solar-title{display:flex;flex-direction:column}.solar-setting [data-solar-output]{color:inherit;flex:none;min-width:52px}.solar-metric{grid-template-columns:minmax(0,1fr)}.solar-metric dd{display:flex;align-items:center;gap:16px}.solar-metric input[data-solar-share]{flex:1;min-width:0;width:0;margin:0}
+ /* Zoom the image inside a fixed viewport; scaling must not resize the header. */
+ .car-stage{min-height:240px}
+ .picture{width:100%;height:auto;top:0;left:0;right:0;bottom:8px;overflow:hidden;z-index:2;pointer-events:none}
+ .picture img{position:absolute;inset:auto auto 0 50%;left:calc(50% + var(--evcc-image-offset-x,0px));bottom:calc(-1 * var(--evcc-image-offset-y,0px));margin:0;width:86%;height:145px;max-width:none;max-height:none;min-width:0;min-height:0;object-fit:contain;transform:translateX(-50%) scale(var(--evcc-image-scale,1));transform-origin:center bottom}
+ @container(max-width:320px){.car-stage{min-height:222px}.picture img{width:94%;height:125px}}
+ /* Share the top row so title and SOC stay aligned, including offline notices. */
+ .car-stage{display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:12px;align-content:start;align-items:start}
+ .car-stage .battery-row{grid-column:1;grid-row:1;margin-top:-20px}
+ .car-stage header{grid-column:2;grid-row:1;align-self:start;flex-direction:column;align-items:flex-end;justify-content:flex-start;gap:2px;min-width:0;margin:-20px 0 0;padding-top:17px;text-align:right}
+ .car-stage header h2{max-width:100%}
+ .car-stage header .range{justify-content:flex-end;text-align:right;max-width:100%}
+ /* Optical alignment compensates for the larger SOC font's space above its digits. */
+ @container(max-width:320px){.car-stage .battery-row,.car-stage header{margin-top:-17px}.car-stage header{padding-top:14px}}
+`;
+
+
+
+
+
+function evccCardStyles() { return `
+:host{display:block;min-width:0;height:100%;min-height:0;container-type:inline-size}
+ha-card{display:block;height:100%;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);font:inherit}
+.content{height:100%;box-sizing:border-box;padding:var(--eleven-card-padding,16px);overflow:auto;min-height:0;scrollbar-width:thin;--evcc-glow:var(--primary-color,#2196f3);--evcc-glow-strength:20%}
+.content[data-view=solar]{--evcc-glow:var(--success-color,#4f8a3c);--evcc-glow-strength:30%}.content[data-view=done]{--evcc-glow:var(--success-color,#4f8a3c);--evcc-glow-strength:12%}.content[data-view=unknown],.content[data-view=disconnected]{--evcc-glow:var(--secondary-text-color,#666);--evcc-glow-strength:5%}
+header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}h2{font-size:18px;line-height:1.25;font-weight:650;margin:0;overflow-wrap:anywhere}
+.status{font-size:10px;display:flex;align-items:center;gap:6px;color:var(--secondary-text-color,#666);padding:4px 7px;border-radius:5px;background:var(--secondary-background-color,#eee)}.status::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;flex:none}.status[data-state=charging]{color:var(--success-color,#2e7d32)}
+.hero{margin:0 0 16px}.car-stage{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);align-items:center;min-height:138px;padding:4px 0 12px}.car-stage::before{content:'';position:absolute;z-index:-1;inset:0;background:radial-gradient(ellipse at 66% 60%,color-mix(in srgb,var(--evcc-glow) var(--evcc-glow-strength),transparent),transparent 69%);pointer-events:none}.car-stage::after{content:'';position:absolute;z-index:-1;height:1px;left:38%;right:8%;bottom:12px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--evcc-glow) 40%,transparent),transparent);pointer-events:none}
+.car-name{font-size:12px;font-weight:600;overflow-wrap:anywhere;margin-bottom:2px;line-height:1.4;color:var(--secondary-text-color,#666)}.picture{min-width:0;display:grid;place-items:center;min-height:120px}.picture img{width:112%;max-width:460px;height:132px;margin-left:-10%;object-fit:contain;display:block;filter:drop-shadow(0 10px 7px #0002)}.picture ha-icon{--mdc-icon-size:86px;color:var(--secondary-text-color,#666)}.picture small{text-align:center;color:var(--secondary-text-color,#666);font-size:11px;overflow-wrap:anywhere}
+button{font:inherit;color:inherit;cursor:pointer;background:transparent;border:0;padding:0;text-align:start;min-height:24px;max-width:100%;overflow-wrap:anywhere}button:not(:disabled):hover{color:var(--primary-color,#2196f3)}button:focus-visible,.plot:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px;border-radius:3px}button:disabled{cursor:default}
+.eyebrow{display:block;color:var(--secondary-text-color,#666);font-size:11px;line-height:1.4}.battery-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0;min-width:0}.battery-value{font-size:44px;line-height:1.15;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.035em;min-width:0}.battery-meta{min-width:0;max-width:100%;text-align:start}.target,.range{display:flex;align-items:baseline;justify-content:flex-start;flex-wrap:wrap;gap:0 5px;font-size:11px;color:var(--secondary-text-color,#666)}.range>button{font-size:12px;font-weight:600;color:var(--primary-text-color,#20252b)}
+.battery-track,.solar-strip{height:5px;background:var(--secondary-background-color,#eee);border-radius:5px;position:relative;margin-right:1px}.battery-fill,.solar-strip span{height:100%;background:var(--primary-color,#2196f3);border-radius:inherit;display:block}.target-marker{position:absolute;top:-3px;height:11px;width:2px;background:var(--primary-text-color,#20252b);transform:translateX(-1px)}
+.status-line{display:flex;align-items:center;gap:8px;padding:10px 12px;border-left:2px solid var(--evcc-glow);border-radius:7px;background:linear-gradient(100deg,color-mix(in srgb,var(--evcc-glow) 10%,transparent),transparent);margin-bottom:12px}.status-line ha-icon{--mdc-icon-size:18px;flex:none;color:var(--evcc-glow)}.status-line strong{font-size:14px;font-weight:600}.status-line p{font-size:11px;line-height:1.4;margin:2px 0 0;color:var(--secondary-text-color,#666)}
+.live-readings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.live-readings>div{padding:10px 12px;background:var(--secondary-background-color,#eee);border-radius:7px;min-width:0}.live-value{font-size:24px;font-weight:650;line-height:1.35;font-variant-numeric:tabular-nums;letter-spacing:-.03em}.live-sub{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);display:block;overflow-wrap:anywhere}
+dl{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.metrics>div{min-width:0}.metrics dt{font-size:11px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere;line-height:1.4;margin-bottom:2px}.metrics dd{margin:0;min-width:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.evcc-tabs{margin-top:16px}.evcc-panel{margin:0;padding:16px 0 0;border:0;min-width:0}.charging-controls{margin:0;padding:0;border:0}.mode-options{display:flex;gap:4px;margin-top:6px}.mode-options [data-ui-button]{flex:1 1 0;min-width:0;width:auto;justify-content:center;text-align:center;padding:6px 3px;min-height:34px;font-size:12px}.mode-options [data-ui-button]:disabled{opacity:.65}.mode-reading{font-size:18px;font-weight:600}
+.solar-setting{padding:16px 0 0}.solar-setting-head,.solar-session-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:25px;font-size:11px;color:var(--secondary-text-color,#666)}.solar-setting-head output,.solar-session-head>button{font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--primary-text-color,#20252b)}
+input[data-solar-share]{display:block;box-sizing:border-box;width:100%;height:28px;margin:4px 0;accent-color:var(--primary-color,#2196f3);cursor:pointer}input[data-solar-share]:disabled{opacity:.45;cursor:default}input[data-solar-share]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px;border-radius:3px}.solar-hint{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin:0;overflow-wrap:anywhere}
+.session{margin:0;padding:0;background:transparent;border:0}.session-summary [data-field=charged_energy]{grid-column:1;grid-row:1}.session-summary [data-field=session_price]{grid-column:2;grid-row:1}.session-summary [data-field=charge_duration]{grid-column:1;grid-row:2}.session-summary [data-field=session_price_per_kwh]{grid-column:2;grid-row:2}.session-details{margin-top:16px;padding-top:12px;border-top:1px solid var(--divider-color,#ddd)}.solar-session{margin:16px 0 0;padding:12px 0 0;border-top:1px solid var(--divider-color,#ddd)}.solar-strip{margin-top:9px;overflow:hidden}.energy-split{margin-top:12px}
+.history{margin-top:16px;padding-top:12px;border-top:1px solid var(--divider-color,#ddd)}.chart-head{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-bottom:8px}.plot{height:138px;position:relative;touch-action:pan-y;cursor:crosshair}.plot svg{display:block;width:100%;height:100%;overflow:visible}.grid-line{stroke:var(--history-grid-color,var(--divider-color,#ddd));stroke-width:.8;vector-effect:non-scaling-stroke}.grid-zero{stroke-width:1.2}.plot .cursor{stroke:var(--secondary-text-color,#666);stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}.plot .point{width:10px;height:10px;border:2px solid var(--primary-color,#2196f3);border-radius:50%;background:var(--ha-card-background,var(--card-background-color,#fff))}.plot .tooltip i{border-radius:50%}.axis-y{position:absolute;left:0;transform:translateY(-50%);font-size:11px;line-height:1.2;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums;pointer-events:none}.chart-axis{display:flex;justify-content:space-between;padding-left:12.667%;padding-right:2%;margin-top:3px;color:var(--secondary-text-color,#666);font-size:11px;font-variant-numeric:tabular-nums}.history .tooltip{top:4px;max-width:calc(100% - 42px)}
+.notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:8px 0;overflow-wrap:anywhere}.notice.warning{color:var(--warning-color,#9a6700)}.notice.error{color:var(--error-color,#db4437)}.empty{padding:12px 0;line-height:1.5;font-size:13px;color:var(--secondary-text-color,#666)}.sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}[hidden]{display:none!important}
+@container(max-width:320px){.picture img{height:112px}.battery-value{font-size:36px}.battery-row{gap:6px}.live-value{font-size:21px}.mode-options [data-ui-button]{font-size:11px}.status-line strong{font-size:12px}}
+${evccGalleryStyles}${galleryStatusStyles}${evccBackgroundStyles}
+/* Compact density keeps the charging essentials and mode controls. */
+.content[data-density=compact] .car-stage{min-height:160px}
+.content[data-density=compact] .battery-value{font-size:64px}
+.content[data-density=compact] .car-stage .battery-row,.content[data-density=compact] .car-stage header{margin-top:-16px}
+.content[data-density=compact] .car-stage header{padding-top:14px}
+.content[data-density=compact] .picture img{height:108px}
+.content[data-density=compact] .header-scene{padding-bottom:12px}
+.content[data-density=compact] .status-line{padding:10px;gap:10px;margin:12px 0 0}
+.content[data-density=compact] .status-symbol{flex-basis:32px;width:32px;height:32px;border-radius:8px}
+.content[data-density=compact] .live-readings{column-gap:12px}
+.content[data-density=compact] .live-readings>div{padding:10px}
+.content[data-density=compact] .live-readings .live-value{font-size:22px}
+.content[data-density=compact] .live-readings{grid-template-rows:auto auto}
+.content[data-density=compact] .live-readings>div{grid-row:span 2;grid-template-rows:auto auto}
+.content[data-density=compact] .compact-controls{margin-top:12px}
+.content[data-density=compact] .evcc-panel{padding-top:12px}
+.content[data-density=compact] .solar-setting{margin-top:12px}
+.content[data-density=compact] .metrics{row-gap:12px}
+.content[data-density=compact] .history{margin-top:12px;padding-top:10px}
+.content[data-density=compact] .plot{height:88px}
+@container(max-width:320px){.content[data-density=compact] .car-stage{min-height:150px}.content[data-density=compact] .battery-value{font-size:56px}.content[data-density=compact] .car-stage .battery-row,.content[data-density=compact] .car-stage header{margin-top:-14px}.content[data-density=compact] .car-stage header{padding-top:12px}.content[data-density=compact] .picture img{height:96px}}
+${uiPrimaryValueStyles()}${uiMetricStyles()}
+.content{--ui-metric-tone:var(--tone)}.charging-status{margin-top:16px}.content[data-density=compact] .charging-status{margin-top:12px}
+.charging-readings{margin:0}.car-stage .battery-row{margin-top:0}.car-stage header{margin-top:0;padding-top:8px}.content[data-density=compact] .car-stage .battery-row,.content[data-density=compact] .car-stage header{margin-top:0}.content[data-density=compact] .car-stage header{padding-top:6px}
+.header-region .ui-metric-value button{font:inherit;line-height:inherit;letter-spacing:inherit;min-height:0}.header-region .ui-metric-info button{font:inherit;line-height:inherit;min-height:0;vertical-align:baseline}
+.hero{padding-top:0}.battery-track,.battery-fill{border-radius:var(--ui-metric-radius,8px)}
+.battery-row [data-ui-primary-value]{max-width:160px}
+`; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+const evccDutch = hass => String(hass?.locale?.language ?? hass?.language ?? 'en').startsWith('nl');
+const evccLabel = (field, dutch) => EVCC_FIELDS[field][dutch ? 0 : 1];
+const EVCC_SESSION = ['charged_energy', 'session_price', 'charge_duration', 'session_price_per_kwh', 'solar_percentage'];
+const EVCC_DETAILS = ['current', 'phases', 'vehicle_limit_soc', 'connected', 'charging', 'enabled', 'smart_cost_active', 'pv_action', 'pv_remaining'];
+// Registry loading shared by the Car editor; public configuration belongs to Car.
+class EvccEditor extends HTMLElement {
+ constructor(){super();this.attachShadow({mode:'open'});this._registry=[];}
+ set hass(hass){
+  this._hass=hass;
+  const connection=hass?.connection??hass?.callWS;
+  if(connection&&connection!==this._connection){
+   this._connection=connection;this._registry=[];
+   loadEvccRegistry(hass).then(registry=>{if(this._connection===connection){this._registry=registry;this._render();}});
+  }
+  this._render();
+ }
+ get hass(){return this._hass;}
+}
+
+class EvccCard extends HTMLElement {
+ constructor() { super(); this.attachShadow({mode: 'open'}); this._registry = []; this._actionVersion = 0; this._solarVersion = 0; }
+ setConfig(config) { this._cancelMode(); this._cancelSolar(); this._actionError = null; this._solarError = null; this._config = normalizeEvccConfig(config); this._signature = null; this._render(); }
+ connectedCallback() { this._observeMotion(); this._ensureClock(); this._render(); }
+ _observeMotion() { this._motionCleanup?.(); this._motionCleanup=observeCardMotion(this); }
+ _ensureClock() {
+  if (!this.isConnected || this._clockTimer) return;
+  this._clockTimer = setInterval(() => { this._render(); this._syncHistory(); }, 1000);
+ }
+ set hass(hass) {
+  this._hass = hass;
+  const connection = hass?.connection ?? hass?.callWS;
+  if (connection && connection !== this._connection) {
+   this._cancelMode(); this._cancelSolar(); this._resetHistory(); this._connection = connection; this._registry = []; this._registryLoading = true;
+   loadEvccRegistry(hass).then(registry => { if (this._connection === connection) { this._registry = registry; this._registryLoading = false; this._render(); } });
+  }
+  if (this._pendingMode && hass.states?.[this._pendingMode.entity]?.state === this._pendingMode.option) this._cancelMode();
+  if (this._pendingSolar && evccPercent(hass.states?.[this._pendingSolar.entity]) === this._pendingSolar.value) this._cancelSolar();
+  this._render();
+ }
+ get hass() { return this._hass; }
+ disconnectedCallback() { this._motionCleanup?.(); this._motionCleanup=null; this._cancelMode(); this._cancelSolar(); this._tabController?.disconnect(); clearInterval(this._clockTimer); this._clockTimer = null; this._resetHistory(); this._signature = null; }
+ _cancelMode() { clearTimeout(this._modeTimer); this._pendingMode = null; this._actionVersion++; }
+ getCardSize() { return this._config?.compact ? 8 : 12; }
+ getGridOptions() { return {columns: 12, min_columns: 6, rows: this._config?.compact ? 10 : 12, min_rows: 3}; }
+ _value(field) { return formatEvccValue(field, this._hass.states?.[this._entities[field]], this._hass); }
+ _metrics(fields, dutch, primary = false) {
+  const rows = fields.filter(field => this._entities[field]);
+  return rows.length ? `<dl class="metrics${primary ? ' primary' : ''}">${rows.map(field => `<div data-field="${field}"><dt>${uiEscape(evccLabel(field, dutch))}</dt><dd>${this._reading(field, dutch)}</dd></div>`).join('')}</dl>` : '';
+ }
+ _reading(field, dutch, interactive=true) {
+  const value = this._value(field), id = this._entities[field];
+  const unavailable = dutch ? 'Niet beschikbaar' : 'Unavailable';
+  const entity=this._hass.states?.[id],sourceUnit=entity?.attributes?.unit_of_measurement;
+  const unit=field==='power'&&sourceUnit==='W'?'kW':sourceUnit;
+  let markup=uiEscape(value??'\u2014');
+  if(value!=null&&['remaining_duration','charge_duration'].includes(field)&&evccDuration(entity,dutch?'nl':'en')){
+   markup=markup.replace(/(\d+) (u|h|min)\b/g,'$1 <span class="ui-metric-unit">$2</span>');
+  }else if(value!=null&&evccNumber(entity)!=null&&unit&&value.endsWith(' '+unit)){
+   markup=uiEscape(value.slice(0,-unit.length).trimEnd())+' <span class="ui-metric-unit">'+uiEscape(unit)+'</span>';
+  }
+  if(!interactive)return id?markup:'\u2014';
+  return id ? `<button type="button" data-entity="${uiEscape(id)}" title="${uiEscape(id)}" aria-label="${uiEscape(evccLabel(field, dutch) + ': ' + (value ?? unavailable))}">${markup}${value == null ? `<span class="sr-only"> ${unavailable}</span>` : ''}</button>` : '—';
+ }
+ _offline() { return this._hass?.connected === false || this._hass?.connection?.connected === false; }
+ _modeMarkup(dutch) {
+  const id = this._entities.mode, entity = this._hass.states?.[id];
+  if (!id) return '';
+  const options = id.startsWith('select.') && this._config.show_controls ? evccModeOptions(entity) : [];
+  const disabled = this._offline() || !!this._pendingMode || typeof this._hass.callService !== 'function';
+  return `<div class="mode">${options.length ? `<div class="mode-options" role="group" aria-label="${evccLabel('mode', dutch)}">${options.filter(option => option !== (entity.state === 'minpv' ? 'pv' : 'minpv') || !options.includes(entity.state === 'minpv' ? 'minpv' : 'pv')).map(option => uiButton({text: ['pv','minpv'].includes(option) ? (dutch ? 'Slim' : 'Smart') : formatEvccValue('mode', {...entity, state: option}, this._hass), variant: 'surface', disabled, attrs: {'data-mode': option, 'aria-pressed': entity.state === option}})).join('')}</div>` : `<div class="mode-reading">${this._reading('mode', dutch)}</div>`}</div>`;
+ }
+ async _changeMode(option) {
+  const id = this._entities.mode, entity = this._hass.states?.[id];
+  if (!this._config.show_controls || this._offline() || this._pendingMode || !id?.startsWith('select.') || !evccModeOptions(entity).includes(option) || entity.state === option || typeof this._hass.callService !== 'function') return;
+  const version = ++this._actionVersion;
+  this._pendingMode = {entity: id, option}; this._actionError = null; this._render();
+  this._modeTimer = setTimeout(() => {
+   if (this._actionVersion !== version) return;
+   this._cancelMode(); this._actionError = evccDutch(this._hass) ? 'Nog geen bevestiging van de laadmodus ontvangen. Controleer EVCC en probeer opnieuw.' : 'No charge mode confirmation received yet. Check EVCC and try again.'; this._render();
+  }, 15000);
+  try { await this._hass.callService('select', 'select_option', {entity_id: id, option}); }
+  catch (error) {
+   if (this._actionVersion !== version) return;
+   this._cancelMode(); this._actionError = (evccDutch(this._hass) ? 'Laadmodus wijzigen mislukt: ' : 'Could not change charge mode: ') + (error?.message || error); this._render();
+  }
+ }
+ _tabItems(dutch) {
+  const items = [];
+  const controls = this._config.show_controls ? this._modeMarkup(dutch) + this._solarMarkup(dutch) : '';
+  if (controls) items.push({value: 'controls', label: dutch ? 'Bediening' : 'Controls', content: `<div class="charging-controls">${controls}</div>${this._pendingMode ? `<p class="notice" role="status">${dutch ? 'Laadmodus wijzigen…' : 'Changing charge mode…'}</p>` : ''}${this._actionError ? `<p class="notice error" role="alert">${uiEscape(this._actionError)}</p>` : ''}`});
+
+  const session = this._config.show_session ? this._sessionMarkup(dutch) : '';
+  if (session) items.push({value: 'session', label: dutch ? 'Laadsessie' : 'Session', content: session});
+  if (this._config.show_details && EVCC_DETAILS.some(field => this._entities[field])) items.push({value: 'technical', label: 'EVCC', content: this._metrics(EVCC_DETAILS, dutch)});
+  return items;
+ }
+ _tabsMarkup(dutch) {
+  const items = this._tabItems(dutch);
+  if (!items.length) return '';
+  // Keep the requested tab while uiTabs displays a temporary fallback.
+  if (!this._registryLoading && !items.some(item => item.value === this._activeTab)) this._activeTab = items[0].value;
+  if(items.length===1)return `<section class="evcc-tabs evcc-panel" aria-label="${uiEscape(items[0].label)}">${items[0].content}</section>`;
+  return uiTabs({variant:'card',id: 'evcc', label: dutch ? 'Laadinformatie' : 'Charging information', items, selected: this._activeTab, className: 'evcc-tabs', panelClassName: 'evcc-panel'});
+ }
+ _sessionMarkup(dutch) {
+  const metrics = this._metrics(EVCC_SESSION, dutch);
+  if (!metrics && !this._entities.power) return '';
+  return `<div class="session" aria-label="${dutch ? 'Laadsessie' : 'Charging session'}"><div class="session-summary">${metrics}</div>${this._historyMarkup(dutch)}</div>`;
+ }
+ _title(dutch) { return this._config.title || (dutch ? 'Auto laden' : 'EV charging'); }
+ _statusMarkup(view) {
+  return uiMetric({title:'Status',value:view.title,info:view.reason,iconContent:statusSymbol(view.kind),compact:this._config.compact,attrs:{class:'charging-status',role:'status'}});
+ }
+ _liveMarkup(dutch, view, now) {
+  const duration = this._hass.states?.[this._entities.remaining_duration];
+  if (!this._durationObserved || this._durationObserved.entity !== duration) this._durationObserved = {entity: duration, time: now};
+  const finish = evccFinishTime(duration, view, this._hass, this._durationObserved.time, now);
+  const charging = view.status === 'charging';
+  const time = view.kind === 'done' ? (dutch ? 'Bereikt' : 'Reached') : charging ? this._reading('remaining_duration', dutch, false) : '—';
+  const hint = finish ? (dutch ? 'Geschat klaar ±' : 'Estimated finish ±') + finish : (view.kind === 'done' ? (dutch ? 'Geen resterende laadtijd' : 'No remaining charge time') : view.status === 'disconnected' ? (dutch ? 'Geen actieve laadsessie' : 'No active charging session') : (dutch ? 'Geen betrouwbare schatting' : 'No reliable estimate'));
+  const technical = (this._config.compact ? [] : ['phases', 'current']).filter(field => this._entities[field]).map(field => this._reading(field, dutch) + (field === 'phases' ? (dutch ? ' fasen' : ' phases') : ''));
+  return '<div class="charging-readings" data-ui-metric-grid>'+uiMetric({title:evccLabel('power',dutch),valueContent:this._reading('power',dutch,technical.length>0),action:!technical.length&&!!this._entities.power,attrs:!technical.length?{'data-entity':this._entities.power||''}:{},infoContent:technical.join(' &middot; '),icon:'mdi:lightning-bolt-outline',compact:this._config.compact})+uiMetric({title:view.kind==='done'?(dutch?'Laaddoel':'Charge target'):evccLabel('remaining_duration',dutch),valueContent:time,action:charging&&!!this._entities.remaining_duration,attrs:charging?{'data-entity':this._entities.remaining_duration||''}:{},info:this._config.compact?'':hint,icon:'mdi:timer-outline',compact:this._config.compact})+'</div>';
+ }
+
+ _render() {
+  if (!this._config) return;
+  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
+  const hass = this._hass, states = hass.states ?? {}, dutch = evccDutch(hass), config = this._config;
+  this._ensureClock();
+  const previousSolar = this._entities?.solar_share, previousPower = this._entities?.power;
+  this._entities = resolveEvccEntities(config, hass, this._registry, {allowFallback: !this._registryLoading});
+  if (previousPower !== this._entities.power) this._resetHistory();
+  if (this._historyKey && this._historyKey !== `${this._entities.power}|${states[this._entities.power]?.attributes?.unit_of_measurement}`) this._resetHistory();
+  const now = Date.now(), view = evccChargingView(this._entities, states, {offline: this._offline(), dutch, now});
+  const offline = hass.connected === false || hass.connection?.connected === false;
+  if (previousSolar !== this._entities.solar_share) { this._cancelSolar(); this._solarError = null; }
+  if (this._solarEditing) {
+   if (!offline && evccSolarRange(states[this._entities.solar_share])) return;
+   this._cancelSolar();
+  }
+  const signature = JSON.stringify([view, this._registryLoading, hass.themes?.darkMode, Math.floor(now / 30000), this._historyRevision, config, this._entities, Object.values(this._entities).map(id => states[id]), states[config.image_entity], hass.locale?.language ?? hass.language, hass.config?.time_zone, offline, this._actionVersion, this._pendingMode, this._actionError, this._solarVersion, this._pendingSolar, this._solarError, typeof hass.callService === 'function', this._extraSignature?.()]);
+  if (signature === this._signature) return;
+  this._signature = signature;
+  const scrollTop = this.shadowRoot.querySelector('.content')?.scrollTop ?? 0;
+  const focus = this.shadowRoot.activeElement, focusedEntity = focus?.dataset?.entity, focusedMode = focus?.dataset?.mode, focusedTab = focus?.dataset?.uiTab;
+  const focusedSolar = focus?.hasAttribute('data-solar-share'), focusedGraph = focus?.classList?.contains('plot');
+  const configured = Object.values(this._entities).some(Boolean), status = offline ? 'unknown' : evccStatus(this._entities, states);
+  const vehicle = evccVehicleName(states[this._entities.vehicle]) || (dutch ? 'Elektrische auto' : 'Electric vehicle');
+  const soc = evccPercent(states[this._entities.soc]), target = evccPercent(states[this._entities.target_soc]);
+  const image = this._vehicleImage ? this._vehicleImage() : evccImageUrl(states[config.image_entity], hass);
+  const imageWarning = dutch ? 'Autoafbeelding niet beschikbaar' : 'Vehicle image unavailable';
+  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
+   <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene"><div class="gallery-top">${!configured ? `<header><h2>${uiEscape(this._title(dutch))}</h2></header>` : ''}
+   ${offline ? `<p class="notice warning" role="status">${dutch ? 'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.' : 'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>` : ''}
+   ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${(this._hasVehicleImage?.()??config.image_entity) ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? `<div class="battery-track" role="progressbar" aria-label="${dutch ? 'Accuniveau' : 'Battery level'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${soc}"><div class="battery-fill" style="width:${soc}%"></div>${target != null ? `<span class="target-marker" style="left:${target}%"></span>` : ''}</div>` : ''}</div>
+    </div>${this._statusMarkup(view)}</div>${this._liveMarkup(dutch, view, now)}</div>
+    ${this._tabsMarkup(dutch)}` : `<p class="empty">${dutch ? 'Kies de EVCC-laadvermogensensor van je laadpunt in de configuratie. Je kunt ook afzonderlijke entiteiten opgeven.' : 'Select your loadpoint’s EVCC charge power sensor in the editor, or configure individual entities.'}</p>`}
+   ${configured ? '' : '</div></div></div>'}</div></ha-card>`;
+  const content = this.shadowRoot.querySelector('.content');
+  content.style.setProperty('--evcc-image-scale', String(config.image_scale / 100));
+  content.style.setProperty('--evcc-image-offset-y', `${config.image_offset_y}px`);
+  if (this._motionState !== view.kind || this._motionEntity !== this._entities.power) {
+   this._motionState = view.kind; this._motionEntity = this._entities.power; this._powerClock = null;
+  }
+  const speed = powerMotion(states[this._entities.power], {maxKw: config.animation_max_kw, speed: config.animation_speed}), previous = this._powerClock;
+  const moving = !offline && speed.moving && ['solar', 'charging'].includes(view.kind);
+  const phase = previous ? previous.phase + (previous.moving ? (now - previous.time) / 1000 / previous.seconds : 0) : 0;
+  this._powerClock = {phase, time: now, seconds: speed.seconds, moving};
+  content.style.setProperty('--power-duration', speed.seconds + 's');
+  content.style.setProperty('--power-delay', -phase * speed.seconds + 's');
+  content.style.setProperty('--power-motion', moving ? 'running' : 'paused');
+  this.shadowRoot.querySelectorAll('[data-entity]').forEach(button => button.addEventListener('click', () => this.dispatchEvent(new CustomEvent('hass-more-info', {detail: {entityId: button.dataset.entity}, bubbles: true, composed: true}))));
+  this.shadowRoot.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', () => this._changeMode(button.dataset.mode)));
+  this._bindSolar(); this._bindHistory();
+  this._tabController?.disconnect();
+  this._tabController = bindUITabs({tabs: this.shadowRoot.querySelectorAll('[data-ui-tab]'), panels: this.shadowRoot.querySelectorAll('[data-ui-tab-panel]'), onSelect: value => { this._activeTab = value; this._syncHistory(); }});
+  const img = this.shadowRoot.querySelector('img');
+  if (img) img.onerror = () => { img.hidden = true; img.nextElementSibling.hidden = false; };
+  this.shadowRoot.querySelector('.content').scrollTop = scrollTop;
+  if (focusedGraph) this.shadowRoot.querySelector('.plot')?.focus({preventScroll: true});
+  else if (focusedSolar) this.shadowRoot.querySelector('[data-solar-share]')?.focus({preventScroll: true});
+  else if (focusedEntity) [...this.shadowRoot.querySelectorAll('[data-entity]')].find(button => button.dataset.entity === focusedEntity)?.focus({preventScroll: true});
+  else if (focusedMode) [...this.shadowRoot.querySelectorAll('[data-mode]')].find(button => button.dataset.mode === focusedMode)?.focus({preventScroll: true});
+  else if (focusedTab) ([...this.shadowRoot.querySelectorAll('[data-ui-tab]')].find(tab => tab.dataset.uiTab === focusedTab) ?? this.shadowRoot.querySelector('[role="tab"][aria-selected="true"]'))?.focus({preventScroll: true});
+  this._syncHistory();
+ }
+}
+Object.assign(EvccCard.prototype, evccSolarMethods, evccHistoryMethods);
+
+
+
+
+const CAR_COLORS = [
+ {value:'charging',label:'Goud / Gold'}, {value:'waiting',label:'Blauw / Blue'},
+ {value:'done',label:'Groen / Green'}, {value:'planned',label:'Paars / Purple'}, {value:'off',label:'Grijs / Gray'},
+];
+const carText = value => typeof value === 'string' ? value.trim() : '';
+const carClamp = (value, fallback, min, max) => value !== '' && value != null && Number.isFinite(Number(value)) ? Math.max(min,Math.min(max,Number(value))) : fallback;
+const normalizeCarTabs=input=>normalizeEntityTabs(input);
+function normalizeCarConfig(config={}) {
+ const evcc=config.evcc_enabled===true;
+ const tabs=Array.isArray(config.tabs)?['controls','session','technical'].filter(tab=>config.tabs.includes(tab)):['controls','session','technical'].filter((tab,i)=>config[['show_controls','show_session','show_details'][i]]!==false);
+ const normalized=evcc?normalizeEvccConfig(config):config;
+ const custom_tabs=normalizeCarTabs(config.custom_tabs),availableTabs=[...(evcc?tabs:[]),...custom_tabs.filter(tab=>tab.show).map(tab=>tab.id)];
+ const fields={};for(let i=1;i<=3;i++)Object.assign(fields,{
+  ['show_field_'+i]:config['show_field_'+i]!==false,['field_'+i+'_attribute']:carText(config['field_'+i+'_attribute']),
+  ['field_'+i+'_icon']:carText(config['field_'+i+'_icon']),['field_'+i+'_unit']:carText(config['field_'+i+'_unit']),['field_'+i+'_show_unit']:config['field_'+i+'_show_unit']!==false,
+  ['field_'+i+'_decimals']:config['field_'+i+'_decimals']==null||config['field_'+i+'_decimals']===''?null:Math.round(carClamp(config['field_'+i+'_decimals'],2,0,6)),
+ });
+ return {...normalized,...fields,type:config.type||'custom:eleven-car-card',evcc_enabled:evcc,tabs,custom_tabs,default_tab:availableTabs.includes(config.default_tab)?config.default_tab:(availableTabs[0]??'controls'),show_controls:tabs.includes('controls'),show_session:tabs.includes('session'),show_details:tabs.includes('technical'),title:carText(config.title),percentage_entity:carText(config.percentage_entity),
+  percentage:carClamp(config.percentage,0,0,100),image_entity:carText(config.image_entity),
+  image_source:['entity','media'].includes(config.image_source)?config.image_source:(config.image_media?'media':'entity'),
+  image_media:typeof config.image_media==='string'?{media_content_id:carText(config.image_media),media_content_type:'image/*'}:config.image_media&&typeof config.image_media==='object'&&!Array.isArray(config.image_media)?{...config.image_media,media_content_id:carText(config.image_media.media_content_id)}:undefined,
+  range_source:['none','entity','calculated'].includes(config.range_source)?config.range_source:(config.range_entity?'entity':config.range_full>0?'calculated':'none'),
+  range_entity:carText(config.range_entity),range_full:carClamp(config.range_full,null,0,100000),range_unit:config.range_unit==='mi'?'mi':'km',
+  image_scale:carClamp(config.image_scale,100,50,300),image_offset_y:carClamp(config.image_offset_y,0,-150,150),
+  image_offset_x:carClamp(config.image_offset_x,0,-150,150),animation_speed:carClamp(config.animation_speed,1,0.25,3),animation_max_kw:carClamp(config.animation_max_kw,11,0.1,500),
+  battery_style:['classic','slim','soft','line'].includes(config.battery_style)?config.battery_style:'soft',
+  animate_background:config.animate_background!==false,background_strength:carClamp(config.background_strength,100,0,100),
+  background:HEADER_BACKGROUNDS.some(item=>item.value===config.background)?config.background:'lanes',
+  color:CAR_COLORS.some(item=>item.value===config.color)?config.color:'charging',compact:(config.compact??(config.density==='compact'))===true,
+  field_1_entity:carText(config.field_1_entity),field_1_label:carText(config.field_1_label),field_1_icon:carText(config.field_1_icon)||'mdi:car',
+  field_2_entity:carText(config.field_2_entity),field_2_label:carText(config.field_2_label),
+  field_3_entity:carText(config.field_3_entity),field_3_label:carText(config.field_3_label)};
+}
+function carAvailable(entity){return entity?.state!=null&&!['','unknown','unavailable'].includes(String(entity.state).trim());}
+function carPercentage(config,states={}) {
+ const entity=states[config.percentage_entity];
+ if(config.percentage_entity&&(!carAvailable(entity)||!Number.isFinite(Number(entity.state))))return null;
+ return Math.max(0,Math.min(100,config.percentage_entity?Number(entity.state):config.percentage));
+}
+function carRange(config,states={}){
+ if(config.range_source==='none')return null;
+ if(config.range_source==='calculated'){
+  const percent=carPercentage(config,states),full=config.range_full;
+  return {value:percent==null||full==null||full<=0?null:full*percent/100,unit:config.range_unit,estimated:true,entity:null};
+ }
+ const entity=states[config.range_entity],raw=entity?.state;
+ return {value:carAvailable(entity)&&Number.isFinite(Number(raw))&&Number(raw)>=0?Number(raw):null,
+  unit:entity?.attributes?.unit_of_measurement||'km',estimated:false,entity:config.range_entity};
+}
+function carReading(entity,hass,decimals=null) {
+ if(!carAvailable(entity))return '\u2014';
+ const raw=String(entity.state), unit=entity.attributes?.unit_of_measurement;
+ if(!Number.isFinite(Number(raw)))return typeof hass?.formatEntityState==='function'?hass.formatEntityState(entity):raw;
+ const locale=hass?.locale?.language??hass?.language??'en';
+ let value;try{value=new Intl.NumberFormat(locale,{maximumFractionDigits:decimals??2,...(decimals!=null?{minimumFractionDigits:decimals}:{})}).format(Number(raw));}catch{value=String(Number(raw));}
+ return value+(unit?' '+unit:'');
+}
+function carFieldReading(entity,hass,config,index){
+ const attribute=config['field_'+index+'_attribute'];
+ if(!carAvailable(entity))return '\u2014';
+ const state=attribute?entity.attributes?.[attribute]:entity.state;
+ if(state==null||typeof state==='object')return '\u2014';
+ const unit=config['field_'+index+'_show_unit']===false?'':config['field_'+index+'_unit']||(attribute?'':entity.attributes?.unit_of_measurement);
+ return carReading({...entity,state:String(state),attributes:{...entity.attributes,unit_of_measurement:unit}},attribute?{...hass,formatEntityState:undefined}:hass,config['field_'+index+'_decimals']);
+}
+function carImageUrl(entity,hass) {
+ if(!carAvailable(entity))return null;
+ const picture=entity.attributes?.entity_picture;
+ if(typeof picture!=='string'||!picture.trim())return null;
+ if(picture.startsWith('/')&&!picture.startsWith('//'))return hass?.hassUrl?hass.hassUrl(picture):picture;
+ try{const url=new URL(picture);return ['http:','https:'].includes(url.protocol)?url.href:null;}catch{return null;}
+}
+
+
+// Media URLs are authenticated, expiring URLs, not the persisted media-source ID.
+class CarMediaImage {
+ constructor(onChange){this.onChange=onChange;this.version=0;}
+ reset(){
+  this.version++;clearTimeout(this.timer);clearTimeout(this.timeout);
+  this.timer=null;this.timeout=null;this.pending=false;this.url=null;this.id=null;this.connection=null;this.expires=0;this.retry=0;
+ }
+ update(hass,media){
+  const id=media?.media_content_id||'',connection=hass?.connection??hass?.callWS;
+  if(id!==this.id||connection!==this.connection){this.reset();this.id=id;this.connection=connection;}
+  this.hass=hass;this.media=media;
+  if(!id)return;
+  if(!id.startsWith('media-source://')){this.url=carImageUrl({state:'available',attributes:{entity_picture:id}},hass);return;}
+  if(!hass?.callWS)return;
+  if(hass.connected===false||hass.connection?.connected===false){
+   clearTimeout(this.timer);this.timer=null;
+   if(this.pending){this.version++;clearTimeout(this.timeout);this.pending=false;}
+   return;
+  }
+  if(this.pending||Date.now()<this.retry)return;
+  if(this.url&&Date.now()<this.expires){if(!this.timer)this._schedule(this.expires-Date.now());return;}
+  this._resolve(hass,id);
+ }
+ _schedule(delay){
+  clearTimeout(this.timer);this.timer=setTimeout(()=>{this.timer=null;this.update(this.hass,this.media);},delay);
+  this.timer.unref?.();
+ }
+ async _resolve(hass,id){
+  const version=++this.version;this.pending=true;
+  try{
+   const result=await Promise.race([
+    Promise.resolve().then(()=>hass.callWS({type:'media_source/resolve_media',media_content_id:id})),
+    new Promise((_,reject)=>{this.timeout=setTimeout(()=>reject(new Error('Media timeout')),10000);this.timeout.unref?.();}),
+   ]);
+   if(version!==this.version)return;
+   const url=carImageUrl({state:'available',attributes:{entity_picture:result?.url}},hass);
+   if(!url||(result.mime_type&&!result.mime_type.startsWith('image/')))throw new Error('Invalid media image');
+   this.url=url;this.expires=Date.now()+23*60*60*1000;this.retry=0;this._schedule(this.expires-Date.now());
+  }catch{
+   if(version!==this.version)return;
+   this.url=null;this.expires=0;this.retry=Date.now()+60000;this._schedule(60000);
+  }finally{
+   if(version===this.version){clearTimeout(this.timeout);this.timeout=null;this.pending=false;this.onChange();}
+  }
+ }
+}
+
+
+
+
+
+
+
+const carEditorDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
+const CAR_EDITOR_LABELS={
+ title:['Kaartnaam (toegankelijkheid)','Card name (accessibility)'],evcc_enabled:['EVCC-koppeling gebruiken','Use EVCC integration'],entity:['Laadvermogensensor van het laadpunt','Loadpoint charge power sensor'],
+ percentage_entity:['Percentage-entiteit (optioneel)','Percentage entity (optional)'],percentage:['Vast percentage','Fixed percentage'],
+ range_source:['Actieradius tonen','Show range'],range_entity:['Resterende actieradius-entiteit','Remaining range entity'],range_full:['Totaal bereik bij 100%','Total range at 100%'],range_unit:['Afstandseenheid','Distance unit'],
+ image_source:['Afbeeldingsbron','Image source'],image_media:['Afbeelding uit Media','Image from Media'],image_entity:['Afbeeldingsentiteit auto (optioneel)','Vehicle image entity (optional)'],image_scale:['Grootte autoafbeelding','Vehicle image size'],image_offset_y:['Verticale positie auto','Vehicle vertical position'],
+ image_offset_x:['Horizontale positie auto','Vehicle horizontal position'],battery_style:['Stijl percentagebalk','Percentage bar style'],animation_speed:['Animatiesnelheid','Animation speed'],animation_max_kw:['Maximaal laadvermogen voor animatie','Maximum charge power for animation'],
+ background_strength:['Achtergrondsterkte','Background intensity'],background:['Achtergrond','Background'],color:['Accentkleur','Accent color'],animate_background:['Achtergrond animeren','Animate background'],compact:['Compacte weergave','Compact layout'],tabs:['Zichtbare tabbladen','Visible tabs'],default_tab:['Standaardtabblad','Default tab'],
+};
+for(let i=1;i<=3;i++)Object.assign(CAR_EDITOR_LABELS,{
+ ['show_field_'+i]:['Gegevensveld tonen','Show data field'],['field_'+i+'_entity']:['Entiteit','Entity'],['field_'+i+'_label']:['Label (optioneel)','Label (optional)'],
+ ['field_'+i+'_attribute']:['Attribuut (optioneel)','Attribute (optional)'],['field_'+i+'_unit']:['Eigen eenheid (optioneel)','Custom unit (optional)'],
+ ['field_'+i+'_decimals']:['Decimalen (optioneel)','Decimal places (optional)'],['field_'+i+'_show_unit']:['Eenheid tonen','Show unit'],
+});
+for(let i=1;i<=3;i++)CAR_EDITOR_LABELS['field_'+i+'_icon']=['Icoon','Icon'];
+const CAR_EDITOR_HELPERS={
+ title:['Naam voor toegankelijkheid en de afbeeldingsbeschrijving; verschijnt niet als zichtbare titel.','Name for accessibility and the image description; not shown as a visible title.'],
+ animate_background:['Bewegende lichtsluiers, wolken en weerlijnen. Animatie stopt bij geen verbinding en de voorkeur voor minder beweging.','Moving light ribbons, clouds and contours. Animation stops when offline or reduced motion is preferred.'],
+ evcc_enabled:['Aan: laadgegevens en bediening via EVCC. Uit: een eigen percentage en drie vrije gegevensvelden. Instellingen blijven bewaard bij omschakelen.','On: EVCC charging data and controls. Off: your own percentage and three custom fields. Switching preserves both sets of settings.'],
+ entity:['Kies de vermogenssensor van één laadpunt. De overige EVCC-entiteiten worden automatisch binnen dat laadpunt herkend.','Choose the power sensor of one loadpoint. Other EVCC entities are detected within that loadpoint.'],
+ percentage_entity:['Gebruik een entiteit met een waarde van 0 tot 100. Laat leeg voor een vast percentage.','Use an entity with a value from 0 to 100. Leave empty for a fixed percentage.'],
+ percentage:['Alleen voor de weergave; dit wijzigt geen sensor.','Display only; this does not change a sensor.'],
+ range_source:['Toont de resterende actieradius onder het percentage, net als bij EVCC. Kies een sensor of een schatting op basis van het percentage.','Shows remaining range below the percentage, as with EVCC. Choose a sensor or an estimate based on the percentage.'],
+ range_entity:['Gebruik een sensor met de resterende afstand. De sensoreenheid wordt overgenomen; zonder eenheid wordt km gebruikt.','Use a sensor with the remaining distance. The sensor unit is retained; km is used if no unit is provided.'],
+ range_full:['Schatting = totaal bereik × huidig percentage / 100. Bijvoorbeeld: 800 km bij 100% en 50% resterend geeft circa 400 km.','Estimate = total range × current percentage / 100. For example: 800 km at 100% and 50% remaining gives approximately 400 km.'],
+ image_entity:['Kies een image-entiteit met de afbeelding van je auto. Zonder afbeelding verschijnt een auto-icoon.','Choose an image entity with your vehicle picture. Without an image a car icon is shown.'],
+ image_source:['Kies een afbeelding-entiteit of een afbeelding uit Home Assistant Media. Beide keuzes blijven bewaard bij omschakelen.','Choose an image entity or a picture from Home Assistant Media. Switching preserves both selections.'],
+ image_media:['Kies een afbeelding in je Home Assistant-mediabibliotheek.','Choose an image in your Home Assistant media library.'],
+ image_scale:['Vergroot de auto binnen de vaste headerhoogte. Een grote afbeelding kan vóór het percentage komen.','Scale the car within the fixed header height. A large image may overlap the percentage.'],
+ image_offset_y:['Negatief = omhoog, positief = omlaag. De headerhoogte blijft gelijk.','Negative moves up, positive moves down. Header height stays fixed.'],
+ image_offset_x:['Negatief = naar links, positief = naar rechts. Nul plaatst de afbeelding horizontaal in het midden van de kaart.','Negative moves left, positive moves right. Zero centers the image horizontally in the card.'],
+ battery_style:['Kies een klassieke balk, slanke capsule, zacht licht (standaard) of fijne lijn.','Choose a classic bar, slim capsule, soft light (default) or fine line.'],
+ animation_speed:['Snelheidsfactor: 0,5× is half zo snel, 2× is dubbel zo snel. Bij nul of onbekend laadvermogen pauzeert de animatie.','Speed factor: 0.5× is half speed, 2× is double speed. Zero or unknown charge power pauses animation.'],
+ animation_max_kw:['Vermogen waarbij de animatie de hoogste snelheid bereikt. Dit verandert geen EVCC-laadlimiet.','Power at which animation reaches its maximum speed. This does not change EVCC charge limits.'],
+ color:['Vaste accentkleur voor eigen gegevens. Met EVCC volgt de kleur de laadstatus.','Fixed accent for custom data. With EVCC the color follows charging state.'],
+ compact:['Kleinere afbeeldingruimte en gegevensvlakken. Je tabkeuze blijft behouden.','Smaller image area and data panels. Your tab selection is preserved.'],
+ tabs:['Kies welke tabbladen zichtbaar zijn, ook in compact. Leeg = geen tabbladen. Een tab zonder beschikbare entiteiten wordt niet getoond.','Choose visible tabs, including in compact. Empty means no tabs. Tabs without source entities are omitted.'],
+ default_tab:['Dit tabblad opent bij het laden van de kaart. Een handmatige tabkeuze blijft behouden bij sensorupdates.','Opens when the card loads. Manual tab selection is preserved during sensor updates.'],
+};
+class CarEditor extends customTabsEditor(EvccEditor) {
+ setConfig(config){this._config=normalizeCarConfig(config);if(this._hass&&this._config.evcc_enabled)this.hass=this._hass;else this._render();}
+ set hass(hass){if(this._config?.evcc_enabled)super.hass=hass;else{this._hass=hass;this._render();}}get hass(){return this._hass;}
+ _schema(nl){
+  const text=name=>({name,selector:{text:{}}}),boolean=name=>({name,selector:{boolean:{}}});
+  const entity=(name,domain)=>({name,selector:{entity:domain?{domain}:{}}});
+  const group=(name,title,schema,expanded=false)=>({type:'expandable',name,title,flatten:true,expanded,schema});
+  const select=(name,options,multiple=false)=>({name,selector:{select:{mode:multiple?'list':'dropdown',multiple,options}}});
+  const number=(name,min,max,step,unit,mode='slider')=>({name,selector:{number:{min,max,step,mode,...(unit?{unit_of_measurement:unit}:{})}}});
+  const config=this._config,evcc=config.evcc_enabled;
+  const schema=[group('general',nl?'Algemeen':'General',[text('title'),boolean('evcc_enabled')],true),
+   group('vehicle_image',nl?'Autoafbeelding':'Vehicle image',[select('image_source',[{value:'entity',label:nl?'Afbeelding-entiteit':'Image entity'},{value:'media',label:'Media'}]),...(config.image_source==='media'?[{name:'image_media',selector:{media:{accept:['image/*']}}}]:[entity('image_entity','image')]),number('image_scale',50,300,5,'%'),number('image_offset_x',-150,150,1,'px'),number('image_offset_y',-150,150,1,'px')]),
+   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',headerBackgroundOptions(nl)),number('background_strength',0,100,5,'%'),boolean('animate_background'),select('battery_style',[{value:'classic',label:nl?'Klassiek · 12 px':'Classic · 12 px'},{value:'slim',label:nl?'Slanke capsule · 8 px':'Slim capsule · 8 px'},{value:'soft',label:nl?'Zacht licht · 8 px (standaard)':'Soft light · 8 px (default)'},{value:'line',label:nl?'Fijne lijn · 4 px':'Fine line · 4 px'}]),...(!evcc?[select('color',CAR_COLORS.map(item=>({...item,label:item.label.split(' / ')[nl?0:1]})))]:[]),...(evcc?[number('animation_speed',0.25,3,0.25,'×'),number('animation_max_kw',0.1,500,0.1,'kW','box')]:[])])];
+  if(!evcc){
+   schema.push(group('percentage_settings',nl?'Percentage':'Percentage',[entity('percentage_entity'),...(!config.percentage_entity?[number('percentage',0,100,1,'%')]:[])],true));
+   schema.push(group('range_settings',nl?'Actieradius':'Range',[
+    select('range_source',[{value:'none',label:nl?'Niet tonen':'Hide'},{value:'entity',label:nl?'Van een entiteit':'From an entity'},{value:'calculated',label:nl?'Berekenen uit percentage':'Calculate from percentage'}]),
+    ...(config.range_source==='entity'?[entity('range_entity','sensor')]:[]),
+    ...(config.range_source==='calculated'?[select('range_unit',[{value:'km',label:'km'},{value:'mi',label:'mi'}]),number('range_full',1,100000,1,config.range_unit,'box')]:[]),
+   ]));
+   for(let i=1;i<=3;i++){
+    const fields=[boolean('show_field_'+i)];
+    if(config['show_field_'+i])fields.push(entity('field_'+i+'_entity'),text('field_'+i+'_label'),{name:'field_'+i+'_icon',selector:{icon:{}}},text('field_'+i+'_attribute'),boolean('field_'+i+'_show_unit'),...(config['field_'+i+'_show_unit']?[text('field_'+i+'_unit')]:[]),number('field_'+i+'_decimals',0,6,1,null,'box'));
+    schema.push(group('field_'+i,nl?['Breed gegevensveld','Gegevensveld links','Gegevensveld rechts'][i-1]:['Wide data field','Left data field','Right data field'][i-1],fields));
+   }
+  }else{
+   schema.push(group('evcc_connection',nl?'EVCC-koppeling':'EVCC integration',[{...entity('entity','sensor'),selector:{entity:{domain:'sensor',device_class:'power'}}}],true));
+   const tabs=[{value:'controls',label:nl?'Bediening':'Controls'},{value:'session',label:nl?'Laadsessie':'Session'},{value:'technical',label:'EVCC'}];
+   const defaults=[...tabs.filter(tab=>config.tabs.includes(tab.value)),...config.custom_tabs.filter(tab=>tab.show).map((tab,i)=>({value:tab.id,label:tab.title||(nl?'Eigen tabblad ':'Custom tab ')+(i+1)}))];
+   schema.push(group('tab_settings',nl?'Tabbladen':'Tabs',[select('tabs',tabs,true),...(defaults.length?[select('default_tab',defaults)]:[])],true));
+   const override=(name,title,fields)=>group(name,title,fields.map(field=>entity(field,EVCC_FIELDS[field][2])));
+   schema.push(group('overrides',nl?'EVCC-entiteiten aanpassen (optioneel)':'Override EVCC entities (optional)',[
+    override('evcc_vehicle',nl?'Auto en laadstatus':'Vehicle and charging state',['vehicle','soc','target_soc','range','connected','charging','enabled','plan_active']),
+    override('evcc_live',nl?'Actuele laadgegevens':'Live charging data',['power','remaining_duration','current','phases']),
+    override('evcc_controls',nl?'Bediening':'Controls',['mode','solar_share']),
+    override('evcc_session',nl?'Laadsessie':'Session',['charged_energy','session_price','charge_duration','session_price_per_kwh','solar_percentage']),
+    override('evcc_details','EVCC',['vehicle_limit_soc','smart_cost_active','pv_action','pv_remaining']),
+   ]));
+  }
+  if(!evcc&&config.custom_tabs.some(tab=>tab.show))schema.push(group('tab_settings',nl?'Tabbladen':'Tabs',[select('default_tab',config.custom_tabs.filter(tab=>tab.show).map((tab,i)=>({value:tab.id,label:tab.title||(nl?'Eigen tabblad ':'Custom tab ')+(i+1)})))],true));
+  return schema;
+ }
+ _helper(item,nl,resolved){
+  const name=item.name;if(CAR_EDITOR_HELPERS[name])return CAR_EDITOR_HELPERS[name][nl?0:1];
+  if(Object.hasOwn(EVCC_FIELDS,name)){
+   const auto=resolved[name];return (nl?'Leeg = automatische herkenning.':'Empty uses automatic detection.')+(auto?' '+(nl?'Herkend: ':'Detected: ')+auto:'');
+  }
+  if(/^field_\d_label$/.test(name))return nl?'Leeg = de naam van de entiteit.':'Empty uses the entity name.';
+  if(/^field_\d_attribute$/.test(name))return nl?'Leeg = de entiteitwaarde. Vul anders de exacte attribuutnaam in.':'Empty uses the entity state. Otherwise enter the exact attribute name.';
+  if(/^field_\d_unit$/.test(name))return nl?'Leeg = de sensoreenheid. Bij een attribuut wordt geen eenheid aangenomen.':'Empty uses the sensor unit. Attribute values have no assumed unit.';
+  if(/^field_\d_decimals$/.test(name))return nl?'Leeg = automatisch, maximaal 2 decimalen. Alleen voor numerieke waarden.':'Empty uses automatic formatting, up to 2 decimals. Numeric values only.';
+ }
+ _changed(event){
+  event.stopPropagation();const next={...this._config,entities:{...this._config.entities}};
+  for(const [key,value] of Object.entries(event.detail.value)){
+   if(Object.hasOwn(EVCC_FIELDS,key)){if(value)next.entities[key]=value;else delete next.entities[key];}
+   else if(Object.hasOwn(CAR_EDITOR_LABELS,key))next[key]=value;
+  }
+  this._config=normalizeCarConfig(next);if(this._config.evcc_enabled)this.hass=this._hass;else this._render();
+  this._emitConfig();
+ }
+ _emitConfig(){this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:{...this._config,entities:{...this._config.entities},custom_tabs:this._config.custom_tabs.map(tab=>({...tab,entities:tab.entities.map(row=>({...row}))}))}},bubbles:true,composed:true}));}
+ _setCustomTabs(tabs){this._config=normalizeCarConfig({...this._config,custom_tabs:tabs});this._render();this._emitConfig();}
+
+ _render(){
+  if(!this._config||!this._hass)return;
+  if(!this._form){
+   this.shadowRoot.innerHTML='<style>:host,ha-form{display:block;min-width:0}p{font-size:12px;line-height:1.5;color:var(--secondary-text-color);margin:0 0 12px}h3{font-size:16px;margin:24px 0 12px}details{border:1px solid var(--divider-color);border-radius:12px;margin:12px 0;min-width:0}summary{padding:12px;min-height:44px;box-sizing:border-box;cursor:pointer;overflow-wrap:anywhere}.tab-body{padding:0 12px 12px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}button{font:inherit;min-height:44px;border:1px solid var(--divider-color);border-radius:6px;padding:8px 12px;background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer}button:disabled{opacity:.4}button:focus-visible,summary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}</style><p></p><ha-form></ha-form><h3></h3><p class="tabs-help"></p><div class="custom-tabs"></div><button type="button" data-action="tab-add"></button>';
+   this._form=this.shadowRoot.querySelector('ha-form');this._form.addEventListener('value-changed',event=>this._changed(event));
+   this.shadowRoot.querySelector('[data-action=tab-add]').onclick=()=>this._customAction('tab-add');
+  }
+  const nl=carEditorDutch(this._hass),automatic=resolveEvccEntities({...this._config,entities:{}},this._hass,this._registry);
+  this.shadowRoot.querySelector('p').textContent=nl?'Stel je auto, afbeelding en weergave in. Kies EVCC voor laadgegevens of gebruik je eigen sensoren.':'Configure your car, image and appearance. Choose EVCC for charging data or use your own sensors.';
+  Object.assign(this._form,{hass:this._hass,data:{...this._config,...this._config.entities},schema:this._schema(nl),computeLabel:item=>(CAR_EDITOR_LABELS[item.name]??EVCC_FIELDS[item.name])?.[nl?0:1]??item.name,computeHelper:item=>this._helper(item,nl,automatic)});
+  this._renderCustomTabs(nl);
+ }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+const carDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
+
+class CarCard extends EvccCard {
+ constructor(){super();this._mediaImage=new CarMediaImage(()=>{this._signature=null;this._render();});}
+ disconnectedCallback(){this._mediaImage.reset();super.disconnectedCallback();}
+ _hasVehicleImage(){return this._config.image_source==='media'?!!this._config.image_media?.media_content_id:!!this._config.image_entity;}
+ _vehicleImage(){return this._config.image_source==='media'?this._mediaImage.url:carImageUrl(this._hass?.states?.[this._config.image_entity],this._hass);}
+ static async getConfigElement(){
+  if(!customElements.get('ha-form')){const helpers=await window.loadCardHelpers();const card=await helpers.createCardElement({type:'entities',entities:[]});await card.constructor.getConfigElement();await customElements.whenDefined('ha-form');}
+  if(!customElements.get('eleven-car-editor'))customElements.define('eleven-car-editor',CarEditor);
+  return document.createElement('eleven-car-editor');
+ }
+ static getStubConfig(){return {title:'',percentage:50,field_1_entity:'',field_2_entity:'',field_3_entity:''};}
+ setConfig(config){
+  const next=normalizeCarConfig(config),switching=this._config?.evcc_enabled!==next.evcc_enabled,defaultChanged=this._config?.default_tab!==next.default_tab;
+  this._cancelMode();this._cancelSolar();this._actionError=null;this._solarError=null;this._tabController?.disconnect();
+  if(switching){clearInterval(this._clockTimer);this._clockTimer=null;this._resetHistory();this._connection=null;this._registry=[];this._activeTab=null;}
+  if(switching||defaultChanged)this._activeTab=next.default_tab;
+  this._config=next;this._signature=null;
+  if(next.evcc_enabled&&this._hass)super.hass=this._hass;else this._render();
+ }
+ set hass(hass){if(this._config?.evcc_enabled)super.hass=hass;else{this._hass=hass;this._render();}}get hass(){return this._hass;}
+ connectedCallback(){this._signature=null;if(this._config?.evcc_enabled)super.connectedCallback();else{this._observeMotion();this._render();}}
+ getCardSize(){return this._config?.evcc_enabled?super.getCardSize():(this._config?.compact?6:8);}
+ getGridOptions(){return this._config?.evcc_enabled?super.getGridOptions():{columns:12,min_columns:6,rows:this._config?.compact?7:9,min_rows:3};}
+ _title(dutch){return this._config.title||(dutch?'Mijn auto':'My car');}
+ _carReading(id,value,label,unit=''){
+  const markup=unit&&value.endsWith(' '+unit)?uiEscape(value.slice(0,-unit.length).trimEnd())+' <span class="ui-metric-unit">'+uiEscape(unit)+'</span>':uiEscape(value);
+  return id?`<button type="button" data-entity="${uiEscape(id)}" aria-label="${uiEscape(label+': '+value)}">${markup}</button>`:markup;}
+ _extraSignature(){return this._config.custom_tabs.flatMap(tab=>tab.entities.map(row=>this._hass?.states?.[row.entity]));}
+ _extraStyles(){return `
+  .content[data-battery-style=slim] .battery-track,.content[data-battery-style=soft] .battery-track{height:8px}
+  .content[data-battery-style=line] .battery-track{height:4px}
+  .content:is([data-battery-style=slim],[data-battery-style=soft],[data-battery-style=line]) .target-marker{top:-2px;height:calc(100% + 4px);width:1px}
+  .content[data-battery-style=soft] .battery-fill{background:color-mix(in srgb,var(--primary-color) 65%,var(--secondary-background-color));box-shadow:0 0 8px color-mix(in srgb,var(--primary-color) 18%,transparent)}
+  .content[data-battery-style=soft] .battery-fill::before{filter:opacity(.45)}
+  .content[data-battery-style=line] .battery-fill::before{background:linear-gradient(100deg,transparent,#ffffff99,transparent)}
+ `;}
+ _applyPresentation(){
+  const content=this.shadowRoot.querySelector('.content');if(!content)return;
+  content.dataset.batteryStyle=this._config.battery_style;
+  content.style.setProperty('--evcc-image-offset-x',this._config.image_offset_x+'px');
+ }
+ _tabItems(nl){
+  const items=this._config.evcc_enabled?super._tabItems(nl):[];
+  for(const [index,tab] of this._config.custom_tabs.entries()){
+   if(!tab.show)continue;
+   const label=tab.title||(nl?'Eigen tabblad ':'Custom tab ')+(index+1);
+   const rows=tab.entities.filter(row=>row.entity);
+   const content=rows.length?`<dl class="metrics">${rows.map(row=>{
+    const entity=this._hass?.states?.[row.entity],name=row.name||entity?.attributes?.friendly_name||row.entity;
+    const value=carFieldReading(entity,this._hass,{field_1_attribute:row.attribute,field_1_unit:row.unit,field_1_show_unit:row.show_unit,field_1_decimals:row.decimals},1);
+    const plain=carFieldReading(entity,this._hass,{field_1_attribute:row.attribute,field_1_show_unit:false,field_1_decimals:row.decimals},1);
+    const unit=value.startsWith(plain)?value.slice(plain.length).trim():'';
+    return `<div><dt>${uiEscape(name)}</dt><dd>${this._carReading(row.entity,value,name,unit)}</dd></div>`;
+   }).join('')}</dl>`:`<p class="notice">${nl?'Voeg entiteiten toe aan dit tabblad in de kaartconfiguratie.':'Add entities to this tab in the card configuration.'}</p>`;
+   items.push({value:tab.id,label,content,tabAttrs:{title:label}});
+  }
+  return items;
+ }
+ _rangePrimary(config,states,nl){
+  const range=carRange(config,states);if(!range)return {};
+  const label=range.estimated?(nl?'geschat bereik':'estimated range'):(nl?'actieradius':'range');
+  const value=range.value==null?'\u2014':carReading({state:String(range.value),attributes:{unit_of_measurement:range.unit}},this._hass,0);
+  return {subtitle:value+' '+label,subtitleEntity:range.entity||''};
+ }
+ _field(i,nl){
+  const config=this._config,id=config['field_'+i+'_entity'],entity=this._hass?.states?.[id];
+  const label=config['field_'+i+'_label']||entity?.attributes?.friendly_name||id||(nl?'Gegevensveld '+i:'Data field '+i);
+  const value=carFieldReading(entity,this._hass,config,i);
+  const plain=carFieldReading(entity,this._hass,{...config,['field_'+i+'_show_unit']:false},i),split=value.startsWith(plain);
+  return uiMetric({title:label,value:plain==='\u2014'?null:split?plain:value,unit:split?value.slice(plain.length).trim():'',icon:config['field_'+i+'_icon']||(i===2?'mdi:map-marker-distance':'mdi:counter'),compact:config.compact,action:!!id,attrs:{class:i===1?'car-status':'car-field','data-entity':id||'','data-car-field':String(i)}});
+ }
+ _render(){
+  if(!this._config)return;
+  if(this.isConnected)this._mediaImage.update(this._hass,this._config.image_source==='media'?this._config.image_media:null);
+  if(this._config.evcc_enabled){super._render();this._applyPresentation();return;}
+  const config=this._config,hass=this._hass,states=hass?.states??{},nl=carDutch(hass),percent=carPercentage(config,states);
+  const offline=hass?.connected===false||hass?.connection?.connected===false;
+  const signature=JSON.stringify([config,hass?.themes?.darkMode,hass?.locale,hass?.language,offline,...[config.percentage_entity,config.range_entity,config.image_entity,config.field_1_entity,config.field_2_entity,config.field_3_entity].map(id=>states[id]),this._extraSignature()]);
+  if(signature===this._signature)return;this._signature=signature;
+  const scroll=this.shadowRoot.querySelector('.content')?.scrollTop??0,focused=this.shadowRoot.activeElement?.dataset.entity,focusedTab=this.shadowRoot.activeElement?.dataset.uiTab;
+  const title=config.title||(nl?'Mijn auto':'My car'),image=this._vehicleImage(),percentage=percent==null?'\u2014':carReading({state:String(percent),attributes:{unit_of_measurement:'%'}},hass);
+  const fields=[2,3].filter(i=>config['show_field_'+i]);
+  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${evccCardStyles()}${this._extraStyles()}
+   .car-status{margin-top:16px}.car-readings{margin:0}.content{--ui-metric-tone:var(--tone)}
+   .content[data-density=compact] .car-status{margin-top:12px}
+   .content .header-scene[data-no-readings]{padding-bottom:0}
+   .range-value{font-size:12px;font-weight:600;color:var(--primary-text-color,#20252b)}
+  </style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
+   <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
+    ${offline?`<p class="notice warning" role="status">${nl?'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.':'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>`:''}
+    <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}</div>
+     <div class="picture">${image?`<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:`<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>${this._hasVehicleImage()?`<small>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:''}`}</div>
+    </div><div class="battery-track" ${percent==null?`aria-label="${nl?'Percentage niet beschikbaar':'Percentage unavailable'}"`:`role="progressbar" aria-label="Percentage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"`}><div class="battery-fill" style="width:${percent??0}%"></div></div></div>
+   </div>${config.show_field_1?`${this._field(1,nl)}`:''}</div>
+   ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:${fields.length}">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;
+  const content=this.shadowRoot.querySelector('.content');content.style.setProperty('--evcc-image-scale',String(config.image_scale/100));content.style.setProperty('--evcc-image-offset-y',config.image_offset_y+'px');content.scrollTop=scroll;
+  for(const button of this.shadowRoot.querySelectorAll('[data-entity]'))button.addEventListener('click',()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:button.dataset.entity},bubbles:true,composed:true})));
+  if(focused)Array.from(this.shadowRoot.querySelectorAll('[data-entity]')).find(button=>button.dataset.entity===focused)?.focus({preventScroll:true});
+  this._tabController?.disconnect();
+  this._tabController=bindUITabs({tabs:this.shadowRoot.querySelectorAll('[data-ui-tab]'),panels:this.shadowRoot.querySelectorAll('[data-ui-tab-panel]'),onSelect:value=>{this._activeTab=value;}});
+  if(focusedTab)(Array.from(this.shadowRoot.querySelectorAll('[data-ui-tab]')).find(tab=>tab.dataset.uiTab===focusedTab)??this.shadowRoot.querySelector('[role=tab][aria-selected=true]'))?.focus({preventScroll:true});
+  this._applyPresentation();
+  const img=this.shadowRoot.querySelector('img');if(img)img.addEventListener('error',()=>{img.hidden=true;const hint=this.shadowRoot.querySelector('.picture small');if(hint)hint.hidden=false;},{once:true});
+ }
+}
+
+if(!customElements.get('eleven-car-card'))customElements.define('eleven-car-card',CarCard);
+window.customCards=window.customCards||[];
+if(!window.customCards.some(card=>card.type==='eleven-car-card'))window.customCards.push({type:'eleven-car-card',name:'Eleven Car (beta)',description:'Vehicle image, percentage and configurable readings, with optional EVCC charging integration.',preview:true});
+})();
+
+;
+// Eleven Energy Flow (beta) - self-contained module
+(()=>{
+
+// Explicit current-price sensors override Energy only in the selected direction.
+// Never substitute another tariff when the chosen sensor is unavailable.
+function energyFlowSelectedPrice(host,direction){
+ const id=host._config?.[direction==='import'?'price_entity':'export_price_entity'];
+ return id?{configured:true,price:energyFlowCurrentPrice({priceEntity:id},host._hass)}:{configured:false,price:null};
+}
+
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
+// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
+function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function uiAttributes(values={}){
+ return Object.entries(values).map(([key,value])=>{
+  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
+  if(value==null)return '';
+  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
+  return ` ${key}="${uiEscape(value)}"`;
+ }).join('');
+}
+function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
+ const classes=className?` class="${uiEscape(className)}"`:'';
+ const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
+ return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
+}
+function uiButtonStyles(){return `
+[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
+[data-ui-button="icon"]{width:32px;height:32px}
+[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
+[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
+[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
+[data-ui-button]:disabled{opacity:.35;cursor:default}
+[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
+[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
+[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
+[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
+`;}
+
+
+// The caller formats measurements and translates the subtitle. All text is escaped.
+function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',attrs={}}={}){
+ const missing=value==null||value==='';
+ const number=uiEscape(missing?'—':value);
+ const label=subtitle!==''&&subtitle!=null?(subtitleEntity?`<button type="button" class="primary-label" data-entity="${uiEscape(subtitleEntity)}">${uiEscape(subtitle)}</button>`:`<div class="primary-label">${uiEscape(subtitle)}</div>`):'';
+ return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
+}
+
+function uiPrimaryValueStyles(){return `
+[data-ui-primary-value]{--_primary-tone:var(--ui-primary-tone,var(--tone,var(--primary-color,#2196f3)));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-primary-value] .primary-value{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin:0;font-size:var(--ui-primary-size,60px);line-height:1.15;font-weight:650;letter-spacing:-.055em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+[data-ui-primary-value] .primary-number{display:block;min-width:0;max-width:100%;overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-number{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}[data-ui-primary-value] button:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px;border-radius:3px}
+[data-ui-primary-value] .primary-value small{display:block;margin:8px 0 0;font-size:var(--ui-primary-unit-size,16px);line-height:1.4;font-weight:400;letter-spacing:-.03em;color:var(--secondary-text-color,#626a78)}
+[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid color-mix(in srgb,var(--_primary-tone) 55%,transparent);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-label{display:block;max-width:100%;min-height:0;margin-bottom:0;padding-block:0;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
+[data-ui-primary-value][data-density=compact] .primary-value{font-size:var(--ui-primary-size,46px)}
+[data-ui-primary-value][data-density=compact] .primary-value small{font-size:var(--ui-primary-unit-size,14px);margin-top:5px}
+`;}
+
+
+
+// Text is escaped. *Content options are trusted markup owned by the calling card.
+// action renders a native button; do not nest other controls in that variant.
+function uiMetric({icon='',iconContent='',title='',value,valueContent='',unit='',info='',infoContent='',compact=false,action=false,attrs={}}={}){
+ const missing=!valueContent&&(value==null||value==='');
+ const symbol=iconContent||(icon?`<ha-icon icon="${uiEscape(icon)}"></ha-icon>`:'');
+ const tag=action?'button':'div';
+ return `<${tag}${uiAttributes({...attrs,...(action?{type:'button'}:{}),'data-ui-metric':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}>
+  ${symbol?`<span class="ui-metric-icon" aria-hidden="true">${symbol}</span>`:''}
+  <div class="ui-metric-reading"><div class="ui-metric-title">${uiEscape(title)}</div><div class="ui-metric-value">${valueContent||uiEscape(missing?'—':value)}${!missing&&unit?` <span class="ui-metric-unit">${uiEscape(unit)}</span>`:''}</div></div>
+  ${infoContent||info!==''&&info!=null?`<div class="ui-metric-info">${infoContent||uiEscape(info)}</div>`:''}
+ </${tag}>`;
+}
+
+function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
+[data-ui-metric]{--_metric-tone:var(--ui-metric-tone,var(--primary-color,#2196f3));box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-content:start;align-items:start;min-width:0;padding:12px;border-radius:var(--ui-metric-radius,8px);background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--_metric-tone) 10%,transparent),color-mix(in srgb,var(--_metric-tone) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee);color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-metric]:has(.ui-metric-info){grid-template-rows:auto auto auto}
+[data-ui-metric] .ui-metric-icon{box-sizing:border-box;display:grid;place-items:center;grid-column:2;grid-row:1/span 2;width:26px;height:26px;border-radius:7px;color:var(--_metric-tone);background:transparent;transform:translate(4px,-4px)}
+[data-ui-metric] .ui-metric-icon svg,[data-ui-metric] .ui-metric-icon ha-icon{display:block;width:18px;height:18px;--mdc-icon-size:18px}
+[data-ui-metric] .ui-metric-icon svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+[data-ui-metric] .ui-metric-reading{display:contents}
+[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:1;min-width:0}
+[data-ui-metric]:not(:has(.ui-metric-icon)) :is(.ui-metric-title,.ui-metric-value){grid-column:1/-1}
+[data-ui-metric] .ui-metric-title,[data-ui-metric] .ui-metric-info{font-size:11px;line-height:1.4;font-weight:400;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-metric] .ui-metric-value{grid-column:1;grid-row:2;align-self:stretch;min-width:0;margin:0;font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ui-metric-unit{display:inline-block;margin-inline-start:4px;font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78)}
+[data-ui-metric] .ui-metric-info{grid-column:1/-1;grid-row:3;align-self:stretch;margin-top:6px;padding-top:8px;border-top:1px solid color-mix(in srgb,var(--_metric-tone) 8%,transparent)}
+[data-ui-metric][data-density=compact]{padding:8px;column-gap:6px}
+[data-ui-metric][data-density=compact] .ui-metric-icon{width:20px;height:20px;border-radius:6px;transform:translate(2px,-2px)}
+[data-ui-metric][data-density=compact] .ui-metric-icon svg,[data-ui-metric][data-density=compact] .ui-metric-icon ha-icon{width:16px;height:16px;--mdc-icon-size:16px}
+[data-ui-metric][data-density=compact] .ui-metric-value{font-size:20px}
+[data-ui-metric][data-density=compact] .ui-metric-info{margin-top:4px;padding-top:4px}
+[data-ui-metric][data-unavailable=true]{--_metric-tone:var(--secondary-text-color,#626a78)}
+button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:hover{filter:brightness(1.04)}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+[data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
+[data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
+@supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
+`;}
+
+
+
+// Informational detail surface. Callers format/translate text and compute percentages.
+// All content is escaped; this component deliberately accepts no trusted HTML.
+function uiDetailSurface({title='',metrics=[],percent=null,entity='',actionLabel='',attrs={}}={}){
+ const progress=Number.isFinite(percent)?Math.max(0,Math.min(100,percent)):null;
+ return `<section${uiAttributes({...attrs,'data-ui-detail-surface':'','aria-label':title})}>
+  <h3 class="ui-detail-surface-title">${entity?`<button type="button" class="ui-detail-surface-action" data-entity="${uiEscape(entity)}" aria-label="${uiEscape(actionLabel||title)}">${uiEscape(title)} <span aria-hidden="true">›</span></button>`:uiEscape(title)}</h3>
+  <dl class="ui-detail-surface-metrics">${metrics.map(({label='',value,unit='',hint=''})=>{
+   const missing=value==null||value==='';
+   return `<div><dt>${uiEscape(label)}</dt><dd>${uiEscape(missing?'—':value)}${!missing&&unit?' '+uiEscape(unit):''}${hint?`<small class="ui-detail-surface-hint">${uiEscape(hint)}</small>`:''}</dd></div>`;
+  }).join('')}</dl>
+  ${progress==null?'':`<div class="ui-detail-surface-track" aria-hidden="true"><i style="width:${progress}%"></i></div>`}
+ </section>`;
+}
+
+function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+`
+[data-ui-detail-surface]{box-sizing:border-box;min-width:0;padding:12px;border-radius:8px;color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--ui-detail-tone,var(--primary-color,#2196f3)) 5%,transparent)}
+[data-ui-detail-surface] .ui-detail-surface-title{font-family:inherit;font-size:12px;font-weight:600;line-height:1.4;color:inherit;margin:0 0 8px;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-action{font:inherit;line-height:1.4;color:inherit;background:none;border:0;border-radius:4px;padding:4px 0;margin:-4px 0;text-align:start;cursor:pointer}
+[data-ui-detail-surface] .ui-detail-surface-action:hover{text-decoration:underline}[data-ui-detail-surface] .ui-detail-surface-action:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
+[data-ui-detail-surface] .ui-detail-surface-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,68px),1fr));gap:8px 12px;margin:0}
+[data-ui-detail-surface] .ui-detail-surface-metrics>div{min-width:0}
+[data-ui-detail-surface] dt{font-size:10px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere;margin:0 0 2px}
+[data-ui-detail-surface] dd{margin:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+[data-ui-detail-surface] .ui-detail-surface-hint{display:block;margin-top:3px;font-size:10px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--secondary-text-color,#626a78)}
+[data-ui-detail-surface] .ui-detail-surface-track{height:8px;border-radius:8px;background:var(--divider-color,#ddd);overflow:hidden;margin-top:8px}
+[data-ui-detail-surface] .ui-detail-surface-track>i{display:block;height:100%;background:var(--ui-detail-tone,var(--primary-color,#2196f3))}
+@container(max-width:360px){[data-ui-detail-surface] dd{font-size:15px}}
+@media(forced-colors:active){[data-ui-detail-surface]{border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track{background:Canvas;border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track>i{background:Highlight;forced-color-adjust:none}}
+`;}
+
+
+function uiTabs({id,label,items,selected,className='',panelClassName='',variant=''}={}){
+ if(typeof id!=='string'||!id||!items?.length||items.some(item=>typeof item.value!=='string'||!item.value)||new Set(items.map(item=>item.value)).size!==items.length)throw Error('Tabs need an id and distinct text values.');
+ const active=items.find(item=>item.value===selected&&!item.disabled)??items.find(item=>!item.disabled);
+ const tabId=value=>`${id}-tab-${encodeURIComponent(value)}`,panelId=value=>`${id}-panel-${encodeURIComponent(value)}`;
+ const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'','data-ui-card-tabs':variant==='card'?true:null,role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
+ const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,'data-ui-card-tab-panel':variant==='card'?true:null,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
+ return bar+panels;
+}
+function bindUITabs({tabs,panels,onSelect=()=>{}}){
+ const buttons=[...tabs],sections=[...panels],cleanups=[];
+ const select=(value,{focus=false,notify=true}={})=>{
+  const target=buttons.find(tab=>tab.dataset.uiTab===value&&!tab.disabled);if(!target)return false;
+  for(const tab of buttons){const active=tab===target;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
+  for(const panel of sections)panel.hidden=panel.dataset.uiTabPanel!==value;
+  if(focus)target.focus({preventScroll:true});if(notify)onSelect(value,target);return true;
+ };
+ for(const tab of buttons){
+  const click=()=>select(tab.dataset.uiTab,{focus:true});
+  const keydown=e=>{
+   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+   e.preventDefault();e.stopPropagation();const enabled=buttons.filter(button=>!button.disabled),index=enabled.indexOf(tab);
+   const next=e.key==='Home'?0:e.key==='End'?enabled.length-1:(index+(e.key==='ArrowRight'?1:-1)+enabled.length)%enabled.length;
+   if(enabled[next])select(enabled[next].dataset.uiTab,{focus:true});
+  };
+  tab.onclick=click;tab.onkeydown=keydown;
+  cleanups.push(()=>{if(tab.onclick===click)tab.onclick=null;if(tab.onkeydown===keydown)tab.onkeydown=null;});
+ }
+ return {select,disconnect(){cleanups.splice(0).forEach(remove=>remove());}};
+}
+function uiTabsStyles(){return `
+[data-ui-tabs]{display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid var(--divider-color,#ddd)}
+[data-ui-tabs] [role="tab"]{flex:1;justify-content:center;min-width:0;min-height:36px;padding:8px 3px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--secondary-text-color,#666);white-space:nowrap}
+[data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
+[data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
+[data-ui-tab-panel][hidden]{display:none!important}
+[data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
+[data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
+[data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
+[data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
+`;}
+
+
+const entityTabText=value=>typeof value==='string'?value.trim():'';
+const entityTabClamp=(value,fallback,min,max)=>value!==''&&value!=null&&Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
+function normalizeEntityTabs(input,maxDecimals=6){
+ const used=new Set();return (Array.isArray(input)?input:[]).filter(tab=>tab&&typeof tab==='object').map((tab,index)=>{
+  let id=/^custom-[a-z0-9_-]+$/.test(tab.id)?tab.id:'custom-'+(index+1);let n=1;while(used.has(id))id='custom-'+(index+1)+'-'+n++;used.add(id);
+  return {id,title:typeof tab.title==='string'?tab.title:'',show:tab.show!==false,entities:(Array.isArray(tab.entities)?tab.entities:[]).map(row=>{
+   row=typeof row==='string'?{entity:row}:row??{};
+   return {entity:entityTabText(row.entity),name:typeof row.name==='string'?row.name:'',attribute:entityTabText(row.attribute),unit:entityTabText(row.unit),show_unit:row.show_unit!==false,decimals:row.decimals==null||row.decimals===''?null:Math.round(entityTabClamp(row.decimals,2,0,maxDecimals))};
+  })};
+ });
+}
+
+function entityTabReading(row,hass){
+ const entity=hass?.states?.[row.entity];
+ if(!entity||entity.state==null||['','unknown','unavailable'].includes(String(entity.state).trim()))return '—';
+ const raw=row.attribute?entity.attributes?.[row.attribute]:entity.state;
+ if(raw==null||typeof raw==='object')return '—';
+ const unit=row.show_unit===false?'':row.unit||(row.attribute?'':entity.attributes?.unit_of_measurement);
+ let value=String(raw);
+ if(value.trim()!==''&&Number.isFinite(Number(value))){
+  try{value=new Intl.NumberFormat(hass?.locale?.language??hass?.language??'en',{maximumFractionDigits:row.decimals??2,...(row.decimals!=null?{minimumFractionDigits:row.decimals}:{})}).format(Number(value));}catch{value=String(Number(value));}
+ }else if(!row.attribute&&typeof hass?.formatEntityState==='function')return hass.formatEntityState(entity);
+ return value+(unit?' '+unit:'');
+}
+function entityTabContent(tab,hass,nl){
+ const rows=tab.entities.filter(row=>row.entity);
+ if(!rows.length)return '<p class="energy-detail-note">'+(nl?'Voeg entiteiten toe aan dit tabblad in de kaartconfiguratie.':'Add entities to this tab in the card configuration.')+'</p>';
+ return '<dl class="energy-grid-metrics">'+rows.map(row=>{
+  const label=row.name||hass?.states?.[row.entity]?.attributes?.friendly_name||row.entity;
+  return '<div><dt>'+uiEscape(label)+'</dt><dd><button type="button" class="energy-entity-value" data-entity="'+uiEscape(row.entity)+'">'+uiEscape(entityTabReading(row,hass))+'</button></dd></div>';
+ }).join('')+'</dl>';
+}
+
+// Adapter supplies _config, _hass and _setCustomTabs().
+const customTabsEditor=Base=>class extends Base{
+ _customAction(action,index,rowIndex){
+  const tabs=this._config.custom_tabs.map(tab=>({...tab,entities:tab.entities.map(row=>({...row}))}));
+  const move=(list,from,to)=>{if(to>=0&&to<list.length)[list[from],list[to]]=[list[to],list[from]];};
+  if(action==='tab-add'){let n=1;while(tabs.some(tab=>tab.id==='custom-'+n))n++;tabs.push({id:'custom-'+n,title:'',show:true,entities:[]});}
+  if(action==='tab-remove')tabs.splice(index,1);
+  if(action==='tab-up')move(tabs,index,index-1);if(action==='tab-down')move(tabs,index,index+1);
+  if(action==='row-add')tabs[index].entities.push({entity:''});
+  if(action==='row-remove')tabs[index].entities.splice(rowIndex,1);
+  if(action==='row-up')move(tabs[index].entities,rowIndex,rowIndex-1);if(action==='row-down')move(tabs[index].entities,rowIndex,rowIndex+1);
+  this._setCustomTabs(tabs);
+  if(action==='tab-add')this.shadowRoot.querySelector('.custom-tabs').lastElementChild.open=true;
+  if(action==='row-add')this.shadowRoot.querySelector('.custom-tabs').children[index].querySelector('.tab-entities').lastElementChild.open=true;
+ }
+ _renderCustomTabs(nl){
+  const container=this.shadowRoot.querySelector('.custom-tabs'),tabs=this._config.custom_tabs;
+  this.shadowRoot.querySelector('h3').textContent=nl?'Eigen tabbladen':'Custom tabs';
+  this.shadowRoot.querySelector('.tabs-help').textContent=nl?'Voeg je eigen tabbladen en entiteiten toe, ook in compacte weergave. Entiteiten tonen altijd hun actuele waarde.':'Add your own tabs and entities, including compact layouts. Entities always show their current value.';
+  const add=this.shadowRoot.querySelector('[data-action=tab-add]');add.textContent=nl?'Tabblad toevoegen':'Add tab';
+  const buttons=(actions)=>actions.map(([action,label])=>`<button type="button" data-action="${action}">${label}</button>`).join('');
+  for(const element of [...container.children])if(!tabs.some(tab=>tab.id===element.dataset.tabId))element.remove();
+  tabs.forEach((tab,index)=>{
+   let element=[...container.children].find(el=>el.dataset.tabId===tab.id);
+   if(!element){element=document.createElement('details');element.dataset.tabId=tab.id;element.innerHTML='<summary></summary><div class="tab-body"><ha-form class="tab-form"></ha-form><div class="tab-entities"></div><div class="actions">'+buttons([['row-add',nl?'Entiteit toevoegen':'Add entity'],['tab-up',nl?'Omhoog':'Move up'],['tab-down',nl?'Omlaag':'Move down'],['tab-remove',nl?'Tabblad verwijderen':'Remove tab']])+'</div></div>';
+    element.querySelector('.tab-form').addEventListener('value-changed',event=>{event.stopPropagation();const i=Number(element.dataset.index),next=this._config.custom_tabs.map((item,j)=>j===i?{...item,...event.detail.value}:item);this._setCustomTabs(next);});
+    element.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(!button)return;this._customAction(button.dataset.action,Number(element.dataset.index),Number(button.closest('[data-row]')?.dataset.row));});
+   }
+   element.dataset.index=index;
+   // Moving an already-positioned node disconnects its focused input.
+   if(container.children[index]!==element)container.insertBefore(element,container.children[index]??null);
+   element.querySelector('summary').textContent=tab.title||(nl?'Eigen tabblad ':'Custom tab ')+(index+1);
+   Object.assign(element.querySelector('.tab-form'),{hass:this._hass,data:tab,schema:[{name:'title',selector:{text:{}}},{name:'show',selector:{boolean:{}}}],computeLabel:item=>item.name==='title'?(nl?'Naam tabblad':'Tab name'):(nl?'Tabblad tonen':'Show tab')});
+   element.querySelector('[data-action=tab-up]').disabled=index===0;element.querySelector('[data-action=tab-down]').disabled=index===tabs.length-1;
+   const rows=element.querySelector('.tab-entities');while(rows.children.length>tab.entities.length)rows.lastElementChild.remove();
+   tab.entities.forEach((row,rowIndex)=>{
+    let rowElement=rows.children[rowIndex];
+    if(!rowElement){rowElement=document.createElement('details');rowElement.innerHTML='<summary></summary><div class="tab-body"><ha-form></ha-form><div class="actions">'+buttons([['row-up',nl?'Omhoog':'Move up'],['row-down',nl?'Omlaag':'Move down'],['row-remove',nl?'Verwijderen':'Remove']])+'</div></div>';rows.append(rowElement);
+     rowElement.querySelector('ha-form').addEventListener('value-changed',event=>{event.stopPropagation();const i=Number(element.dataset.index),r=Number(rowElement.dataset.row),next=this._config.custom_tabs.map((item,j)=>j===i?{...item,entities:item.entities.map((value,k)=>k===r?{...value,...event.detail.value}:value)}:item);this._setCustomTabs(next);});
+    }
+    rowElement.dataset.row=rowIndex;rowElement.querySelector('summary').textContent=row.name||this._hass.states?.[row.entity]?.attributes?.friendly_name||row.entity||(nl?'Nieuwe entiteit':'New entity');
+    const rowLabels={entity:nl?'Entiteit':'Entity',name:nl?'Label (optioneel)':'Label (optional)',attribute:nl?'Attribuut (optioneel)':'Attribute (optional)',unit:nl?'Eigen eenheid (optioneel)':'Custom unit (optional)',show_unit:nl?'Eenheid tonen':'Show unit',decimals:nl?'Decimalen (optioneel)':'Decimal places (optional)'};
+    Object.assign(rowElement.querySelector('ha-form'),{hass:this._hass,data:row,schema:[{name:'entity',selector:{entity:{}}},...['name','attribute'].map(name=>({name,selector:{text:{}}})),{name:'show_unit',selector:{boolean:{}}},...(row.show_unit?[{name:'unit',selector:{text:{}}}]:[]),{name:'decimals',selector:{number:{min:0,max:this._customTabMaxDecimals??6,step:1,mode:'box'}}}],computeLabel:item=>rowLabels[item.name]});
+    rowElement.querySelector('[data-action=row-up]').disabled=rowIndex===0;rowElement.querySelector('[data-action=row-down]').disabled=rowIndex===tab.entities.length-1;
+   });
+  });
+  const actionLabels={'row-add':nl?'Entiteit toevoegen':'Add entity','tab-up':nl?'Omhoog':'Move up','tab-down':nl?'Omlaag':'Move down','tab-remove':nl?'Tabblad verwijderen':'Remove tab','row-up':nl?'Omhoog':'Move up','row-down':nl?'Omlaag':'Move down','row-remove':nl?'Verwijderen':'Remove'};
+  for(const button of container.querySelectorAll('[data-action]'))button.textContent=actionLabels[button.dataset.action];
+ }
+};
+
+
+
+function uiPopup({id,title,label=title,closeLabel='Close',content='',className='',attrs={},closeAttrs={}}){
+ return `<div${uiAttributes({id,class:className||null,'data-ui-popup':'',popover:'auto',role:'dialog','aria-label':label,...attrs})}><div class="ui-popup-heading"><strong>${uiEscape(title)}</strong>${uiButton({variant:'close',content:'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>',label:closeLabel,attrs:{'data-ui-popup-close':'',...closeAttrs}})}</div>${content}</div>`;
+}
+function bindUIPopupPosition({trigger,popup,isRequested,onShow,ready,width=380,maxHeight=560,topBoundary=()=>8,align='end'}){
+ let active=true;
+ const position=()=>{
+  if(!active||!isRequested())return;
+  const box=trigger.getBoundingClientRect();
+  if(!box.width||!box.height){popup.style.visibility='hidden';return;}
+  const actualWidth=Math.min(width,window.innerWidth-16),minimumTop=Math.max(8,Math.min(topBoundary(),window.innerHeight-80));
+  popup.style.width=actualWidth+'px';popup.style.maxHeight=Math.min(maxHeight,window.innerHeight-minimumTop-8)+'px';
+  popup.style.visibility='';onShow?.();
+  const height=popup.getBoundingClientRect().height,below=window.innerHeight-box.bottom-8,above=box.top-8;
+  const left=align==='center'?(box.left+box.right-actualWidth)/2:box.right-actualWidth;
+  popup.style.left=Math.max(8,Math.min(left,window.innerWidth-actualWidth-8))+'px';
+  popup.style.top=Math.max(minimumTop,Math.min(below>=height||below>=above?box.bottom+6:box.top-height-6,window.innerHeight-height-8))+'px';
+ };
+ if(ready?.then)ready.then(position,()=>{});
+ const observer=typeof ResizeObserver==='function'?new ResizeObserver(position):null;
+ observer?.observe(trigger);
+ return {position,disconnect(){active=false;observer?.disconnect();}};
+}
+// Domain state lives in callbacks; this controller also works without a card host.
+function bindUIPopup({trigger,popup,container=popup,ready,isRequested,isCurrent=()=>true,beforeOpen=()=>{},onOpen=()=>{},onClose=()=>{},onShown=()=>{},onToggle=()=>{},focusTarget,closeWhenAnchorHidden=false,keepOpenOnOutside=()=>false,topBoundary,align}){
+ let requested=false,pending=false,focusPending=false,pointerWasOpen;
+ const wantsOpen=isRequested??(()=>requested),native=typeof popup.showPopover==='function';
+ const isOpen=()=>native?popup.matches(':popover-open'):popup.hasAttribute('data-fallback-open');
+ trigger.setAttribute('aria-haspopup','dialog');if(popup.id)trigger.setAttribute('aria-controls',popup.id);trigger.setAttribute('aria-expanded',String(isOpen()));
+ const cleanups=[],listen=(target,type,handler,capture=false)=>{target?.addEventListener?.(type,handler,capture);cleanups.push(()=>target?.removeEventListener?.(type,handler,capture));};
+ const property=(target,key,handler)=>{if(!target)return;target[key]=handler;cleanups.push(()=>{if(target[key]===handler)target[key]=null;});};
+ const closeButton=popup.querySelector('[data-ui-popup-close]');
+ const placement=bindUIPopupPosition({trigger,popup,ready,topBoundary,align,isRequested:wantsOpen,onShow:()=>{
+  pending=false;if(native){if(!isOpen())popup.showPopover();}else popup.setAttribute('data-fallback-open','');
+  if(focusPending){(focusTarget?.()??closeButton)?.focus({preventScroll:true});focusPending=false;}
+  onShown();
+ }});
+ const close=(focus=false)=>{
+  requested=false;pending=false;focusPending=false;onClose();trigger.setAttribute('aria-expanded','false');
+  if(native){if(isOpen())popup.hidePopover();}else popup.removeAttribute('data-fallback-open');
+  if(focus)trigger.focus({preventScroll:true});
+ };
+ const open=(focus=true)=>{beforeOpen();requested=true;pending=true;focusPending=focus;onOpen(focus);trigger.setAttribute('aria-expanded','true');placement.position();};
+ property(trigger,'onpointerdown',()=>{pointerWasOpen=wantsOpen();});
+ property(trigger,'onpointercancel',()=>{pointerWasOpen=undefined;});
+ property(trigger,'onclick',()=>{const wasOpen=pointerWasOpen??wantsOpen();pointerWasOpen=undefined;wasOpen?close(true):open();});
+ property(closeButton,'onclick',()=>close(true));
+ listen(popup,'keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close(true);}});
+ listen(popup,'toggle',e=>{if(!isCurrent())return;const opened=e.newState==='open';if(!opened){if(wantsOpen())onClose();pending=false;focusPending=false;}requested=opened;trigger.setAttribute('aria-expanded',String(opened));onToggle(opened);});
+ listen(window,'resize',()=>{if(wantsOpen()){if(closeWhenAnchorHidden&&trigger.getClientRects?.().length===0)close();else placement.position();}});
+ listen(window,'scroll',e=>{if(isOpen()&&!e.composedPath().includes(popup))close();},true);
+ listen(document,'pointerdown',e=>{if((!native||popup.getAttribute?.('popover')==='manual'||pending)&&(isOpen()||wantsOpen())&&!e.composedPath().includes(container)&&!keepOpenOnOutside(e))close();});
+ return {open,close,isOpen,position:placement.position,disconnect(){placement.disconnect();cleanups.splice(0).forEach(remove=>remove());}};
+}
+function uiPopupStyles(){return uiSurfaceStyles('[data-ui-popup]')+`
+[data-ui-popup]{display:none;position:fixed;inset:auto;margin:0;padding:12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;z-index:20;max-width:calc(100vw - 16px);border:0;border-radius:8px;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit;font-size:12px;line-height:1.35}
+[data-ui-popup]:popover-open,[data-ui-popup][data-fallback-open]{display:block}
+[data-ui-popup] [hidden]{display:none!important}
+[data-ui-popup]>:last-child{margin-block-end:0}
+.ui-popup-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px}
+.ui-popup-heading>strong{font-size:14px;font-weight:600}
+.ui-popup-heading [data-ui-popup-close]{display:grid;place-items:center;width:30px;height:30px;min-height:30px;padding:0;line-height:1;flex:none}
+.ui-popup-heading [data-ui-popup-close] svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+`;}
+
+
+
+
+// Shared markup stays in each card's shadow root: native links and existing
+// data-zoom handlers work without cross-bundle custom-element registration.
+const headerEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function bindCardPopupPosition(host,trigger,popup,isRequested,show){
+ return bindUIPopupPosition({trigger,popup,isRequested,onShow:show,ready:host.shadowRoot.querySelector('ha-card')?.updateComplete});
+}
+// Native toggle events are asynchronous. Clear the other popup's restore
+// state synchronously, also for browsers using the attribute fallback.
+function closeOtherCardPopups(host,kind){
+ const period=kind==='period',root=host.shadowRoot;
+ if(period){host._insightOpen=null;host._insightPending=null;host._insightFocus=null;}
+ else{host._periodMenuOpen=false;host._periodMenuPending=false;host._periodFocus=null;}
+ for(const panel of root.querySelectorAll?.(period?'.insight-popup':'.period-menu')??[]){
+  if(typeof panel.showPopover==='function'){if(panel.matches(':popover-open'))panel.hidePopover();}
+  else panel.removeAttribute('data-fallback-open');
+ }
+ for(const trigger of root.querySelectorAll?.(period?'[data-insight]':'[data-period="menu"]')??[])trigger.setAttribute('aria-expanded','false');
+}
+function cardHeaderIcon(name){
+ const paths={in:'M5 12h14M12 5v14',out:'M5 12h14',reset:'M3 10a9 9 0 1 1 2.6 8.4M3 4v6h6',previous:'m15 6-6 6 6 6',next:'m9 6 6 6-6 6',info:'M12 17v-5M12 8h.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',history:'M14 3h7v7M21 3 10 14M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5',calendar:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z',down:'m6 9 6 6 6-6'};
+ return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${paths[name]}"/></svg>`;
+}
+function cardHeader({title,showTitle=true,ready=false,historyUrl,language='en',periods={},zoomState={in:true,out:true,reset:true,zoomed:false},information=''}){
+ const nl=language.startsWith('nl'),label=nl?['Inzoomen','Uitzoomen','Zoom herstellen','Open in Home Assistant Geschiedenis']:['Zoom in','Zoom out','Reset zoom','Open in Home Assistant History'];
+ const zoom=ready?`<div class="zoom-controls" role="group" aria-label="Zoom">${['out','in','reset'].map(action=>uiButton({content:cardHeaderIcon(action),disabled:!zoomState[action],title:label[['in','out','reset'].indexOf(action)],label:label[['in','out','reset'].indexOf(action)],attrs:{'data-zoom':action}})).join('')}</div>`:'';
+ const group=periods.picker||periods.navigation?`<div class="chart-controls" role="group" aria-label="${nl?'Tijdvak':'Timeframe'}">${periods.picker??''}${periods.navigation??''}</div>`:'';
+ const showZoomStatus=zoomState.zoomed&&!periods.picker;
+ return `<header class="card-header">${showTitle&&title?`<h2>${headerEscape(title)}</h2>`:''}<div class="header-actions">${group}${zoom}<div class="chart-links" role="group" aria-label="${nl?'Geschiedenis en informatie':'History and information'}">${uiButton({href:historyUrl??'',className:'history-link',content:cardHeaderIcon('history'),title:label[3],label:label[3]})}${information}</div></div></header>${showZoomStatus?`<div class="chart-context"><div class="chart-range"><span class="zoom-status">${nl?'Ingezoomd':'Zoomed in'}</span></div></div>`:''}`;
+}
+function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+uiSurfaceStyles('.chart-controls,.zoom-controls,.chart-links')+`
+.card-header{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;min-height:32px;flex:none;margin:-6px -4px 10px 0}
+.card-header h2{flex:1 1 110px;min-width:0;margin:4.75px 0 0;font-size:18px;line-height:1.25;font-weight:650;letter-spacing:-.01em;overflow-wrap:anywhere}
+.header-actions{--chart-action-gap:8px;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--chart-action-gap);flex:0 1 auto;min-width:0;max-width:100%;margin-inline-start:auto}
+.chart-controls{display:flex;align-items:center;gap:0;min-width:0;max-width:100%}
+.chart-links{display:flex;align-items:center;gap:0;flex:none}
+.zoom-controls{display:flex;gap:0;position:relative}
+.chart-controls,.zoom-controls,.chart-links{background:var(--secondary-background-color,#eee);border:0;border-radius:8px}
+.chart-controls>[data-period="now"]{width:36px}
+.chart-controls>.period-controls{position:relative;margin-inline-end:8px;padding-inline-end:8px}
+.chart-controls>.period-controls::after{content:"";position:absolute;inset-inline-end:0;top:8px;height:16px;width:1px;background:var(--divider-color,#ddd)}
+.header-actions svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+`;}
+
+// Calendar periods use the Home Assistant timezone, including DST boundaries.
+const periodZoneFormats=new Map();
+function periodLocalParts(t,zone){
+ let format=periodZoneFormats.get(zone);
+ if(!format){format=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});periodZoneFormats.set(zone,format);}
+ return Object.fromEntries(format.formatToParts(t).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
+}
+function periodLocalEpoch(t,zone){const p=periodLocalParts(t,zone);return Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second);}
+function periodMidnight(nominal,zone){
+ let t=nominal;for(let i=0;i<6;i++){const next=nominal-(periodLocalEpoch(t,zone)-t);if(next===t)return t;t=next;}
+ // Midnight can be skipped by a timezone transition. Use the first valid
+ // instant of that local date rather than oscillating across the transition.
+ let low=nominal-36*3600000,high=nominal+36*3600000;
+ while(high-low>1000){const mid=Math.floor((low+high)/2000)*1000,p=periodLocalParts(mid,zone);if(Date.UTC(p.year,p.month-1,p.day)>=nominal)high=mid;else low=mid;}
+ return high;
+}
+function calendarDayStart(key,zone='UTC'){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(key))return NaN;
+ const nominal=Date.parse(`${key}T00:00:00Z`);
+ return Number.isFinite(nominal)&&new Date(nominal).toISOString().slice(0,10)===key?periodMidnight(nominal,zone||'UTC'):NaN;
+}
+function graphPeriodBounds(t,period,zone='UTC'){
+ zone ||= 'UTC';const p=periodLocalParts(t,zone),size={minute:60000,quarter_hour:900000,hour:3600000}[period];
+ if(size){const local=Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second),a=t-(local%size)-(t%1000);return [a,a+size];}
+ let nominal=Date.UTC(p.year,p.month-1,period==='month'?1:p.day);let next;
+ if(period==='week'){const day=new Date(nominal).getUTCDay();nominal-=((day+6)%7)*86400000;next=nominal+7*86400000;}
+ else if(period==='month')next=Date.UTC(p.year,p.month,1);
+ else next=nominal+86400000;
+ return [periodMidnight(nominal,zone),periodMidnight(next,zone)];
+}
+const periodCalendarModes=['today','week','month','quarter','year'];
+const periodPresetHours={'1h':1,'6h':6,'12h':12,'24h':24,'48h':48,'7d':168,'14d':336,'30d':720,'90d':2160,'365d':8760};
+function periodDateTime(t,zone='UTC'){
+ const p=periodLocalParts(t,zone),pad=n=>String(n).padStart(2,'0');
+ return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+function parsePeriodDateTime(value,zone='UTC',edge='start',previous){
+ if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))return NaN;
+ if(Number.isFinite(previous)&&periodDateTime(previous,zone)===value)return previous;
+ const nominal=Date.parse(value+'Z');if(!Number.isFinite(nominal)||periodDateTime(nominal,'UTC')!==value)return NaN;
+ // Collect the offsets on both sides of a transition. Reject skipped local
+ // times; repeated times include both occurrences unless editing an existing bound.
+ const candidates=new Set();
+ for(let h=-48;h<=48;h+=6){const sample=nominal+h*3600000,offset=periodLocalEpoch(sample,zone)-sample,candidate=nominal-offset;if(periodDateTime(candidate,zone)===value)candidates.add(candidate);}
+ const times=[...candidates].sort((a,b)=>a-b);return times.length?(edge==='end'?times.at(-1):times[0]):NaN;
+}
+function chooseCustomGraphPeriod(host,start,end){
+ if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start||end-start>366*86400000)return false;
+ resetGraphPeriod(host);host._periodMode='custom';host._periodHours=(end-start)/3600000;host._periodEnd=end;
+ publishTimeframe(host);host._reloadPeriod();return true;
+}
+function timeframeSyncConfig(config,{draft=false}={}){
+ if(!draft){
+  if(config.sync_timeframe!==undefined&&typeof config.sync_timeframe!=='boolean')throw Error('sync_timeframe must be a boolean. / Tijdvak synchroniseren moet aan of uit zijn.');
+  for(const key of ['hover_sync_group','timeframe_sync_group'])if(config[key]!=null&&typeof config[key]!=='string')throw Error(`${key} must be text. / De synchronisatiegroep moet tekst zijn.`);
+ }
+ return {sync_timeframe:config.sync_timeframe??false,hover_sync_group:config.hover_sync_group??config.timeframe_sync_group??''};
+}
+function timeframeGroup(host){return host._config?.sync_timeframe===true?((host._config.hover_sync_group??host._config.timeframe_sync_group)?.trim()||'default'):null;}
+function timeframeGroups(){
+ const root=globalThis.window??globalThis,key=Symbol.for('eleven-cards.timeframe-sync.v1');
+ return root[key]??=new Map();
+}
+function applyTimeframe(host,selection){
+ // Default is a group-wide reset to each card's own configured range (or
+ // native price window), rather than a copy of the sender's hours.
+ if(selection.mode==='configured'&&selection.offset===0){resetGraphPeriod(host);return;}
+ host._sharedTimeframe=selection;
+ Object.assign(host,{_periodMode:selection.mode,_periodHours:selection.hours,_periodEnd:selection.end,_periodOffset:selection.offset,_periodAnchor:selection.anchor});
+}
+function disconnectTimeframeSync(host){
+ host._disconnectTimeframeSync?.();host._disconnectTimeframeSync=null;
+}
+function connectTimeframeSync(host){
+ disconnectTimeframeSync(host);
+ const group=timeframeGroup(host);if(group===null||!host._connected)return;
+ const groups=timeframeGroups();let entry=groups.get(group);
+ if(!entry){entry={selection:null,listeners:new Set()};groups.set(group,entry);}
+ const receive=(selection,source)=>{
+  if(source===host||host._sharedTimeframe===selection)return;
+  applyTimeframe(host,selection);host._reloadPeriod();
+ };
+ entry.listeners.add(receive);
+ host._disconnectTimeframeSync=()=>entry.listeners.delete(receive);
+ // Joining never publishes this card's default over an existing selection.
+ if(entry.selection)applyTimeframe(host,entry.selection);
+}
+function publishTimeframe(host){
+ const group=timeframeGroup(host);if(group===null||!host._connected)return;
+ const entry=timeframeGroups().get(group);if(!entry)return;
+ const selection={group,mode:host._periodMode,hours:host._periodHours??host._config.hours_to_show,
+  end:host._periodEnd,offset:host._periodOffset,anchor:host._periodAnchor,zone:host._hass?.config?.time_zone||'UTC',at:Date.now()};
+ selection.range=localGraphPeriodRange(host,selection.at);
+ entry.selection=selection;applyTimeframe(host,selection);
+ for(const receive of entry.listeners)receive(selection,host);
+}
+function resetGraphPeriod(host){host._sharedTimeframe=null;host._periodMode='configured';host._periodHours=null;host._periodEnd=null;host._periodOffset=0;host._periodAnchor=null;host._periodMenuOpen=false;host._periodMenuPending=false;host._periodCustomDraft=null;host._periodTab=null;host._insightPending=null;}
+function graphPeriodRange(host,now=Date.now()){
+ const shared=host._sharedTimeframe;
+ if(shared&&timeframeGroup(host)===shared.group){
+  // One clock and timezone for the whole group, including separate bundles.
+  // Live selections advance together on the minute; historical ranges stay fixed.
+  if(shared.offset===0&&shared.end==null&&(Math.floor(now/60000)!==Math.floor(shared.at/60000))){
+   shared.at=now;shared.range=localGraphPeriodRange({_periodMode:shared.mode,_periodHours:shared.hours,_periodOffset:0,_hass:{config:{time_zone:shared.zone}}},now);
+  }
+  return {...shared.range};
+ }
+ return localGraphPeriodRange(host,now);
+}
+function localGraphPeriodRange(host,now){
+ const mode=host._periodMode,offset=host._periodOffset??0;
+ if(periodCalendarModes.includes(mode)){
+  const zone=host._hass?.config?.time_zone||'UTC',p=periodLocalParts(host._periodAnchor??now,zone);
+  let nominal,finishNominal;
+  if(mode==='week'){
+   nominal=Date.UTC(p.year,p.month-1,p.day);nominal+=(offset*7-(new Date(nominal).getUTCDay()+6)%7)*86400000;finishNominal=nominal+7*86400000;
+  }else if(mode==='month'||mode==='quarter'){
+   const size=mode==='quarter'?3:1,month=(mode==='quarter'?Math.floor((p.month-1)/3)*3:p.month-1)+offset*size;
+   nominal=Date.UTC(p.year,month,1);finishNominal=Date.UTC(p.year,month+size,1);
+  }else if(mode==='year'){nominal=Date.UTC(p.year+offset,0,1);finishNominal=Date.UTC(p.year+offset+1,0,1);}
+  else{nominal=Date.UTC(p.year,p.month-1,p.day+offset);finishNominal=nominal+86400000;}
+  const start=periodMidnight(nominal,zone),finish=periodMidnight(finishNominal,zone);
+  return {start,end:Math.max(start+1,Math.min(now,finish))};
+ }
+ const end=host._periodEnd??now;
+ return {start:end-(host._periodHours??host._config.hours_to_show)*3600000,end};
+}
+function chooseGraphPeriod(host,value){
+ const calendar=value==='configured'||periodCalendarModes.includes(value),hours=periodPresetHours[value]??Number(value);
+ if(!calendar&&(!Number.isFinite(hours)||hours<1||hours>8760))return;
+ resetGraphPeriod(host);
+ host._periodMode=calendar?value:Object.entries(periodPresetHours).find(([,h])=>h===hours)?.[0]??String(value);
+ if(!calendar)host._periodHours=hours;
+ publishTimeframe(host);
+ return host._reloadPeriod();
+}
+function moveGraphPeriod(host,direction){
+ if(![-1,0,1].includes(direction))return;
+ if(host._periodMode==='custom'){
+  if(direction===0){host._periodEnd=null;host._periodOffset=0;}
+  else{const end=(host._periodEnd??Date.now())+direction*host._periodHours*3600000;host._periodEnd=direction>0?Math.min(Date.now(),end):end;host._periodOffset=(host._periodOffset??0)+direction;}
+  host._periodCustomDraft=null;host._periodTab=null;host._sharedTimeframe=null;publishTimeframe(host);return host._reloadPeriod();
+ }
+ if(direction===0){host._periodOffset=0;host._periodEnd=null;host._periodAnchor=null;}
+ else{
+  const previous=host._periodOffset??0;
+  const calendar=periodCalendarModes.includes(host._periodMode);
+  if(previous===0)host._periodAnchor=calendar?Date.now():host._status==='ready'?(host._end??Date.now()):Date.now();
+  host._periodOffset=Math.min(0,previous+direction);
+  if(host._periodOffset===0)host._periodAnchor=null;
+  if(!calendar){
+   host._periodEnd=host._periodOffset===0?null:host._periodAnchor+host._periodOffset*(host._periodHours??host._config.hours_to_show)*3600000;
+  }
+ }
+ host._sharedTimeframe=null;
+ publishTimeframe(host);
+ return host._reloadPeriod();
+}
+
+
+
+
+
+
+const periodEscape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function compactPeriodName({start,end,mode,past,zoomed,hours,name,locale,zone}){
+ const format=options=>new Intl.DateTimeFormat(locale,{timeZone:zone,...options});
+ const dates=format({year:'numeric',month:'numeric',day:'numeric'});
+ const parts=t=>Object.fromEntries(dates.formatToParts(t).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
+ const a=parts(start),b=parts(end),currentYear=parts(Date.now()).year;
+ const dayMonth=format({day:'numeric',month:'short'}),dayYear=format({day:'numeric',month:'short',year:'numeric'});
+ const sameDay=a.year===b.year&&a.month===b.month&&a.day===b.day;
+ const dateRange=(from,to)=>{
+  const first=parts(from),last=parts(to),year=first.year!==currentYear?` ${first.year}`:'';
+  if(first.year!==last.year)return `${dayYear.format(from)}–${dayYear.format(to)}`;
+  if(first.month===last.month)return `${first.day===last.day?'':`${first.day}–`}${dayMonth.format(to)}${year}`;
+  return `${dayMonth.format(from)}–${dayMonth.format(to)}${year}`;
+ };
+ if(mode==='custom'||zoomed||(past&&!['today','week','month','quarter','year'].includes(mode)&&hours<24)){
+  const time=format({hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+  if(sameDay){
+   const offsets=format({timeZoneName:'shortOffset'}),offset=t=>offsets.formatToParts(t).find(p=>p.type==='timeZoneName')?.value;
+   const clock=offset(start)!==offset(end)?format({hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'shortOffset'}):time;
+   return `${(a.year===currentYear?dayMonth:dayYear).format(start)} · ${clock.format(start)}–${clock.format(end)}`;
+  }
+  if(end-start<48*3600000)return `${(a.year===b.year&&a.year===currentYear?dayMonth:dayYear).format(start)} ${time.format(start)}–${(a.year===b.year&&a.year===currentYear?dayMonth:dayYear).format(end)} ${time.format(end)}`;
+  return dateRange(start,end);
+ }
+ if(mode==='month'){const month=format({month:'long',year:'numeric'}).format(start);return month[0].toLocaleUpperCase(locale)+month.slice(1);}
+ if(mode==='quarter')return `Q${Math.ceil(a.month/3)} ${a.year}`;
+ if(mode==='year')return String(a.year);
+ if(mode==='week')return dateRange(start,Math.max(start,end-1));
+ if(mode==='today')return past?dateRange(start,Math.max(start,end-1)):name;
+ if(past)return `${dateRange(start,end)} · ${hours>=168&&hours%24===0?`${hours/24} ${locale==='nl-NL'?'dagen':'days'}`:`${hours} ${locale==='nl-NL'?'uur':hours===1?'hour':'hours'}`}`;
+ return name;
+}
+function periodControls(host,language='en',{popupNavigation=false,tabVariant=''}={}){
+ const active=host.shadowRoot.activeElement;
+ if(!host._periodMenuPending)host._periodFocus=null;
+ if(active?.closest?.('.header-actions'))host._periodFocus=active.dataset.periodTab!=null?`tab:${active.dataset.periodTab}`:active.dataset.customField!=null?`custom:${active.dataset.customField}`:active.dataset.periodOption!=null?`option:${active.dataset.periodOption}`:active.dataset.zoom!=null?`zoom:${active.dataset.zoom}`:active.classList.contains('history-link')?'history':active.dataset.period;
+ if(host._config.show_navigation===false){host._periodMenuOpen=false;host._periodMenuPending=false;return {};}
+ const previousMenu=host.shadowRoot.querySelector('.period-menu');
+ if(previousMenu){
+  if(!host._periodMenuPending)host._periodMenuScroll=previousMenu.scrollTop;
+  host._periodMenuOpen=!!host._periodMenuPending||(typeof previousMenu.showPopover==='function'?previousMenu.matches(':popover-open'):previousMenu.hasAttribute('data-fallback-open'));
+ }
+ const nl=language.startsWith('nl'),label=(en,nlText)=>nl?nlText:en,mode=host._periodMode??'configured',past=(host._periodOffset??0)<0;
+ const standard=label(`Default (${host._config.hours_to_show} hours)`,`Standaard (${host._config.hours_to_show} uur)`);
+ const rolling=[['1h',1],['6h',6],['12h',12],['24h',24],['48h',48],['7d',168],['14d',336],['30d',720],['90d',2160],['365d',8760]].map(([id,hours])=>[id,hours<168?label(`${hours} ${hours===1?'hour':'hours'}`,`${hours} uur`):label(`${hours/24} days`,`${hours/24} dagen`),hours<168?`${hours} ${nl?'u':'h'}`:`${hours/24} d`]);
+ const calendar=[['today',label('Today','Vandaag'),label('Day','Dag')],['week',label('This week','Deze week'),label('Week','Week')],['month',label('This month','Deze maand'),label('Month','Maand')],['quarter',label('This quarter','Dit kwartaal'),label('Quarter','Kwartaal')],['year',label('This year','Dit jaar'),label('Year','Jaar')]];
+ const calendarChoice=calendar.find(([id])=>id===mode);
+ if(!calendarChoice&&mode!=='configured'&&mode!=='custom'&&host._periodHours!=null&&!rolling.some(([id])=>id===mode))rolling.push([mode,label(`${host._periodHours} hours`,`${host._periodHours} uur`)]);
+ const selectedStandard=label(`Default (${host._periodHours??host._config.hours_to_show} hours)`,`Standaard (${host._periodHours??host._config.hours_to_show} uur)`);
+ const name=mode==='configured'?selectedStandard:calendarChoice?.[past?2:1]??rolling.find(([id])=>id===mode)?.[1]??standard;
+ const tabIds=['rolling','calendar','custom'];
+ const selectedTab=host._periodMenuOpen&&tabIds.includes(host._periodTab)?host._periodTab:mode==='custom'?'custom':calendarChoice?'calendar':'rolling';
+ host._periodTab=selectedTab;
+ const choice=([value,text,compact])=>uiButton({variant:'surface',content:`<span>${periodEscape(compact??text)}</span><span aria-hidden="true">${value===mode?'✓':''}</span>`,attrs:{role:'menuitemradio','aria-checked':value===mode,tabindex:-1,'aria-label':text,title:text,'data-period-option':value}});
+
+ const {start,end}=host._status==='ready'&&Number.isFinite(host._viewStart)&&Number.isFinite(host._viewEnd)?{start:host._viewStart,end:host._viewEnd}:graphPeriodRange(host);
+ const locale=nl?'nl-NL':'en-GB',zone=host._hass?.config?.time_zone||'UTC';
+ const zoomed=host._status==='ready'&&(start>host._start+1||end<host._end-1);
+ const compactName=compactPeriodName({start,end,mode,past,zoomed,hours:host._periodHours??host._config.hours_to_show,name,locale,zone});
+ const format=new Intl.DateTimeFormat(locale,{timeZone:zone,day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'shortOffset'});
+ const range=`${format.format(start)} – ${format.format(end)}`;
+ const customRange=graphPeriodRange(host),draft=host._periodCustomDraft??{start:periodDateTime(customRange.start,zone),end:periodDateTime(customRange.end,zone)};
+ const canGoNext=mode==='custom'?host._periodEnd!=null&&customRange.end<Date.now():past;
+ const custom=`<form data-custom-range><div class="period-custom-fields">${[['start',label('Start','Begin')],['end',label('End','Einde')]].map(([key,text])=>`<label>${text}<input type="datetime-local" name="${key}" data-custom-field="${key}" value="${periodEscape(draft[key])}" step="60" required></label>`).join('')}</div><p class="period-custom-zone">${periodEscape(zone)}</p><p class="period-custom-error" role="alert"${draft.error?'':' hidden'}>${periodEscape(draft.error??'')}</p>${uiButton({variant:'surface',type:'submit',text:label('Apply','Toepassen'),attrs:{'data-custom-field':'apply'}})}</form>`;
+ const contents=uiTabs({id:'eleven-period',variant:tabVariant,label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
+  {value:'rolling',label:label('Last','Afgelopen'),content:`<div class="period-options" role="menu" aria-label="${label('Last','Afgelopen')}">${rolling.map(choice).join('')}</div>`},
+  {value:'calendar',label:label('Calendar','Kalender'),content:`<div class="period-options period-calendar" role="menu" aria-label="${label('Calendar','Kalender')}">${calendar.map(([id,text])=>choice([id,text])).join('')}</div>`},
+  {value:'custom',label:label('Custom range','Eigen bereik'),content:custom,className:'period-custom'}
+ ].map(item=>({...item,tabAttrs:{'data-period-tab':item.value},panelAttrs:{'data-period-panel':item.value}}))});
+ const navigation=[['previous',label('Previous period','Vorige periode')],['now',label('Return to the current period','Terug naar de huidige periode')],['next',label('Next period','Volgende periode')]].map(([key,title])=>uiButton({text:key==='now'?label('Now','Nu'):'',content:key==='now'?undefined:cardHeaderIcon(key),disabled:key==='next'&&!canGoNext,title,label:title,attrs:{'data-period':key}})).join('');
+ const popup=uiPopup({id:'eleven-period-menu',className:'period-menu',title:label('Timeframe','Tijdvak'),label:label('Choose a period','Kies een periode'),closeLabel:label('Close','Sluiten'),closeAttrs:{'data-period':'close'},content:`<div class="period-current-range">${periodEscape(range)}${zoomed?`<span class="zoom-status">${label('Zoomed in','Ingezoomd')}</span>`:''}</div><div class="period-default" role="menu" aria-label="${label('Default','Standaard')}">${choice(['configured',standard])}</div>${contents}${popupNavigation?`<div class="period-menu-navigation" role="group" aria-label="${label('Period navigation','Periode navigeren')}">${navigation}</div>`:''}`});
+ const trigger=uiButton({className:'period-trigger',content:`<span>${periodEscape(compactName)}</span>${cardHeaderIcon('down')}`,attrs:{'data-period':'menu','aria-haspopup':'dialog','aria-controls':'eleven-period-menu','aria-expanded':host._periodMenuOpen===true,title:range,'aria-label':label('Timeframe','Tijdvak')+': '+compactName,'aria-description':range+(zoomed?'. '+label('Zoomed in','Ingezoomd'):'')}});
+
+ return {picker:`<div class="period-controls">${trigger}${popup}</div>`,navigation};
+
+}
+function restorePeriodFocus(host,items=[]){
+ const key=host._periodFocus;if(!key)return;const root=host.shadowRoot;
+ const target=key.startsWith('tab:')?root.querySelector(host._periodMenuOpen?'[data-period-tab="'+key.slice(4)+'"]':'[data-period="menu"]'):key.startsWith('custom:')&&host._periodMenuOpen?root.querySelector('[data-custom-field="'+key.slice(7)+'"]'):key==='history'?root.querySelector('.history-link'):key.startsWith('zoom:')?root.querySelector('[data-zoom="'+key.slice(5)+'"]'):key.startsWith('option:')&&host._periodMenuOpen?items.find(item=>item.dataset.periodOption===key.slice(7)):root.querySelector('[data-period="'+(key.startsWith('option:')?'menu':key)+'"]');
+ (target?.disabled?root.querySelector('[data-period="now"], [data-zoom="in"]:not(:disabled), .history-link'):target)?.focus?.({preventScroll:true});host._periodFocus=null;
+}
+function disconnectPeriodControls(host,preserveState=false){host._periodMenuCleanup?.();host._periodMenuCleanup=null;if(!preserveState)host._periodMenuPending=false;}
+function bindPeriodControls(host){
+ disconnectPeriodControls(host,true);
+ const root=host.shadowRoot,nav=root.querySelector('.period-controls');if(!nav){restorePeriodFocus(host);return;}
+ const menu=nav.querySelector('.period-menu'),trigger=nav.querySelector('[data-period="menu"]'),items=[...menu.querySelectorAll('[data-period-option]')];
+ const nl=(host._hass?.language??'en').startsWith('nl'),label=(en,nlText)=>nl?nlText:en;
+ const form=menu.querySelector('form[data-custom-range]'),tabs=[...menu.querySelectorAll('[data-period-tab]')],panels=[...menu.querySelectorAll('[data-period-panel]')];
+ const visibleItems=()=>items.filter(item=>!item.closest?.('[data-period-panel]')?.hidden);
+ const updateOptionFocus=()=>{
+  const visible=visibleItems();for(const item of items)item.tabIndex=-1;
+  const standard=visible.find(item=>item.dataset.periodOption==='configured');if(standard)standard.tabIndex=0;
+  const options=visible.filter(item=>item!==standard),selected=options.find(item=>item.getAttribute('aria-checked')==='true')??options[0];if(selected)selected.tabIndex=0;
+ };
+ updateOptionFocus();
+ const cleanups=[];
+ const listen=(target,event,handler,capture=false)=>{target?.addEventListener?.(event,handler,capture);cleanups.push(()=>target?.removeEventListener?.(event,handler,capture));};
+ host._periodMenuCleanup=()=>cleanups.splice(0).forEach(remove=>remove());
+ let scrollPending=false;
+ const controller=bindUIPopup({trigger,popup:menu,container:nav,ready:root.querySelector('ha-card')?.updateComplete,
+  isRequested:()=>host._periodMenuOpen,isCurrent:()=>root.querySelector('.period-menu')===menu,
+  beforeOpen:()=>closeOtherCardPopups(host,'period'),
+  onOpen:focus=>{host._periodMenuOpen=true;host._periodMenuPending=true;scrollPending=!focus;},
+  onClose:()=>{host._periodMenuOpen=false;host._periodMenuPending=false;},
+  onToggle:open=>{host._periodMenuOpen=open;},
+  focusTarget:()=>visibleItems().find(item=>item.getAttribute('aria-checked')==='true')??tabs.find(tab=>tab.getAttribute('aria-selected')==='true')??items[0],
+  onShown:()=>{host._periodMenuPending=false;restorePeriodFocus(host,items);if(scrollPending){menu.scrollTop=host._periodMenuScroll??0;scrollPending=false;}}
+ });
+ const {open,close,position}=controller;cleanups.push(()=>controller.disconnect());
+ trigger.onkeydown=e=>{if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();open();if(e.key==='ArrowUp')visibleItems().at(-1)?.focus({preventScroll:true});}};
+ for(const item of items)item.onclick=()=>{close(true);chooseGraphPeriod(host,item.dataset.periodOption);};
+ const tabController=bindUITabs({tabs,panels,onSelect:value=>{
+  host._periodTab=value;updateOptionFocus();host._periodMenuScroll=0;menu.scrollTop=0;position();
+ }});cleanups.push(()=>tabController.disconnect());
+ if(form?.tagName==='FORM'){
+  const fields=Object.fromEntries(['start','end'].map(key=>[key,form.elements.namedItem(key)]));
+  const readDraft=()=>host._periodCustomDraft={start:fields.start.value,end:fields.end.value};
+  listen(form,'input',()=>{readDraft();const error=form.querySelector('.period-custom-error');error.hidden=true;error.textContent='';});
+  listen(form,'submit',e=>{
+   e.preventDefault();const draft=readDraft(),zone=host._hass?.config?.time_zone||'UTC',previous=graphPeriodRange(host);
+   const start=parsePeriodDateTime(draft.start,zone,'start',previous.start),end=parsePeriodDateTime(draft.end,zone,'end',previous.end);
+   let message;
+   if(!Number.isFinite(start)||!Number.isFinite(end))message=label('Choose valid dates and times in the displayed timezone.','Kies geldige datums en tijden in de getoonde tijdzone.');
+   else if(end<=start)message=label('End must be after start.','Einde moet na begin liggen.');
+   else if(end-start>366*86400000)message=label('Choose a range of at most 366 days.','Kies een bereik van maximaal 366 dagen.');
+   if(message){draft.error=message;const error=form.querySelector('.period-custom-error');error.textContent=message;error.hidden=false;position();return;}
+   close(true);chooseCustomGraphPeriod(host,start,end);
+  });
+ }
+ menu.onkeydown=e=>{
+  if(e.target?.closest?.('.period-custom, .period-tabs'))return;
+  if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){
+   const visible=visibleItems();if(!visible.length)return;e.preventDefault();const index=visible.indexOf(host.shadowRoot.activeElement),next=e.key==='Home'?0:e.key==='End'?visible.length-1:index<0?(e.key==='ArrowUp'?visible.length-1:0):(index+(e.key==='ArrowDown'?1:-1)+visible.length)%visible.length;
+   visible[next].focus();
+  }
+ };
+ for(const [key,direction]of [['previous',-1],['next',1],['now',0]])for(const button of root.querySelectorAll(`[data-period="${key}"]`))button.onclick=()=>{close();moveGraphPeriod(host,direction);};
+ if(host._periodMenuOpen)open(false);
+ if(!host._periodMenuPending)restorePeriodFocus(host,items);
+}
+function periodControlsStyles(){return uiTabsStyles()+`
+.period-menu-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;margin-top:12px;border-top:1px solid var(--divider-color,#ddd)}
+.period-menu-navigation>[data-period]{width:36px;height:32px}.period-menu-navigation>[data-period=now]{width:auto;padding:4px 12px}
+.period-controls{display:flex;min-width:0;max-width:100%;flex:0 1 auto}
+.header-actions .period-trigger{width:auto;min-width:0;max-width:100%;flex:0 1 auto;gap:6px;padding:4px 10px;border:0;border-radius:4px;background:transparent;font-weight:400}
+.header-actions .period-trigger:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
+.period-trigger span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.period-current-range{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;margin:2px 0 10px}
+.period-current-range .zoom-status{display:table;margin-top:4px}
+.period-tabs{margin:10px 0 0}
+.period-menu:has([data-ui-card-tabs]){font-size:inherit;line-height:inherit}
+.period-panel{padding-top:12px}
+.period-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:0}
+.period-options button{position:relative;justify-content:center;padding:7px 3px;gap:0;min-width:0;white-space:nowrap}
+.period-options button>span:last-child{position:absolute;inset-inline-end:2px;top:1px;font-size:9px;line-height:1}
+.period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-custom-fields{display:grid;gap:10px}
+.period-custom-fields label{display:grid;gap:4px;font-size:12px}
+.period-custom input{box-sizing:border-box;width:100%;min-width:0;padding:8px;border:1px solid var(--divider-color,#ddd);border-radius:5px;font:inherit;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));color-scheme:inherit}
+.period-custom input:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-1px}
+.period-custom p{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);margin:8px 0;overflow-wrap:anywhere}
+.period-custom .period-custom-error{color:var(--error-color,#db4437)}
+.period-custom button[type="submit"]{justify-content:center;margin-top:10px}
+`;}
+
+// Decorative header layers; all paint inherits the weather state's --tone.
+function observeCardMotion(host,onVisibility=()=>{}){
+ if(typeof document==='undefined'||typeof host.toggleAttribute!=='function')return ()=>{};
+ let visible=true;
+ const update=()=>{host.toggleAttribute('data-motion-paused',document.hidden||!visible);onVisibility();};
+ const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{visible=entries.some(entry=>entry.isIntersecting);update();}):null;
+ observer?.observe(host);document.addEventListener('visibilitychange',update);update();
+ return ()=>{observer?.disconnect();document.removeEventListener('visibilitychange',update);};
+}
+function headerAtmosphere(background){
+ if(background==='terrain')return '<div class="header-pattern" aria-hidden="true">'+Array.from({length:10},(_,n)=>`<i style="--n:${n}"></i>`).join('')+'</div>';
+ if(background==='hologram'||background==='ink')return '<div class="header-pattern" aria-hidden="true">'+'<i></i>'.repeat(background==='ink'?3:2)+'</div>';
+
+ if(!['aurora','clouds','isobars'].includes(background))return '';
+ let body='';
+ if(background==='aurora')body=Array.from({length:32},(_,i)=>`<i style="--star-x:${i*37%100}%;--star-y:${i*19%72}%;--star-duration:${2+i%5}s;--star-delay:${-i*.37}s"></i>`).join('');
+ if(background==='isobars')body='<svg class="weather-isobars" viewBox="0 0 600 340" preserveAspectRatio="none" focusable="false">'+Array.from({length:10},(_,i)=>`<path d="M-40 ${40+i*27}C100 ${-90+i*27} 235 ${270+i*10} 370 ${105+i*15}S580 ${-20+i*28} 650 ${85+i*29}"/>`).join('')+Array.from({length:4},(_,i)=>`<path class="weather-front" d="M-40 ${67+i*54}C100 ${-63+i*54} 235 ${280+i*20} 370 ${120+i*30}S580 ${8+i*56} 650 ${114+i*58}"/>`).join('')+'</svg>';
+ return `<div class="header-atmosphere" aria-hidden="true">${body}</div>`;
+}
+
+const headerAtmosphereStyles=`
+.header-atmosphere{position:absolute;inset:0;overflow:hidden;pointer-events:none;--sky-light:color-mix(in srgb,var(--tone) 42%,transparent)}
+.content:is([data-background=aurora],[data-background=clouds],[data-background=isobars]) :is(.scene-background,.header-background)::after{display:none}
+.content[data-background=aurora] :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 60% 20%,color-mix(in srgb,var(--tone) 32%,transparent),transparent 80%)}
+[data-background=aurora] .header-atmosphere::before,[data-background=aurora] .header-atmosphere::after{content:'';position:absolute;width:170%;height:72%;left:-35%;top:0;border-radius:50%;background:conic-gradient(from 75deg at 50% 100%,transparent,color-mix(in srgb,var(--tone) 70%,#58ddb6) 10deg,transparent 42deg);filter:blur(13px);animation:weather-aurora 13s ease-in-out infinite alternate;transform:rotate(-18deg)}
+[data-background=aurora] .header-atmosphere::after{top:20%;opacity:.7;animation-delay:-7s;animation-duration:17s;transform:rotate(15deg);background:conic-gradient(from 260deg at 50% 0%,transparent,color-mix(in srgb,var(--tone) 75%,#e1a0d9) 15deg,transparent 55deg)}
+[data-background=aurora] .header-atmosphere i{position:absolute;left:var(--star-x);top:var(--star-y);width:2px;height:2px;border-radius:50%;background:var(--tone);box-shadow:0 0 8px var(--tone);opacity:.55;animation:weather-star var(--star-duration) ease-in-out infinite alternate;animation-delay:var(--star-delay)}
+.content[data-background=clouds] :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 65% 20%,color-mix(in srgb,var(--tone) 42%,transparent),transparent 76%)}
+[data-background=clouds] .header-atmosphere::before,[data-background=clouds] .header-atmosphere::after{content:'';position:absolute;left:-40%;top:32%;width:180%;height:75%;background:radial-gradient(ellipse at 18% 53%,color-mix(in srgb,var(--tone) 42%,transparent),transparent 28%),radial-gradient(ellipse at 46% 40%,color-mix(in srgb,var(--tone) 33%,transparent),transparent 38%),radial-gradient(ellipse at 82% 62%,color-mix(in srgb,var(--tone) 44%,transparent),transparent 31%);animation:weather-clouds 8s ease-in-out infinite alternate}
+[data-background=clouds] .header-atmosphere::after{top:12%;opacity:.55;animation-duration:13s;animation-delay:-5s;animation-direction:alternate-reverse}
+.content[data-background=isobars] :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 50% 35%,color-mix(in srgb,var(--tone) 42%,transparent),transparent 70%)}
+.weather-isobars{position:absolute;width:155%;height:135%;left:-28%;top:-10%;fill:none;stroke:var(--tone);stroke-width:.8;opacity:.36}
+.weather-isobars .weather-front{stroke-width:2;stroke-dasharray:38 540;opacity:1;animation:weather-front 9s linear infinite}
+.weather-isobars .weather-front:nth-child(2n){animation-duration:13s;animation-delay:-5s}
+@keyframes weather-aurora{to{transform:translate(9%,20%) rotate(9deg) scale(1.16)}}
+@keyframes weather-star{from{opacity:.2}to{opacity:.9;transform:scale(1.4)}}
+@keyframes weather-clouds{0%{transform:translate(-16%,6%) scale(1);opacity:.6}50%{opacity:1}100%{transform:translate(22%,-16%) scale(1.16);opacity:.85}}
+@keyframes weather-front{to{stroke-dashoffset:-578}}
+.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere *,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::before,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::after{animation:none!important}
+:host([data-motion-paused]) *,:host([data-motion-paused]) *::before,:host([data-motion-paused]) *::after{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.header-atmosphere,.header-atmosphere *,.header-atmosphere::before,.header-atmosphere::after{animation:none!important}}
+
+.header-pattern{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.header-pattern i{position:absolute;display:block;pointer-events:none}
+.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::before,.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::after{display:none}
+[data-background=hologram] .header-pattern{perspective:380px;background:radial-gradient(ellipse at 50% 60%,color-mix(in srgb,var(--tone) 15%,transparent),transparent 70%)}
+[data-background=hologram] .header-pattern i:first-child{inset:-25%;background:repeating-linear-gradient(0deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px),repeating-linear-gradient(90deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px);transform:rotateX(52deg);transform-origin:50% 80%;animation:energy-background-grid 26s linear infinite}
+[data-background=hologram] .header-pattern i:last-child{inset:0;background:linear-gradient(180deg,transparent 25%,color-mix(in srgb,var(--tone) 14%,transparent) 48%,transparent 65%);animation:energy-background-scan 16s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i{width:100%;height:100%;left:-20%;top:-35%;border-radius:36% 64% 55% 45% / 65% 45% 55% 35%;background:radial-gradient(ellipse,color-mix(in srgb,var(--tone) 25%,transparent),transparent 70%);filter:blur(15px);animation:energy-background-ink 29s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i:nth-child(2){left:35%;top:-20%;opacity:.75;animation-delay:-14s;animation-duration:37s}
+[data-background=ink] .header-pattern i:nth-child(3){left:5%;top:25%;opacity:.45;animation-delay:-24s;animation-duration:41s}
+[data-background=terrain] .header-pattern i{width:calc(130px + var(--n)*38px);height:calc(80px + var(--n)*25px);left:65%;top:20%;border:1px solid color-mix(in srgb,var(--tone) 20%,transparent);border-radius:42% 58% 63% 37% / 52% 37% 63% 48%;transform:translate(-50%,-50%) rotate(-18deg);animation:energy-background-terrain 24s ease-in-out infinite alternate;animation-delay:calc(var(--n)*-1.5s)}
+@keyframes energy-background-grid{to{background-position:0 72px,0 72px}}
+@keyframes energy-background-scan{from{transform:translateY(-25%)}to{transform:translateY(25%)}}
+@keyframes energy-background-ink{from{transform:rotate(-12deg) scale(.9)}to{transform:translate(10%,8%) rotate(25deg) scale(1.15)}}
+@keyframes energy-background-terrain{from{translate:-2% -2%;rotate:-2deg}to{translate:3% 5%;rotate:5deg}}
+.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-pattern i{animation:none!important}
+:host([data-motion-paused]) .header-pattern i{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.header-pattern i{animation:none!important}}
+`;
+
+// Shared designs; each card supplies its own state color through --tone.
+const HEADER_BACKGROUNDS = [
+ {
+  "value": "lanes",
+  "label": "Energy Lanes"
+ },
+ {
+  "value": "halo",
+  "label": "Halo"
+ },
+ {
+  "value": "ribbon",
+  "label": "Silk Flow"
+ },
+ {
+  "value": "prism-glass",
+  "label": "Prism Glass"
+ },
+ {
+  "value": "eclipse",
+  "label": "Eclipse"
+ },
+ {
+  "value": "aurora",
+  "label": "Aurora sky"
+ },
+ {
+  "value": "clouds",
+  "label": "Cloud layers"
+ },
+ {
+  "value": "isobars",
+  "label": "Atmospheric flow"
+ },
+ {value:'hologram',label:'Holographic grid',labelNl:'Holografisch raster'},
+ {value:'ink',label:'Liquid ink',labelNl:'Vloeibare inkt'},
+ {value:'terrain',label:'Relief map',labelNl:'Reliëfkaart'}
+].map(item=>({...item,animated:['aurora','clouds','isobars','hologram','ink','terrain'].includes(item.value)}));
+function headerBackgroundOptions(nl){
+ return HEADER_BACKGROUNDS.map(item=>({value:item.value,label:`${nl?(item.labelNl??item.label):item.label} · ${nl?(item.animated?'Geanimeerd':'Statisch'):(item.animated?'Animated':'Static')}`}));
+}
+
+
+const headerBackgroundStyles = `
+:is(.scene-background,.header-background)::before,:is(.scene-background,.header-background)::after{content:"";position:absolute;z-index:-1;pointer-events:none;inset:auto;transform:none;border:0;box-shadow:none;border-radius:0;width:auto;height:auto}
+:where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::before{inset:0;background:linear-gradient(143deg,transparent 0 43%,color-mix(in srgb,var(--tone) 19%,transparent) 43.2% 70%,color-mix(in srgb,var(--tone) 5%,transparent) 70.2% 88%,transparent 88.2%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 11%,transparent),transparent 75%)}:where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::after{inset:20% -16% -30% 24%;transform:skewY(-36deg);background:repeating-linear-gradient(0deg,transparent 0 25px,color-mix(in srgb,var(--tone) 13%,transparent) 26px,transparent 27px 58px)}
+:where(.content[data-background="halo"]) :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 75% 68%,color-mix(in srgb,var(--tone) 20%,transparent),transparent 61%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 11%,transparent),transparent 65%)}:where(.content[data-background="halo"]) :is(.scene-background,.header-background)::after{width:88%;height:60%;right:-11%;bottom:20%;border:1px solid color-mix(in srgb,var(--tone) 39%,transparent);border-radius:50%;transform:rotate(-16deg);box-shadow:0 0 0 19px color-mix(in srgb,var(--tone) 4%,transparent),0 0 0 39px color-mix(in srgb,var(--tone) 3%,transparent),inset 0 0 45px color-mix(in srgb,var(--tone) 8%,transparent);background:radial-gradient(ellipse at 50% 50%,color-mix(in srgb,var(--tone) 7%,transparent),transparent 70%)}
+:where(.content[data-background="ribbon"]) :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 95% 32%,color-mix(in srgb,var(--tone) 24%,transparent),transparent 59%),linear-gradient(155deg,color-mix(in srgb,var(--tone) 10%,transparent),transparent 65%)}:where(.content[data-background="ribbon"]) :is(.scene-background,.header-background)::after{width:145%;height:60%;right:-32%;top:22%;border-radius:50%;transform:rotate(-21deg);border-top:1px solid color-mix(in srgb,var(--tone) 49%,transparent);background:linear-gradient(180deg,color-mix(in srgb,var(--tone) 25%,transparent),color-mix(in srgb,var(--tone) 3%,transparent) 65%,transparent);box-shadow:0 -16px 0 color-mix(in srgb,var(--tone) 5%,transparent),0 -35px 0 color-mix(in srgb,var(--tone) 3%,transparent)}
+:where(.content[data-background="prism-glass"]) :is(.scene-background,.header-background)::before{inset:0;background:linear-gradient(119deg,transparent 37%,color-mix(in srgb,var(--tone) 12%,transparent) 37.3%,color-mix(in srgb,var(--tone) 3%,transparent) 76%,transparent 76.3%),linear-gradient(34deg,transparent 42%,color-mix(in srgb,var(--tone) 11%,transparent) 42.3%,transparent 83%),radial-gradient(ellipse at 82% 30%,color-mix(in srgb,var(--tone) 20%,transparent),transparent 63%)}:where(.content[data-background="prism-glass"]) :is(.scene-background,.header-background)::after{inset:0;background:linear-gradient(119deg,transparent 37%,color-mix(in srgb,var(--tone) 23%,transparent) 37.2%,transparent 37.5%),linear-gradient(34deg,transparent 42%,color-mix(in srgb,var(--tone) 19%,transparent) 42.2%,transparent 42.5%)}
+:where(.content[data-background="eclipse"]) :is(.scene-background,.header-background)::before{inset:0;background:radial-gradient(ellipse at 82% 24%,color-mix(in srgb,var(--tone) 28%,transparent),transparent 57%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 5%,transparent),transparent 78%)}:where(.content[data-background="eclipse"]) :is(.scene-background,.header-background)::after{width:76%;height:auto;aspect-ratio:1;right:-5%;top:-12%;border-radius:50%;background:radial-gradient(circle at 47% 46%,color-mix(in srgb,var(--ha-card-background,var(--card-background-color,#fff)) 95%,transparent) 0 55%,color-mix(in srgb,var(--tone) 58%,transparent) 57%,color-mix(in srgb,var(--tone) 12%,transparent) 61%,transparent 70%)}
+`;
+
+// The backdrop belongs to the header region, never to the entire card or a tab.
+// Relative stops follow the header's intrinsic height, including wrapped content.
+const headerSceneStyles=`
+.header-region{position:relative;isolation:isolate;margin:calc(-1 * var(--eleven-card-padding,16px)) calc(-1 * var(--eleven-card-padding,16px)) 0;padding:var(--eleven-card-padding,16px) var(--eleven-card-padding,16px) 0}
+.header-region>.header-scene,.header-region>.scene{margin:0;padding-left:0;padding-right:0;padding-top:0;padding-bottom:12px;isolation:auto;overflow:visible}
+.header-region>.header-background,.header-region>.scene-background{position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;opacity:var(--header-background-opacity,1);
+--header-fade:linear-gradient(180deg,#000 0%,#000 25%,rgba(0,0,0,.9) 40%,rgba(0,0,0,.65) 55%,rgba(0,0,0,.32) 72%,rgba(0,0,0,.08) 88%,transparent 100%);
+-webkit-mask-image:var(--header-fade);mask-image:var(--header-fade)}
+`;
+
+
+const WEATHER_BACKGROUNDS=HEADER_BACKGROUNDS;
+const weatherBackgroundStyles=headerBackgroundStyles;
+
+// Liquid glass and Neon: complete icon families for HA weather conditions.
+let weatherStyledArtId=0;
+function weatherStyledArt(requestedKind,style,idPrefix='wx-styled'){
+ const kinds=['sun','night','partly','cloud','rain','pouring','lightning','storm','snow','sleet','hail','fog','wind','wind-cloud','exceptional'];
+ const kind=kinds.includes(requestedKind)?requestedKind:'unknown';
+ const id=idPrefix+'-'+(++weatherStyledArtId),paint=name=>`url(#${id}-${name})`;
+ const sun=`<g class="wxi-sun"><g class="wxi-rays" stroke="#ffd37b" stroke-width="3" stroke-linecap="round">${Array.from({length:12},(_,i)=>`<path transform="rotate(${i*30} 80 60)" d="M80 18v-7"/>`).join('')}</g><circle class="wxi-core" cx="80" cy="60" r="29" fill="${paint('sun')}" stroke="#ffe5ae"/><path class="wxi-highlight" d="M59 57a22 22 0 0 1 28-18" stroke="#fff7d4" stroke-width="3.5" stroke-linecap="round"/></g>`;
+ const cloud=`<g class="wxi-cloud-layer"><path class="wxi-cloud" d="M39 109C10 107 15 68 43 68C43 28 100 22 113 63C146 59 152 106 121 109Z" fill="${paint('cloud')}" stroke="#e1f2ff" stroke-width="1.6"/><path class="wxi-highlight" d="M50 66C53 41 91 39 101 60" stroke="#ffffffbe" stroke-width="3" stroke-linecap="round"/><path class="wxi-shadow" d="M33 95c20 10 63 12 95 0" stroke="#43689430" stroke-width="5"/></g>`;
+ const moon=`<g class="wxi-moon"><path class="wxi-core" d="M108 91C70 108 42 62 68 29C19 42 25 110 72 114C88 116 101 106 108 91Z" fill="${paint('moon')}" stroke="#e7e8ff" stroke-width="1.5"/><path class="wxi-highlight" d="M48 55C40 80 58 99 74 101" stroke="#fff9" stroke-width="3" stroke-linecap="round"/></g><g class="wxi-stars" fill="#e5dfff"><path d="m113 27 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/><circle cx="130" cy="73" r="2.3"/><circle cx="88" cy="15" r="1.7"/></g>`;
+ const rain=(heavy=false)=>`<g class="wxi-rain${heavy?' wxi-heavy':''}" stroke="#7bcaff" stroke-width="${heavy?5:4}" stroke-linecap="round">${(heavy?[38,59,80,101,122]:[49,80,111]).map((x,i)=>`<path class="wxi-drop" style="--wxi-delay:${-i*.4}s" d="m${x} 117-5 11"/>`).join('')}</g>`;
+ const snow=`<g class="wxi-snow" stroke="#cfecff" stroke-width="2" stroke-linecap="round">${[49,80,111].map((x,i)=>`<path class="wxi-flake" style="--wxi-delay:${-i*1.2}s" d="M${x} 117v14m-7-7h14m-12-5 10 10m-10 0 10-10"/>`).join('')}</g>`;
+ const hail='<g class="wxi-hail" fill="#d2ecff" stroke="#ecf7ff" stroke-width="1.5"><circle class="wxi-pellet" cx="48" cy="122" r="4"/><circle class="wxi-pellet" cx="80" cy="129" r="4"/><circle class="wxi-pellet" cx="112" cy="120" r="4"/></g>';
+ const bolt=`<path class="wxi-bolt" d="m89 94-24 28h17l-8 20 29-32H87l9-16Z" fill="${paint('sun')}" stroke="#ffe9ae"/>`;
+ const wind='<g class="wxi-wind" stroke="#9ad8ed" stroke-width="4" stroke-linecap="round"><path d="M24 56h76c25 0 25-25 7-25"/><path d="M18 78h106c24 0 24 25 5 25"/><path d="M38 101h45c21 0 21 23 4 23"/></g>';
+ const fog='<g class="wxi-fog" stroke="#b6cadc" stroke-width="4" stroke-linecap="round"><path d="M26 108h108m-94 13h80m-66 13h64"/></g>';
+ const warning=`<g class="wxi-warning"><path d="M73 28a8 8 0 0 1 14 0l49 86a8 8 0 0 1-7 12H31a8 8 0 0 1-7-12Z" fill="${paint('sun')}" fill-opacity=".3" stroke="#ffd37b" stroke-width="3"/><path d="M80 58v34m0 13v3" stroke="#ffe4a7" stroke-width="5" stroke-linecap="round"/></g>`;
+ const unknown='<g class="wxi-unknown" stroke="currentColor"><circle cx="80" cy="75" r="42" stroke-width="2" stroke-dasharray="4 7"/><path d="M67 64c0-20 27-20 27-2 0 12-14 10-14 24m0 12v2" stroke-width="4" stroke-linecap="round"/></g>';
+ const bodies={sun,night:moon,partly:`<g transform="translate(10 -5) scale(.85)">${sun}</g>`+cloud,cloud,rain:cloud+rain(),pouring:cloud+rain(true),lightning:cloud+bolt,storm:cloud+rain()+bolt,snow:cloud+snow,sleet:cloud+`<g class="wxi-sleet">${snow}${rain()}</g>`,hail:cloud+hail,fog:`<g transform="translate(15 0) scale(.82)">${cloud}</g>`+fog,wind,'wind-cloud':`<g transform="translate(21 -8) scale(.72)">${cloud}</g><g transform="translate(0 47) scale(1 .7)">${wind}</g>`,exceptional:warning,unknown};
+ const accent=kind==='unknown'?'#9da5b4':kind==='night'?'#b3a6ff':['rain','pouring'].includes(kind)?'#73c3ff':['snow','sleet','hail'].includes(kind)?'#a7e2ff':['lightning','storm'].includes(kind)?'#b1a0ff':['cloud','fog','wind','wind-cloud'].includes(kind)?'#98c5df':'#ffc760';
+ return `<svg class="weather-icon wxi-icon wxi-${style==='neon'?'neon':'glass'}" data-icon-kind="${kind}" style="--wxi-accent:${accent}" viewBox="0 0 160 150" fill="none" aria-hidden="true" focusable="false"><defs><radialGradient id="${id}-sun" cx=".3" cy=".2" r=".95"><stop stop-color="#fff5cb"/><stop offset=".45" stop-color="#ffd36f"/><stop offset="1" stop-color="#e58d30"/></radialGradient><linearGradient id="${id}-cloud" x2=".15" y2="1"><stop stop-color="#fff" stop-opacity=".95"/><stop offset=".45" stop-color="#d1e9ff" stop-opacity=".8"/><stop offset="1" stop-color="#668bab" stop-opacity=".7"/></linearGradient><linearGradient id="${id}-moon" x2=".6" y2="1"><stop stop-color="#f5edff"/><stop offset="1" stop-color="#8d8ad8"/></linearGradient><radialGradient id="${id}-halo"><stop stop-color="${accent}" stop-opacity=".6"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient></defs><circle class="wxi-halo" cx="80" cy="73" r="66" fill="${paint('halo')}"/><g class="wxi-body">${bodies[kind]}</g><path class="wxi-glint" d="m118 49 2 7 7 2-7 2-2 7-2-7-7-2 7-2Z" fill="#fff"/></svg>`;
+}
+const weatherStyledIconStyles=`
+.content:is([data-icon-style=glass],[data-icon-style=neon]) .hero{min-height:210px}.content:is([data-icon-style=glass],[data-icon-style=neon]) .art{inset:40px 0 0}.content:is([data-icon-style=glass],[data-icon-style=neon]) .art svg{width:210px;height:168px}
+@container(max-width:320px){.content:is([data-icon-style=glass],[data-icon-style=neon]) .hero{min-height:190px}.content:is([data-icon-style=glass],[data-icon-style=neon]) .art svg{width:180px;height:150px}}
+.content[data-compact=true]:is([data-icon-style=glass],[data-icon-style=neon]) .hero{min-height:132px}.content[data-compact=true]:is([data-icon-style=glass],[data-icon-style=neon]) .art{inset:38px 0 0}.content[data-compact=true]:is([data-icon-style=glass],[data-icon-style=neon]) .art svg{width:120px;height:94px}
+.content[data-dark=false] .wxi-icon{--wxi-stroke:#946500}.content[data-dark=false] .wxi-icon:is([data-icon-kind=cloud],[data-icon-kind=fog],[data-icon-kind=wind],[data-icon-kind=wind-cloud]){--wxi-stroke:#416c88}.content[data-dark=false] .wxi-icon:is([data-icon-kind=rain],[data-icon-kind=pouring],[data-icon-kind=snow],[data-icon-kind=sleet],[data-icon-kind=hail]){--wxi-stroke:#24799e}.content[data-dark=false] .wxi-icon:is([data-icon-kind=night],[data-icon-kind=lightning],[data-icon-kind=storm]){--wxi-stroke:#6e55ac}
+.wxi-icon{overflow:visible;color:var(--secondary-text-color,#9da5b4)}.wxi-glint{display:none}.wxi-rays{transform-origin:80px 60px;animation:wxi-spin 30s linear infinite}.wxi-cloud-layer{animation:wxi-float 6s ease-in-out infinite}.wxi-moon{animation:wxi-float 8s ease-in-out infinite}.wxi-stars{animation:wxi-twinkle 4s ease-in-out infinite alternate}.wxi-drop{animation:wxi-rain 1.6s linear infinite;animation-delay:var(--wxi-delay,0s)}.wxi-heavy .wxi-drop{animation-duration:1.05s}.wxi-bolt{animation:wxi-light 5s ease-in-out infinite}.wxi-flake{animation:wxi-snow 4s linear infinite;animation-delay:var(--wxi-delay,0s)}.wxi-pellet{animation:wxi-hail 2s ease-in infinite}.wxi-pellet:nth-child(2){animation-delay:-.7s}.wxi-pellet:nth-child(3){animation-delay:-1.3s}.wxi-fog{animation:wxi-fog 7s ease-in-out infinite}.wxi-wind{stroke-dasharray:85 160;animation:wxi-wind 4s linear infinite}
+.wxi-sleet .wxi-flake:nth-child(2),.wxi-sleet .wxi-drop:first-child,.wxi-sleet .wxi-drop:last-child{display:none}
+.wxi-glass .wxi-body{filter:drop-shadow(0 8px 5px #07162540)}.wxi-glass .wxi-glint{display:block;transform-origin:118px 58px;animation:wxi-glint 4s ease-in-out infinite}.wxi-glass .wxi-halo{opacity:.25}.wxi-glass .wxi-cloud{stroke-width:2.2}
+.wxi-neon .wxi-core,.wxi-neon .wxi-cloud{fill:transparent;stroke:var(--wxi-stroke,var(--wxi-accent));stroke-width:2.3;stroke-dasharray:180 24;animation:wxi-trace 9s linear infinite}.wxi-neon .wxi-body{filter:drop-shadow(0 0 4px var(--wxi-stroke,var(--wxi-accent)))}.wxi-neon .wxi-highlight{opacity:.25}.wxi-neon .wxi-shadow{display:none}.wxi-neon .wxi-halo{opacity:.18}.wxi-neon .wxi-rays{stroke:var(--wxi-stroke,var(--wxi-accent));stroke-width:2}.wxi-neon .wxi-rain,.wxi-neon .wxi-snow,.wxi-neon .wxi-wind,.wxi-neon .wxi-fog{stroke:var(--wxi-stroke,var(--wxi-accent))}.wxi-neon .wxi-warning path:first-child,.wxi-neon .wxi-pellet{fill:transparent}
+.wxi-icon:is([data-icon-kind=unknown],[data-icon-kind=exceptional]) .wxi-glint{display:none}
+@keyframes wxi-spin{to{transform:rotate(360deg)}}@keyframes wxi-float{50%{transform:translate(3px,-4px)}}@keyframes wxi-twinkle{to{opacity:.3}}@keyframes wxi-rain{0%{transform:translate(2px,-4px);opacity:0}20%,70%{opacity:1}100%{transform:translate(-4px,12px);opacity:0}}@keyframes wxi-light{0%,100%{opacity:.4}60%{opacity:1}}@keyframes wxi-glint{0%,70%,100%{opacity:.2;transform:scale(.55)}35%{opacity:.95;transform:scale(1.15)}}@keyframes wxi-trace{to{stroke-dashoffset:-204}}@keyframes wxi-snow{0%{transform:translate(-2px,-4px);opacity:0}20%,70%{opacity:1}100%{transform:translate(3px,8px);opacity:0}}@keyframes wxi-hail{0%,100%{transform:translateY(-4px);opacity:.3}65%{transform:translateY(8px);opacity:1}80%{transform:translateY(3px)}}@keyframes wxi-fog{50%{transform:translateX(5px);opacity:.55}}@keyframes wxi-wind{to{stroke-dashoffset:-245}}
+.content[data-animated=false] .wxi-icon *{animation:none!important}
+@media(prefers-reduced-motion:reduce){.wxi-icon *{animation:none!important}}
+`;
+
+
+const weatherAtmosphere=headerAtmosphere;
+// Background selection never changes the header or illustration dimensions.
+const weatherAtmosphereStyles=headerAtmosphereStyles;
+
+
+
+
+
+const weatherStyles=`
+:host{display:block;min-width:0;container-type:inline-size;font:inherit}
+*{box-sizing:border-box}ha-card{display:block;overflow:hidden;border-radius:var(--ha-card-border-radius,12px);background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit}
+.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--tone:#536b82}.content[data-dark=true]{--tone:#a8c9eb}
+.content[data-kind=sun],.content[data-kind=partly]{--tone:#946800}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--tone:#f2c451}
+.content[data-kind=rain]{--tone:#427fac}.content[data-dark=true][data-kind=rain]{--tone:#82b8e8}
+.content[data-kind=night],.content[data-kind=storm]{--tone:#6553a3}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--tone:#aca3f1}
+.content[data-kind=snow]{--tone:#45858c}.content[data-dark=true][data-kind=snow]{--tone:#a2dce6}
+.scene{position:relative;isolation:isolate;margin:-16px -16px 0;padding:16px 16px 16px;overflow:visible}
+.hero{min-height:160px;position:relative;display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:12px;align-content:start;padding-top:6px}
+.temperature{font-size:76px;font-weight:500;line-height:1.15;letter-spacing:-.065em;font-variant-numeric:tabular-nums;margin-top:-20px}.temperature .unit{font-size:.53em;letter-spacing:-.03em;margin-left:2px}
+header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:color-mix(in srgb,var(--tone) 88%,#fff);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
+.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:drop-shadow(0 8px 14px color-mix(in srgb,var(--tone) 25%,transparent))}
+button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(--secondary-background-color,#eee);border-radius:7px;padding:12px}.status{display:flex;gap:12px;align-items:center;width:100%;text-align:left;border:0;min-height:0;margin:16px 0 0}.status-icon{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:10px;color:var(--tone);background:color-mix(in srgb,var(--tone) 13%,transparent)}.status-icon svg{width:30px;height:30px}.status strong{font-size:13px;line-height:1.4;font-weight:600}.status small{display:block;font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0}.metrics:has(.metric:only-child){grid-template-columns:minmax(0,1fr)}.metric{min-width:0;display:grid;grid-template-rows:auto auto;gap:2px;align-content:start}.metric dt{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin:0;overflow-wrap:anywhere}.metric dd{font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:0;overflow-wrap:anywhere}
+.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--tone)}
+.notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.retry{background:transparent;color:var(--primary-color,#2196f3);border:0;min-height:32px;padding:4px 0}.status:focus-visible,.retry:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
+@container(max-width:320px){.hero{min-height:150px}.temperature{font-size:65px;margin-top:-17px}header{margin-top:-17px;padding-top:14px}.art svg{height:100px}.forecast-list{grid-auto-columns:minmax(46px,1fr)}}
+@supports(grid-template-rows:subgrid){.metrics{grid-template-rows:auto auto;row-gap:2px}.metric{grid-row:span 2;grid-template-rows:subgrid}}
+.forecast-panel{padding-top:16px}.forecast-panel[hidden]{display:none!important}
+.metric-entity{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;text-align:start;max-width:100%;overflow-wrap:anywhere}.metric-entity:hover{color:var(--primary-color)}.metric-entity:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px;border-radius:3px}
+.status>span:last-child{min-width:0;overflow-wrap:anywhere}.status-label{display:block;font-size:11px;line-height:1.4;color:var(--secondary-text-color);margin-bottom:2px}.status-data strong{font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums}.status-icon ha-icon{--mdc-icon-size:22px}
+.content[data-compact=true] .hero{min-height:112px}
+.content[data-compact=true] .temperature{font-size:64px;margin-top:-16px}
+.content[data-compact=true] header{padding-top:14px;margin-top:-16px}
+.content[data-compact=true] .art{inset:38px 0 0}
+.content[data-compact=true] .art svg{height:74px;width:100px;filter:drop-shadow(0 5px 10px color-mix(in srgb,var(--tone) 20%,transparent))}
+.content[data-compact=true] .scene{padding-bottom:12px}
+.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}
+.content[data-compact=true] .status{padding:10px;gap:10px;margin-top:12px}
+.content[data-compact=true] .status-data strong{font-size:22px}
+.content[data-compact=true] .status-icon{width:32px;height:32px;border-radius:8px}
+.content[data-compact=true] .status-icon svg{width:26px;height:26px}
+.content[data-compact=true] .metrics{column-gap:12px}
+.content[data-compact=true] .metric{padding:10px}
+.content[data-compact=true] .metric dd{font-size:22px}
+.content[data-compact=true] .forecast{margin-top:12px}
+.content[data-compact=true] .forecast-panel{padding-top:12px}
+.content[data-compact=true] .forecast-list svg{width:32px;height:30px;margin:2px auto}
+@container(max-width:320px){.content[data-compact=true] .hero{min-height:104px}.content[data-compact=true] .art svg{height:66px}.content[data-compact=true] .temperature{font-size:56px;margin-top:-14px}.content[data-compact=true] header{margin-top:-14px;padding-top:12px}}
+.forecast-extra{font-size:11px;line-height:1.4;margin-top:5px;color:var(--primary-text-color)}.forecast-label{display:block;overflow-wrap:anywhere;font-size:10px;color:var(--secondary-text-color)}
+${weatherBackgroundStyles}
+
+.wx-rays{transform-origin:70px 55px}.wx-corona{transform-origin:70px 55px}
+@media(prefers-reduced-motion:no-preference){
+ .content[data-animated=true] .wx-rays{animation:wx-rotate 24s linear infinite}
+ .content[data-animated=true] .wx-corona{animation:wx-glow 5s ease-in-out infinite}
+ .content[data-animated=true] .wx-cloud{animation:wx-float 6s ease-in-out infinite}
+ .content[data-animated=true] .wx-drop{animation:wx-rain 1.5s linear infinite}
+ .content[data-animated=true] .wx-flake{animation:wx-snow 4s ease-in-out infinite}
+ .content[data-animated=true] .wx-drop-two{animation-delay:-.5s}
+ .content[data-animated=true] .wx-drop-three{animation-delay:-1s}
+ .content[data-animated=true] .wx-moon{animation:wx-float 7s ease-in-out infinite}
+ .content[data-animated=true] .wx-star{animation:wx-twinkle 4s ease-in-out infinite}
+ .content[data-animated=true] .wx-star-two{animation-delay:-1.5s}
+ .content[data-animated=true] .wx-star-three{animation-delay:-2.5s}
+ .content[data-animated=true] .wx-wind path{stroke-dasharray:90 160;animation:wx-wind 4s linear infinite}
+ .content[data-animated=true] .wx-wind path:nth-child(2){animation-delay:-1.2s}
+ .content[data-animated=true] .wx-wind path:nth-child(3){animation-delay:-2.4s}
+ .content[data-animated=true] .wx-fog{animation:wx-fog 7s ease-in-out infinite}
+ .content[data-animated=true] .wx-lightning{animation:wx-lightning 5s ease-in-out infinite}
+}
+@keyframes wx-rotate{to{transform:rotate(360deg)}}
+@keyframes wx-glow{50%{transform:scale(1.12);opacity:.6}}
+@keyframes wx-float{50%{transform:translate(3px,-2px)}}
+@keyframes wx-rain{0%{transform:translate(2px,-3px);opacity:0}15%,75%{opacity:1}100%{transform:translate(-4px,12px);opacity:0}}
+@keyframes wx-snow{0%{transform:translate(-2px,-2px);opacity:0}20%,70%{opacity:1}100%{transform:translate(4px,9px);opacity:0}}
+@keyframes wx-twinkle{50%{opacity:.35}}
+@keyframes wx-wind{to{stroke-dashoffset:-250}}
+@keyframes wx-fog{50%{transform:translateX(5px);opacity:.55}}
+@keyframes wx-lightning{0%,50%,100%{opacity:.4}70%,80%{opacity:1}}
+${weatherAtmosphereStyles}
+${weatherStyledIconStyles}
+${headerSceneStyles}
+`;
+
+// Retain live nodes, focus, scroll offsets and running SVG animations on telemetry updates.
+function patchWeatherDOM(root,markup){
+ const template=document.createElement('template');template.innerHTML=markup;
+ const key=node=>node.nodeType===1?node.localName+'|'+(node.getAttribute('data-weather-key')??node.getAttribute('data-ui-tab')??node.getAttribute('data-ui-tab-panel')??node.getAttribute('data-forecast-field')??node.getAttribute('class')?.split(' ')[0]??''):String(node.nodeType);
+ const patch=(parent,incoming)=>{
+  let cursor=parent.firstChild;
+  for(const next of [...incoming.childNodes]){
+   let current=cursor;
+   if(!current||key(current)!==key(next)){
+    current=cursor?.nextSibling;
+    while(current&&key(current)!==key(next))current=current.nextSibling;
+    if(current)parent.insertBefore(current,cursor);else{current=next.cloneNode(true);parent.insertBefore(current,cursor);}
+   }
+   if(!current.isEqualNode(next)){
+    if(current.nodeType===3)current.nodeValue=next.nodeValue;
+    else if(current.nodeType===1){
+     for(const attribute of [...current.attributes])if(!next.hasAttribute(attribute.name))current.removeAttribute(attribute.name);
+     for(const attribute of [...next.attributes])if(current.getAttribute(attribute.name)!==attribute.value)current.setAttribute(attribute.name,attribute.value);
+     patch(current,next);
+    }
+   }
+   cursor=current.nextSibling;
+  }
+  while(cursor){const next=cursor.nextSibling;parent.removeChild(cursor);cursor=next;}
+ };
+ patch(root,template.content);
+}
+
+
+
+const ENERGY_FLOW_BACKGROUNDS=HEADER_BACKGROUNDS;
+const energyFlowBackgroundOptions=headerBackgroundOptions;
+const energyFlowBackground=headerAtmosphere;
+// Shared atmosphere styles are already included through weatherStyles.
+const energyFlowBackgroundStyles='';
+
+
+
+const energyFlowDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
+const ENERGY_FLOW_COLORS=[{value:'charging',label:'Goud / Gold'},{value:'waiting',label:'Blauw / Blue'},{value:'done',label:'Groen / Green'},{value:'planned',label:'Paars / Purple'},{value:'off',label:'Grijs / Gray'}];
+const energyFlowNumber=value=>value==null||value===''||typeof value==='boolean'||!Number.isFinite(Number(value))?null:Number(value);
+function normalizeEnergyFlowConfig(input={}){
+ if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Invalid energy flow configuration');
+ const config={...input,title:typeof input.title==='string'?input.title:'',default_view:input.default_view==='history'?'history':'live',hours_to_show:Math.min(8784,Math.max(1,energyFlowNumber(input.hours_to_show)??24)),show_navigation:true,animate_background:input.animate_background!==false,compact:(input.compact??(input.density==='compact'))===true,grid_power_inverted:input.grid_power_inverted===true};
+ for(const key of ['sync_timeframe','show_field_1','show_field_2','show_field_3'])if(input[key]!=null&&typeof input[key]!=='boolean')throw Error('Invalid '+key);
+ config.background_strength=input.background_strength==null||!Number.isFinite(Number(input.background_strength))?100:Math.max(0,Math.min(100,Number(input.background_strength)));
+ config.color=ENERGY_FLOW_COLORS.some(item=>item.value===input.color)?input.color:'charging';
+ config.sync_timeframe=input.sync_timeframe===true;
+ const group=input.hover_sync_group??input.timeframe_sync_group;
+ if(group!=null&&typeof group!=='string')throw Error('Invalid synchronization group');
+ config.hover_sync_group=group?.trim()||'';
+ for(let i=1;i<=3;i++)config['show_field_'+i]=input['show_field_'+i]!==false;
+ config.background=ENERGY_FLOW_BACKGROUNDS.some(item=>item.value===input.background)?input.background:'lanes';
+ // Ignore retired price-graph options in older dashboards.
+ delete config.show_prices;delete config.price_card;
+ for(const key of ['solar_power_entity','grid_power_entity','grid_import_power_entity','grid_export_power_entity','home_power_entity','price_entity','export_price_entity']){
+  if(input[key]&&!(typeof input[key]==='string'&&/^sensor\.[a-z0-9_]+$/.test(input[key])))throw Error('Invalid '+key);
+  config[key]=input[key]||'';
+ }
+ config.detail_view=input.detail_view==='tabs'?'tabs':'popup';
+ config.tabs=Array.isArray(input.tabs)?['sun','home','grid'].filter(tab=>input.tabs.includes(tab)):['sun','home','grid'];
+ config.custom_tabs=normalizeEntityTabs(input.custom_tabs,2);
+ const available=[...(config.detail_view==='tabs'?config.tabs:[]),...config.custom_tabs.filter(tab=>tab.show).map(tab=>tab.id)];
+ config.default_tab=available.includes(input.default_tab)?input.default_tab:(available[0]??'');
+ return config;
+}
+const total=values=>values.some(value=>value==null)?null:values.reduce((a,b)=>a+b,0);
+const ids=values=>[...new Set(values.filter(value=>typeof value==='string'&&value))];
+function energyFlowSources(prefs){
+ const sources=Array.isArray(prefs?.energy_sources)?prefs.energy_sources:[];
+ return Object.fromEntries(['solar','grid','battery'].map(type=>[type,sources.filter(source=>source?.type===type)]));
+}
+function energyFlowMeters(prefs){
+ const sources=energyFlowSources(prefs);
+ const grid=(key,legacy)=>ids(sources.grid.flatMap(source=>source[key]?[source[key]]:(source[legacy]??[]).map(flow=>flow[key])));
+ return {solar:ids(sources.solar.map(source=>source.stat_energy_from)),import:grid('stat_energy_from','flow_from'),export:grid('stat_energy_to','flow_to'),discharge:ids(sources.battery.map(source=>source.stat_energy_from)),charge:ids(sources.battery.map(source=>source.stat_energy_to))};
+}
+const energyFlowStatisticIds=prefs=>ids(Object.values(energyFlowMeters(prefs)).flat());
+function energyFlowPower(hass,id){
+ const state=hass?.states?.[id],value=energyFlowNumber(state?.state),factor={W:.001,kW:1,MW:1000}[state?.attributes?.unit_of_measurement];
+ return value==null||factor==null?null:value*factor;
+}
+// HA normalizes grid power to positive import and battery power to positive discharge.
+function sourcePower(source,hass){
+ const read=id=>energyFlowPower(hass,id),config=source.power_config??{};
+ if(source.stat_rate)return read(source.stat_rate);
+ if(config.stat_rate)return read(config.stat_rate);
+ if(config.stat_rate_inverted){const value=read(config.stat_rate_inverted);return value==null?null:-value;}
+ if(config.stat_rate_from||config.stat_rate_to){const from=config.stat_rate_from?read(config.stat_rate_from):0,to=config.stat_rate_to?read(config.stat_rate_to):0;return from==null||to==null?null:from-to;}
+ return null;
+}
+const balance=data=>Object.values(data).some(value=>value==null)?null:Math.max(0,data.solar+data.import-data.export+data.discharge-data.charge);
+function energyFlowLive(prefs,hass,config={}){
+ const sources=energyFlowSources(prefs),read=id=>energyFlowPower(hass,id);
+ const solar=config.solar_power_entity?read(config.solar_power_entity):total(sources.solar.map(source=>sourcePower(source,hass)));
+ let incoming,outgoing;
+ if(config.grid_power_entity){const net=read(config.grid_power_entity),value=net==null?null:net*(config.grid_power_inverted?-1:1);incoming=value==null?null:Math.max(0,value);outgoing=value==null?null:Math.max(0,-value);}
+ else if(config.grid_import_power_entity||config.grid_export_power_entity){incoming=config.grid_import_power_entity?read(config.grid_import_power_entity):0;outgoing=config.grid_export_power_entity?read(config.grid_export_power_entity):0;}
+ else {const powers=sources.grid.map(source=>sourcePower(source,hass));incoming=total(powers.map(value=>value==null?null:Math.max(0,value)));outgoing=total(powers.map(value=>value==null?null:Math.max(0,-value)));}
+ const battery=sources.battery.map(source=>sourcePower(source,hass)),data={solar,import:incoming,export:outgoing,discharge:total(battery.map(value=>value==null?null:Math.max(0,value))),charge:total(battery.map(value=>value==null?null:Math.max(0,-value)))};
+ return {...data,home:config.home_power_entity?read(config.home_power_entity):balance(data),battery:sources.battery.length>0};
+}
+function energyFlowHistorical(prefs,statistics){
+ const meters=energyFlowMeters(prefs),sources=energyFlowSources(prefs),data={};
+ for(const [key,list] of Object.entries(meters))data[key]=total(list.map(id=>{
+  const changes=(Array.isArray(statistics?.[id])?statistics[id]:[]).map(row=>energyFlowNumber(row.change)).filter(value=>value!=null);
+  return changes.length?changes.reduce((a,b)=>a+b,0):null;
+ }));
+ if(sources.solar.some(source=>!source.stat_energy_from))data.solar=null;
+ if(sources.grid.some(source=>!source.stat_energy_from&&!source.stat_energy_to&&!(source.flow_from?.length||source.flow_to?.length)))data.import=data.export=null;
+ if(sources.battery.some(source=>!source.stat_energy_from))data.discharge=null;
+ if(sources.battery.some(source=>!source.stat_energy_to))data.charge=null;
+ return {...data,home:balance(data),battery:sources.battery.length>0};
+}
+function energyFlowStatisticsRequest(prefs,start,end){
+ return {type:'recorder/statistics_during_period',start_time:new Date(start).toISOString(),end_time:new Date(Math.min(end,Date.now())).toISOString(),statistic_ids:energyFlowStatisticIds(prefs),period:'hour',units:{energy:'kWh'},types:['change']};
+}
+
+
+function energyFlowGridMeters(prefs){
+ return energyFlowSources(prefs).grid.flatMap(source=>['import','export'].flatMap(direction=>{
+  const incoming=direction==='import',key=incoming?'stat_energy_from':'stat_energy_to';
+  const entries=source[key]?[source]:(source[incoming?'flow_from':'flow_to']??[]);
+  return entries.filter(entry=>typeof entry?.[key]==='string'&&entry[key]).map(entry=>({
+   direction,energy:entry[key],name:source.name||entry.name,
+   cost:entry[incoming?'stat_cost':'stat_compensation'],
+   priceEntity:entry[incoming||!source[key]?'entity_energy_price':'entity_energy_price_export'],
+   fixedPrice:entry[incoming||!source[key]?'number_energy_price':'number_energy_price_export'],
+  }));
+ }));
+}
+function energyFlowDetailIds(prefs,info={}){
+ return [...new Set([
+  ...energyFlowStatisticIds(prefs),
+  ...(prefs?.device_consumption??[]).map(device=>device.stat_consumption),
+  ...energyFlowGridMeters(prefs).flatMap(meter=>[meter.energy,meter.cost||info.cost_sensors?.[meter.energy]]),
+  ...energyFlowSources(prefs).solar.map(source=>source.stat_energy_from),
+ ].filter(id=>typeof id==='string'&&id))];
+}
+function energyFlowChange(statistics,id){
+ const rows=Array.isArray(statistics?.[id])?statistics[id]:[];
+ const values=rows.map(row=>energyFlowNumber(row.change)).filter(value=>value!=null);
+ return values.length?values.reduce((sum,value)=>sum+value,0):null;
+}
+function energyFlowDeviceRows(prefs,hass,history,statistics={}){
+ const seen=new Set();
+ return (Array.isArray(prefs?.device_consumption)?prefs.device_consumption:[]).filter(device=>{
+  if(!device?.stat_consumption||seen.has(device.stat_consumption))return false;
+  seen.add(device.stat_consumption);return true;
+ }).map(device=>{
+  const entity=hass?.states?.[device.stat_rate]??hass?.states?.[device.stat_consumption];
+  const value=history?energyFlowChange(statistics,device.stat_consumption):energyFlowPower(hass,device.stat_rate);
+  return {...device,label:device.name||entity?.attributes?.friendly_name||device.stat_consumption,value:value!=null&&value>=0?value:null};
+ }).sort((a,b)=>(b.value??-1)-(a.value??-1)||a.label.localeCompare(b.label));
+}
+function energyFlowDeviceTotal(rows){
+ // Count a nested measurement only when none of its measured ancestors covers it.
+ return rows.reduce((sum,row)=>{
+  const visited=new Set([row.stat_consumption]);let id=row.included_in_stat;
+  while(id&&!visited.has(id)){
+   visited.add(id);const parent=rows.find(candidate=>candidate.stat_consumption===id);
+   if(!parent)break;if(parent.value!=null)return sum;id=parent.included_in_stat;
+  }
+  return sum+(row.value??0);
+ },0);
+}
+function energyFlowCurrentPrice(meter,hass){
+ if(meter.priceEntity){
+  const state=hass?.states?.[meter.priceEntity],value=energyFlowNumber(state?.state);
+  const match=String(state?.attributes?.unit_of_measurement??'').match(/^(.+)\/(Wh|kWh|MWh)$/);
+  if(value==null||!match)return null;
+  const factor={Wh:1000,kWh:1,MWh:.001}[match[2]];
+  return {value:value*factor,currency:match[1]==='€'?'EUR':match[1]};
+ }
+ const value=energyFlowNumber(meter.fixedPrice),currency=hass?.config?.currency;
+ return value==null||!currency?null:{value,currency};
+}
+function energyFlowHistoricalCost(meter,info,statistics,metadata,hass){
+ const id=meter.cost||info?.cost_sensors?.[meter.energy];
+ const rows=Array.isArray(statistics?.[id])?statistics[id]:[];
+ // A sum of the available bins is not a complete period cost. Require every
+ // returned cost bin and coverage of the corresponding energy timestamps.
+ if(!rows.length||rows.some(row=>energyFlowNumber(row.change)==null))return null;
+ const timestamp=row=>row.start==null?null:new Date(row.start).getTime();
+ const covered=new Set(rows.map(timestamp).filter(Number.isFinite));
+ const energyRows=Array.isArray(statistics?.[meter.energy])?statistics[meter.energy]:[];
+ if(energyRows.some(row=>{const time=timestamp(row);return time!=null&&(!Number.isFinite(time)||!covered.has(time));}))return null;
+ const value=energyFlowChange(statistics,id);
+ const currency=metadata?.[id]?.unit_of_measurement||hass?.states?.[id]?.attributes?.unit_of_measurement;
+ // Do not apply today's price or assume the currency of an external statistic.
+ return value==null||!currency?null:{value,currency};
+}
+function energyFlowSolarRows(prefs,hass,history,statistics){
+ return energyFlowSources(prefs).solar.map(source=>({
+  label:source.name||hass?.states?.[source.stat_rate]?.attributes?.friendly_name||hass?.states?.[source.stat_energy_from]?.attributes?.friendly_name||source.stat_energy_from,
+  value:history?energyFlowChange(statistics,source.stat_energy_from):energyFlowLive({energy_sources:[source]},hass).solar,
+ }));
+}
+
+// Without storage, generated energy minus export is the solar share of home use.
+// Reject inconsistent balances instead of silently clamping them into a convincing percentage.
+function energyFlowSolarCoverage(data){
+ if(data.battery||![data.solar,data.home,data.export].every(value=>Number.isFinite(value)&&value>=0)||data.export>data.solar)return null;
+ const used=data.solar-data.export;
+ if(used>data.home+.01)return null;
+ if(data.import!=null&&(!Number.isFinite(data.import)||data.import<0||Math.abs(used+data.import-data.home)>.01))return null;
+ const own=Math.min(data.home,used);
+ return {own,coverage:data.home>0?own/data.home*100:null,selfConsumption:data.solar>0?own/data.solar*100:null};
+}
+
+
+
+const HOUR=3600000;
+function insightTimestamp(value){
+ const number=typeof value==='number'?value:Date.parse(value);
+ return Number.isFinite(number)?(number<1e12?number*1000:number):null;
+}
+function insightHours(statistics){
+ const hours=new Map();
+ for(const [id,rows] of Object.entries(statistics??{}))for(const row of Array.isArray(rows)?rows:[]){
+  const start=insightTimestamp(row.start);if(start==null)continue;
+  if(!hours.has(start))hours.set(start,{});
+  hours.get(start)[id]=[row];
+ }
+ return [...hours].sort((a,b)=>a[0]-b[0]);
+}
+// Median of the quietest full hour in each of up to seven complete local nights.
+// Requiring all four local hour labels excludes gaps and incomplete nights.
+function energyFlowBaseConsumption(prefs,statistics,zone='UTC',end=Date.now()){
+ const ids=energyFlowStatisticIds(prefs);if(!ids.length)return null;
+ let date;try{date=new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'});}catch{return null;}
+ const nights=new Map();
+ for(const [start,stats] of insightHours(statistics)){
+  if(start+HOUR>end||ids.some(id=>energyFlowNumber(stats[id]?.[0]?.change)==null))continue;
+  const parts=Object.fromEntries(date.formatToParts(start).map(part=>[part.type,part.value])),hour=Number(parts.hour);
+  if(hour<1||hour>=5)continue;
+  const home=energyFlowHistorical(prefs,stats).home;if(!Number.isFinite(home)||home<0)continue;
+  const day=parts.year+'-'+parts.month+'-'+parts.day;
+  if(!nights.has(day))nights.set(day,[]);nights.get(day).push({hour,watts:home*1000});
+ }
+ const values=[...nights].filter(([,rows])=>[1,2,3,4].every(hour=>rows.some(row=>row.hour===hour))).slice(-7).map(([,rows])=>Math.min(...rows.map(row=>row.watts))).sort((a,b)=>a-b);
+ if(values.length<3)return null;
+ const middle=Math.floor(values.length/2);
+ return {watts:values.length%2?values[middle]:(values[middle-1]+values[middle])/2,nights:values.length};
+}
+
+// Preserve hourly tariffs; value gaps at the period's energy-weighted import tariff.
+// This is an estimate of consumption value, not an allocation of the household bill.
+function energyFlowDeviceCosts(prefs,hass,state={}){
+ const meters=energyFlowGridMeters(prefs).filter(meter=>meter.direction==='import'),statistics=state.statistics??{},totals=new Map(),hours=[];
+ let periodEnergy=0,periodCost=0,periodCurrency=null,incompatible=false;
+ for(const [start,stats] of insightHours(statistics)){
+  let energy=0,cost=0,currency=null,known=meters.length>0;
+  for(const meter of meters){
+   const costId=meter.cost||state.info?.cost_sensors?.[meter.energy],used=energyFlowNumber(stats[meter.energy]?.[0]?.change),paid=energyFlowNumber(stats[costId]?.[0]?.change),unit=state.metadata?.[costId]?.unit_of_measurement||hass?.states?.[costId]?.attributes?.unit_of_measurement;
+   if(used==null||used<0){known=false;break;}
+   if(used===0){if(paid!=null&&paid!==0)known=false;continue;}
+   if(currency&&unit&&unit!==currency){incompatible=true;known=false;break;}
+   if(paid==null||!unit){known=false;break;}
+   energy+=used;cost+=paid;currency=unit;
+  }
+  const rate=known&&energy>0?cost/energy:null;
+  if(rate!=null){
+   if(periodCurrency&&currency!==periodCurrency)incompatible=true;
+   periodEnergy+=energy;periodCost+=cost;periodCurrency=currency;
+  }
+  hours.push({start,stats,rate,currency});
+ }
+ const average=!incompatible&&periodEnergy>0?periodCost/periodEnergy:null;
+ for(const {start,stats,rate,currency} of hours){
+  const devices=energyFlowDeviceRows(prefs,hass,true,stats),home=energyFlowHistorical(prefs,stats).home,measured=energyFlowDeviceTotal(devices);
+  // Clamping an overmeasured hour to zero would inflate the period's residual costs.
+  const other=Number.isFinite(home)&&devices.every(device=>device.value!=null)&&measured<=home+.01?Math.max(0,home-measured):null;
+  for(const row of [...devices.map(device=>({id:device.stat_consumption,value:device.value})),{id:'__other',value:other}]){
+   if(!totals.has(row.id))totals.set(row.id,{value:0,currency:null,known:!incompatible,energy:0,estimatedEnergy:0,hours:new Set()});
+   const total=totals.get(row.id);total.hours.add(start);
+   if(row.value==null||row.value<0){total.known=false;continue;}
+   if(row.value===0)continue;
+   total.energy+=row.value;
+   const applied=rate??average,unit=rate==null?periodCurrency:currency;
+   if(applied==null||total.currency&&unit!==total.currency){total.known=false;continue;}
+   total.value+=row.value*applied;total.currency=unit;
+   if(rate==null)total.estimatedEnergy+=row.value;
+  }
+ }
+ // A positive device interval must also be represented among the priced hours.
+ const positiveHours=id=>(statistics[id]??[]).filter(row=>energyFlowNumber(row.change)>0).every(row=>{const start=insightTimestamp(row.start);return start!=null&&totals.get(id)?.hours.has(start);});
+ const home=energyFlowHistorical(prefs,statistics).home,devices=energyFlowDeviceRows(prefs,hass,true,statistics);
+ const residual=Number.isFinite(home)&&devices.every(device=>device.value!=null)?Math.max(0,home-energyFlowDeviceTotal(devices)):null;
+ return Object.fromEntries([...totals].map(([id,total])=>{
+  const consistent=id==='__other'?residual!=null&&Math.abs(total.energy-residual)<=.01:positiveHours(id);
+  return [id,total.known&&consistent?{value:total.value,currency:total.currency??hass?.config?.currency,estimatedShare:total.energy>0?total.estimatedEnergy/total.energy*100:0}:null];
+ }));
+}
+
+
+
+
+
+
+
+function energyFlowDetailPopup(host,kind,data,{id,attrs={}}={}){
+ const nl=String(host._hass?.locale?.language??host._hass?.language??'en').startsWith('nl'),history=host._view==='history';
+ const title=kind==='home'?(nl?'Woning':'Home'):kind==='grid'?(nl?'Net':'Grid'):(nl?'Zon':'Solar');
+ const mode=history?(nl?'Historisch':'History'):(nl?'Actueel':'Live');
+ return uiPopup({id,title:title+' · '+mode,closeLabel:nl?'Sluiten':'Close',attrs:{...attrs,popover:'manual','data-energy-popup':kind},content:`<div class="energy-detail-body" data-detail-view="${history?'history':'live'}">${energyFlowDetailContent(host,kind,data)}</div>`});
+}
+
+function energyFlowDetailContent(host,kind,data){
+ const nl=String(host._hass?.locale?.language??host._hass?.language??'en').startsWith('nl'),t=(a,b)=>nl?a:b;
+ const history=host._view==='history',hass=host._hass,prefs=host._prefs;
+ const format=value=>{try{return new Intl.NumberFormat(hass?.locale?.language??hass?.language??'en',{maximumFractionDigits:2}).format(value);}catch{return new Intl.NumberFormat('en',{maximumFractionDigits:2}).format(value);}};
+ const reading=(value,suffix=history?'kWh':'kW')=>value==null?'—':suffix==='EUR'||suffix.startsWith('EUR/')?'€ '+format(value)+suffix.slice(3):format(value)+(suffix?' '+suffix:'');
+ const balanceReading=(share,amount)=>uiEscape((share==null?'':reading(share,'%')+' · ')+reading(amount));
+ const note=value=>`<p class="energy-detail-note">${uiEscape(value)}</p>`;
+ const heading=label=>`<div class="energy-detail-section"><h3>${uiEscape(label)}</h3></div>`;
+ const metric=(label,value,tone='home')=>`<div data-tone="${tone}"><dt>${uiEscape(label)}</dt><dd>${uiEscape(value)}</dd></div>`;
+ const deviceMetric=(label,value,total,{tone='home',hint=''}={})=>{
+  const comparable=Number.isFinite(value)&&value>=0&&Number.isFinite(total)&&total>0,percent=comparable?value/total*100:null;
+  return `<div data-tone="${tone}"><dt>${uiEscape(label)}</dt><dd><strong>${uiEscape(reading(value))}</strong>${percent!=null&&percent<=100?`<small>${uiEscape(reading(percent,'%'))}</small>`:''}</dd>${comparable?`<div class="energy-detail-track" aria-hidden="true"><i style="width:${Math.min(100,percent)}%"></i></div>`:''}${hint?`<small class="energy-home-hint">${uiEscape(hint)}</small>`:''}</div>`;
+ };
+ const state=host._detailResult??{},stats=state.statistics??{},meta=state.metadata??{};
+ let html='';
+ if(host._offline())return html+note(t('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'));
+ if(!prefs)return html+note(t('Energy-instellingen worden geladen.','Loading Energy preferences.'));
+ if(history&&host._detailLoading)return html+note(t('Detailgegevens laden…','Loading details…'));
+ if(history&&host._detailError)return html+note(t('Detailgegevens laden mislukt.','Could not load details.'))+uiButton({variant:'text',text:t('Opnieuw proberen','Retry'),attrs:{'data-detail-retry':true}});
+ if(kind==='home'){
+  html+=`<dl class="energy-grid-metrics energy-home-summary">${metric(t('Woning totaal','Home total'),reading(data.home))}${metric(t('Geschat basisverbruik','Estimated base consumption'),reading(host._baseResult?.value?.watts??null,'W'))}</dl>`;
+  const devices=energyFlowDeviceRows(prefs,hass,history,stats),costs=history?energyFlowDeviceCosts(prefs,hass,state):{};
+  if(!devices.length)return html+note(t('Geen afzonderlijke apparaten ingesteld in Home Assistant Energy.','No individual devices configured in Home Assistant Energy.'));
+  const costReading=cost=>cost?.currency?reading(cost.value,cost.currency):'—';
+  const surface=(label,value,{entity='',cost=null,hint='',id=''}={})=>{
+   const share=Number.isFinite(data.home)&&data.home>0?value/data.home*100:null;
+   return uiDetailSurface({title:label,entity,actionLabel:t('Details van ','Details for ')+label,percent:share,attrs:{style:'--ui-detail-tone:var(--detail-home)','data-device-stat':id},metrics:[
+    {label:t('Aandeel','Share'),value:share==null?null:format(share),unit:'%'},
+    {label:history?t('Verbruik','Consumption'):t('Vermogen','Power'),value:reading(value)},
+    ...(history?[{label:t('Geschatte kosten','Estimated cost'),value:costReading(cost)}]:[])
+   ]})+(hint?`<p class="energy-home-hint">${uiEscape(hint)}</p>`:'');
+  };
+  if(history)html+=`<label class="energy-device-sort">${t('Sorteren op','Sort by')}<select data-energy-device-sort><option value="energy"${host._deviceSort!=='cost'?' selected':''}>${t('Verbruik','Consumption')}</option><option value="cost"${host._deviceSort==='cost'?' selected':''}>${t('Geschatte kosten','Estimated cost')}</option></select></label>`;
+  const ordered=[...devices].sort((a,b)=>history&&host._deviceSort==='cost'?((costs[b.stat_consumption]?.value??-Infinity)-(costs[a.stat_consumption]?.value??-Infinity))||a.label.localeCompare(b.label):(b.value??-1)-(a.value??-1)||a.label.localeCompare(b.label));
+  html+='<div class="energy-device-surfaces">';
+  for(const device of ordered){
+   if(device.value==null||device.value===0)continue;
+   const parent=devices.find(item=>item.stat_consumption===device.included_in_stat),id=history?device.stat_consumption:device.stat_rate;
+   html+=surface(device.label,device.value,{id:device.stat_consumption,cost:costs[device.stat_consumption],entity:hass?.states?.[id]?id:'',hint:parent?t('Onderdeel van ','Included in ')+parent.label:''});
+  }
+  const measured=energyFlowDeviceTotal(devices),other=data.home==null?null:Math.max(0,data.home-measured);
+  if(other!=null&&other>0)html+=surface(t('Overig','Other'),other,{cost:costs.__other,id:'__other'});
+  html+='</div>';
+  if(data.home!=null&&measured>data.home+.01)html+=note(t('Apparaatmetingen zijn samen hoger dan het woningtotaal. Meetmomenten of meters kunnen overlappen.','Device measurements exceed the home total. Measurements may overlap or differ in timing.'));
+  return html;
+ }
+ if(kind==='grid'){
+  const meters=energyFlowGridMeters(prefs),prices=meters.map(meter=>history?energyFlowHistoricalCost(meter,state.info,stats,meta,hass):energyFlowCurrentPrice(meter,hass));
+  const amounts=[],costs=[],gridSurfaces=[];
+  for(const direction of ['import','export']){
+   const incoming=direction==='import',indices=meters.map((meter,i)=>meter.direction===direction?i:-1).filter(i=>i>=0),value=incoming?data.import:data.export;
+   const label=history?(incoming?t('Totale afname','Total import'):t('Totale teruglevering','Total export')):(incoming?t('Actuele afname','Current import'):t('Actuele teruglevering','Current export'));
+   const costLabel=incoming?t('Afnamekosten','Import costs'):t('Terugleververgoeding','Export compensation');
+   const rateLabel=incoming?t('Actuele afnameprijs','Current import price'):t('Actuele terugleverprijs','Current export price');
+   const sameCurrency=indices.length>0&&indices.every(i=>prices[i]&&prices[i].currency===prices[indices[0]].currency);
+   const selected=history?{configured:false}:energyFlowSelectedPrice(host,direction);
+   const price=selected.configured?selected.price:history&&sameCurrency?{value:indices.reduce((sum,i)=>sum+prices[i].value,0),currency:prices[indices[0]].currency}:indices.length===1?prices[indices[0]]:null;
+   amounts.push(metric(label,reading(value),direction));
+   if(history){
+    const costMetrics=!price&&indices.length>1?indices.map(i=>({label:meters[i].name||hass?.states?.[meters[i].energy]?.attributes?.friendly_name||meters[i].energy,value:prices[i]?reading(prices[i].value,prices[i].currency):'—'})):[{label:costLabel,value:price?reading(price.value,price.currency):'—'}];
+    gridSurfaces.push(uiDetailSurface({title:incoming?t('Afname','Import'):t('Teruglevering','Export'),attrs:{style:'--ui-detail-tone:var(--detail-home)'},metrics:[{label,value:reading(value)},...costMetrics]}));
+   }
+   if(!price&&indices.length>1&&!selected.configured){
+    const connections=indices.map(i=>{
+     const meter=meters[i],meterPrice=prices[i],name=meter.name||hass?.states?.[meter.energy]?.attributes?.friendly_name||meter.energy;
+     return `<div class="energy-grid-connection"><span>${uiEscape(name)}</span><strong>${uiEscape(meterPrice?reading(meterPrice.value,meterPrice.currency+(history?'':'/kWh')):'—')}</strong></div>`;
+    }).join('');
+    costs.push(`<div data-tone="${direction}"><dt>${uiEscape(history?costLabel:rateLabel)}</dt><dd>${connections}</dd></div>`);
+   }else costs.push(metric(history?costLabel:rateLabel,price?reading(price.value,price.currency+(history?'':'/kWh')):'—',direction));
+  }
+  let net='';
+  if(history){
+   const known=prices.length>0&&prices.every(price=>price&&price.currency===prices[0].currency);
+   const value=known?prices.reduce((sum,price,i)=>sum+(meters[i].direction==='import'?price.value:-price.value),0):null;
+   net=`<div class="energy-grid-net"><dt>${t('Netto kosten','Net costs')}</dt><dd>${uiEscape(known?reading(value,prices[0].currency):'—')}</dd></div>`;
+  }
+  html+=history?`<dl class="energy-grid-metrics energy-grid-summary">${net}</dl><div class="energy-detail-surfaces">${gridSurfaces.join('')}</div>`:`<dl class="energy-grid-metrics">${amounts.join('')}${costs.join('')}</dl>`;
+  return html;
+ }
+ const coverage=energyFlowSolarCoverage(data);
+ const percent=value=>reading(value,'%');
+ html+=`<dl class="energy-grid-metrics energy-solar-metrics">${metric(t('Zonne-opwek','Solar generation'),reading(data.solar),'solar')}${metric(t('Zon naar net','Solar to grid'),reading(coverage?data.export:null),'export')}</dl><div class="energy-detail-surfaces">${uiDetailSurface({title:t('Zelfvoorziening','Self-sufficiency'),percent:coverage?.coverage,attrs:{style:'--ui-detail-tone:var(--detail-home)'},metrics:[{label:t('Aandeel','Share'),value:percent(coverage?.coverage)},{label:t('Gedekt door zon','Supplied by solar'),value:reading(coverage?.own)},{label:t('Woning totaal','Home total'),value:reading(data.home)}]})}${uiDetailSurface({title:t('Eigen gebruik van opwek','Self-consumed generation'),percent:coverage?.selfConsumption,attrs:{style:'--ui-detail-tone:var(--detail-home)'},metrics:[{label:t('Aandeel','Share'),value:percent(coverage?.selfConsumption)},{label:t('Zelf gebruikt','Self-consumed'),value:reading(coverage?.own)},{label:t('Zonne-opwek','Solar generation'),value:reading(data.solar)}]})}</div>`;
+ if(!coverage)html+=note(data.battery?t('Zelfvoorziening onbekend met batterij.','Self-sufficiency unknown with battery.'):t('Zelfvoorziening niet beschikbaar.','Self-sufficiency unavailable.'));
+ else if(data.home===0)html+=note(t('Geen woningverbruik.','No home consumption.'));
+ const sources=energyFlowSolarRows(prefs,hass,history,stats);
+ if(sources.length>1){
+  html+=heading(history?t('Opbrengst per bron','Generation by source'):t('Vermogen per bron','Power by source'))+'<dl class="energy-grid-metrics energy-home-devices">';
+  for(const source of sources)html+=deviceMetric(source.label,source.value,data.solar,{tone:'solar'});
+  html+='</dl>';
+ }
+ if(!sources.length)html+=note(t('Geen zonnebronnen ingesteld in Energy.','No solar sources configured in Energy.'));
+
+ return html;
+}
+
+const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
+.energy-detail-surfaces,.energy-device-surfaces{display:grid;gap:10px;margin-top:12px}
+.energy-device-sort{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0 0;font-size:11px;color:var(--secondary-text-color)}
+.energy-device-sort select{min-height:32px;max-width:65%;border:1px solid var(--divider-color);border-radius:8px;padding:4px 8px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit}
+.energy-device-sort select:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
+@container(max-width:360px){.energy-home-summary dd{font-size:16px}}
+
+:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--detail-bar-radius:8px;--detail-home:var(--house,var(--primary-color,#578d83));--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,#9576bb)}
+:is([data-energy-popup],[data-energy-panel]) .ui-popup-heading>strong{font-size:14px;font-weight:600}
+:is([data-energy-popup],[data-energy-panel]) button{border-radius:8px}
+.energy-grid-metrics>.energy-grid-net{grid-column:1/-1}
+.energy-detail-note{font-size:11px;line-height:1.5;color:var(--secondary-text-color);margin:8px 0;overflow-wrap:anywhere}
+:is([data-energy-popup],[data-energy-panel]) [data-tone=import]{--detail-tone:var(--detail-import)}
+:is([data-energy-popup],[data-energy-panel]) [data-tone=export]{--detail-tone:var(--detail-export)}
+:is([data-energy-popup],[data-energy-panel]) :is([data-tone=home],[data-tone=other]){--detail-tone:var(--detail-home)}
+:is([data-energy-popup],[data-energy-panel]) [data-tone=solar]{--detail-tone:var(--detail-solar)}
+.energy-detail-section{margin:16px 0 0}.energy-detail-section h3{font-size:12px;font-weight:650;line-height:1.4;margin:0;color:var(--primary-text-color)}
+.energy-detail-track,.energy-detail-supply{display:flex;height:var(--detail-bar-height);margin:8px 0 0;border-radius:var(--detail-bar-radius);background:var(--divider-color,#ddd);overflow:hidden}
+.energy-detail-track i,.energy-detail-supply i{display:block;height:100%;flex:none;border-radius:0;background:var(--detail-tone)}
+.energy-detail-supply [data-supply=solar]{background:var(--detail-solar)}
+.energy-detail-supply [data-supply=grid]{background:var(--detail-import)}
+.energy-detail-supply [data-supply=import]{background:var(--detail-import)}
+.energy-detail-supply [data-supply=export]{background:var(--detail-export)}
+.energy-grid-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 16px;margin:16px 0 0}
+.energy-grid-summary{margin-top:0}
+.energy-grid-metrics>div{display:grid;grid-template-rows:subgrid;grid-row:span 2;min-width:0}
+.energy-grid-metrics>div:nth-child(n+3){padding-top:14px}
+.energy-grid-metrics dt{font-size:11px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere;line-height:1.4}
+.energy-grid-metrics dd{margin:0;min-width:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.energy-home-total>div{grid-column:1/-1}
+.energy-home-devices{display:block;margin-top:8px}
+.energy-home-devices>div{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto;gap:6px 12px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--divider-color,#ddd)}
+.energy-home-devices>div:last-child{border-bottom:0}
+.energy-home-devices>div:nth-child(n+3){padding-top:10px}
+.energy-home-devices dt{grid-column:1;grid-row:1}
+.energy-home-devices dd{grid-column:2;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) 56px;align-items:baseline;gap:8px;text-align:end;min-width:144px;max-width:180px}
+.energy-home-devices dd strong{font:inherit;min-width:0}
+.energy-home-devices dd small{font-size:13px;font-weight:600;letter-spacing:normal;white-space:nowrap;color:var(--secondary-text-color,#666)}
+.energy-home-devices .energy-detail-track{grid-column:1/-1;grid-row:2;margin:0}
+.energy-home-hint{grid-column:1/-1;grid-row:3;font-size:11px;font-weight:400;line-height:1.4;overflow-wrap:anywhere;color:var(--secondary-text-color,#666)}
+.energy-home-devices>div:not(:has(.energy-detail-track)) .energy-home-hint{grid-row:2}
+.energy-grid-connection+.energy-grid-connection{margin-top:8px}
+.energy-grid-connection>span{display:block;font-size:11px;font-weight:400;letter-spacing:normal;color:var(--secondary-text-color,#666);line-height:1.4}
+.energy-grid-connection>strong{font:inherit}
+.energy-grid-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:8px;font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666)}
+.energy-grid-legend>span{position:relative;padding-inline-start:15px;overflow-wrap:anywhere}
+.energy-grid-legend>span::before{content:'';position:absolute;inset-inline-start:0;top:.35em;width:8px;height:8px;border-radius:2px;background:var(--detail-tone)}
+.energy-grid-legend strong{display:block;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--primary-text-color)}
+@media(forced-colors:active){.energy-grid-balance [data-supply=import]{background:Highlight;forced-color-adjust:none}.energy-grid-balance [data-supply=export]{background:CanvasText;forced-color-adjust:none}}
+button.circle-node:focus-visible{outline-offset:-3px}
+@media(forced-colors:active){.energy-detail-track,.energy-detail-supply{background:Canvas;border:1px solid CanvasText}.energy-detail-track i,.energy-detail-supply [data-supply=grid]{background:CanvasText;forced-color-adjust:none}.energy-detail-supply [data-supply=solar]{background:Highlight;forced-color-adjust:none}}
+`;
+
+const energyFlowStyles=`
+ha-card{border-radius:var(--ha-card-border-radius,12px)}
+.content [data-ui-metric]{--ui-metric-radius:8px}
+.content [data-ui-button],.content .period-trigger,.content .period-custom input,.content [data-ui-popup]{border-radius:8px}
+
+:host{height:100%;min-height:0}ha-card{height:100%;min-height:0;overflow:auto;overscroll-behavior:auto;scrollbar-width:thin}
+.content{--tone:#d9b77c;--solar:#d9b77c;--grid:#91a9c7;--house:#9bc9b2}
+.content[data-dark=false]{--tone:#92641c;--solar:#946800;--grid:#356da6;--house:#34785d}
+.content[data-color=waiting]{--tone:#82b8e8}.content[data-color=done]{--tone:#7ed79c}.content[data-color=planned]{--tone:#8fa5ff}.content[data-color=off]{--tone:#a7a9b2}
+.content[data-dark=false][data-color=waiting]{--tone:#386c9b}.content[data-dark=false][data-color=done]{--tone:#277441}.content[data-dark=false][data-color=planned]{--tone:#4455ad}.content[data-dark=false][data-color=off]{--tone:#656975}
+.header-region{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px 12px;align-items:start}
+.energy-heading{grid-column:1;grid-row:1;min-width:0;--ui-primary-size:60px;--ui-primary-unit-size:16px}
+.energy-heading:has([data-long=true]){--ui-primary-size:34px}
+.toolbar{grid-column:2;grid-row:1;display:flex;justify-content:flex-end;align-items:start;max-width:280px;min-width:0;margin:0!important}
+.toolbar .header-actions{margin:0;min-width:0;max-width:100%}
+.toolbar .chart-controls{flex-wrap:nowrap;justify-content:flex-end;gap:0;min-width:0;max-width:100%}
+.toolbar .view-period{display:flex;align-items:center;flex:1 1 auto;flex-wrap:nowrap;gap:0;min-width:0}
+.toolbar .chart-controls>[data-period]{flex:none;width:28px;min-width:0;padding:4px}
+.toolbar .chart-controls>[data-period=now]{width:30px}
+.toolbar .view-period>[data-view-button]{flex:none;min-height:32px;padding:4px 8px;white-space:nowrap}
+.toolbar .view-period .period-controls{position:relative;flex:1 1 auto;min-width:0;margin:0;padding:0;border-inline-start:1px solid var(--divider-color,#ddd)}
+.toolbar .view-period .period-trigger{width:100%;min-width:0;max-width:190px}
+.toolbar .view-period .period-trigger>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toolbar .view-period .period-trigger svg{width:14px;height:14px}
+.circle-flow{grid-column:1/-1;grid-row:2;min-width:0}
+.circle-flow *{box-sizing:border-box}
+.circle-scene{position:relative;width:100%;aspect-ratio:412/164;margin:0 auto}
+.circle-scene foreignObject{overflow:visible}
+.circle-scene>svg{display:block;width:100%;height:100%;overflow:visible}
+.flow-route[data-route=solar]{color:var(--solar)}
+.flow-route[data-route=return]{color:#b4a0db}.content[data-dark=false] .flow-route[data-route=return]{color:#8060b1}
+.flow-route[data-route=grid]{color:var(--grid)}
+.flow-bed{fill:none;stroke:currentColor;stroke-width:8;stroke-opacity:.16;stroke-linecap:round;stroke-linejoin:round}
+.flow-wire{fill:none;stroke:currentColor;stroke-width:2.1;stroke-opacity:.9;stroke-linecap:round;stroke-linejoin:round}
+.flow-route[data-active=false] .flow-bed{stroke:var(--divider-color,#ddd);stroke-width:2;stroke-opacity:.7}
+.flow-route[data-active=false] .flow-wire{stroke-opacity:.12}
+.flow-dot{fill:currentColor;r:3;offset-distance:0%;offset-rotate:0deg;animation:energy-flow-travel var(--route-duration,4s) linear infinite}
+.circle-node[data-ui-metric]{--node-ink:var(--ui-metric-tone);width:100%;height:100%;position:relative;isolation:isolate;grid-template-columns:minmax(0,1fr);grid-template-rows:22px 16px;align-content:center;justify-items:center;row-gap:4px;column-gap:0;border:0;border-radius:8px;background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--node-ink) 10%,transparent),color-mix(in srgb,var(--node-ink) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee)}
+.circle-node[data-ui-metric][data-density] .ui-metric-icon,.circle-node[data-ui-metric][data-density] .ui-metric-icon svg{width:22px;height:22px}
+.circle-node .ui-metric-value{display:none}.circle-node[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:2;justify-self:center;text-align:center;font-size:11px;font-weight:500;line-height:16px}
+.circle-node[data-ui-metric][data-density] .ui-metric-icon{position:relative;grid-row:1;grid-column:1;justify-self:center;align-self:center;transform:none;color:var(--node-ink);overflow:visible}
+.circle-node[data-ui-metric] .ui-metric-icon::before{content:'';position:absolute;inset:-29px -31px;border-radius:50%;background:radial-gradient(ellipse,color-mix(in srgb,var(--node-ink) 13%,transparent),color-mix(in srgb,var(--node-ink) 4%,transparent) 48%,transparent 76%);z-index:-1;pointer-events:none}
+.flow-reading{fill:var(--primary-text-color,#20252b);font-family:inherit;font-size:18px;font-weight:600;letter-spacing:-.4px;font-variant-numeric:tabular-nums}.flow-reading[data-long=true]{font-size:12px}.flow-unit{fill:var(--secondary-text-color,#626a78);font-size:11px;font-weight:400;letter-spacing:0}
+.flow-arrow{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.flow-route[data-active=false] .flow-arrow{opacity:.24}
+.header-region>[data-ui-metric]{grid-column:1/-1;grid-row:3}
+.flow-secondary{margin-top:12px}
+.content[data-animated=false] .flow-dot,.content[data-view=history] .flow-dot{display:none}
+:host([data-motion-paused]) .flow-dot{animation-play-state:paused}
+.content[data-compact=true] .header-region{row-gap:12px}
+.content[data-compact=true] .energy-heading{--ui-primary-size:46px;--ui-primary-unit-size:14px}
+@keyframes energy-flow-travel{to{offset-distance:100%}}
+@media(prefers-reduced-motion:reduce){.circle-scene .flow-dot{display:none}}
+.toolbar .period-menu-navigation{display:none}
+@container(max-width:480px){
+ .header-region{grid-template-columns:minmax(0,1fr) 100px;column-gap:8px}
+ .toolbar{width:100%;max-width:100%;justify-self:end}
+ .toolbar .header-actions,.toolbar .chart-controls,.toolbar .view-period{width:100%}
+ .toolbar .chart-controls{background:none}
+ .toolbar .chart-controls>[data-period]{display:none}
+ .toolbar .view-period{flex-direction:column;align-items:stretch;gap:4px}
+ .toolbar .view-period>[data-view-button],.toolbar .view-period .period-controls{background:var(--secondary-background-color,#eee);border-radius:8px}
+ .toolbar .view-period .period-controls{border:0}
+ .toolbar .view-period .period-trigger{padding:4px 6px;gap:3px;min-height:32px}
+ .toolbar .view-period .period-trigger>span,.toolbar .view-period>[data-view-button]{font-size:11px}
+ .toolbar .period-menu-navigation{display:flex}
+ .energy-heading,.content[data-compact=true] .energy-heading{--ui-primary-size:46px;--ui-primary-unit-size:14px}
+ .energy-heading:has([data-long=true]){--ui-primary-size:30px}
+}
+@container(max-width:319px){
+ .header-region{row-gap:12px}
+ .energy-heading,.content[data-compact=true] .energy-heading{--ui-primary-size:36px;--ui-primary-unit-size:12px}
+ .energy-heading:has([data-long=true]){--ui-primary-size:25px}
+}
+@container(max-width:270px){.energy-heading,.content[data-compact=true] .energy-heading{--ui-primary-size:32px}}
+`;
+
+// One stroke family for the diagram and shared metric surfaces.
+const energyFlowIconPaths={
+ solar:'M3 12h15l2 9H1l2-9ZM4 16h14M7 12l-1 9m7-9 1 9M6 23h9M10 21v2M18 2v2m0 4v2m-4-4h-2m12 0h-2m-7-3-1-1m7 1 1-1M20 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0',
+ sun:'M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0',
+ grid:'m12 2-7 20m7-20 7 20M8 7h8M6 13h12M3 22h18M12 2v20M8 7l10 6M16 7 6 13',
+ home:'m3 10 9-7 9 7M5 9v12h14V9m-6 2-4 6h4l-1 4 4-6h-4l1-4',
+ import:'m8 8 6-5 7 5M10 8v13h10V8M2 14h12m-4-4 4 4-4 4',
+ export:'m3 8 6-5 6 5M4 8v13h10v-4M10 12h12m-4-4 4 4-4 4'
+};
+function energyFlowIcon(kind){return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-energy-icon="${kind}"><path d="${energyFlowIconPaths[kind]??energyFlowIconPaths.home}"/></svg>`;}
+
+
+
+
+function energyFlowDiagram(data,history,nl,format,{detailView='popup',tabs=[],id='energy-flow'}={}){
+ const text=(a,b)=>nl?a:b,unit=history?'kWh':'kW',number=value=>value==null?'—':format(value);
+ const {solar,home,import:incoming,export:outgoing}=data;
+ const direction=incoming==null||outgoing==null?'unknown':incoming>0&&outgoing>0?'both':incoming>0?'import':outgoing>0?'export':'idle';
+ // Battery storage makes the source of home consumption ambiguous. Do not
+ // invent a solar-to-home amount; imported/exported grid totals remain valid.
+ const own=data.battery||solar==null||outgoing==null||home==null?null:Math.min(home,Math.max(0,solar-outgoing));
+ const returned=data.battery||solar==null||outgoing==null?null:Math.min(solar,Math.max(0,outgoing));
+ const total=(own||0)+(incoming||0)+(returned||0);
+ const route=(name,path,amount,arrow)=>{
+  const active=amount!=null&&amount>0,duration=6-Math.min(1,(amount||0)/Math.max(total,1))*4.5;
+  return `<g class="flow-route" data-route="${name}" data-active="${active}"><path class="flow-bed" d="${path}"/><path class="flow-wire" d="${path}"/><path class="flow-arrow" d="${arrow}"/>${active&&!history?`<circle class="flow-dot" r="2.7" style="offset-path:path('${path}');--route-duration:${duration}s"/>`:''}</g>`;
+ };
+ const node=(kind,label,value,x,tone)=>{
+  const aria=kind==='grid'?`${text('Netafname','Grid import')} ${number(incoming)} ${unit}, ${text('Teruglevering','Grid export')} ${number(outgoing)} ${unit}`:`${label}: ${number(value)} ${unit}`;
+  return `<foreignObject x="${x-36}" y="68" width="72" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="height:100%">${uiMetric({action:true,title:label,value:label,iconContent:energyFlowIcon(kind),compact:true,attrs:{class:'circle-node','data-node':kind,'data-direction':kind==='grid'?direction:'','data-active':String(value!=null&&value>0),'data-energy-detail':kind,'aria-haspopup':detailView==='popup'?'dialog':null,'aria-controls':detailView==='tabs'&&tabs.includes(kind)?id+'-tabs-panel-'+kind:null,disabled:detailView==='tabs'&&!tabs.includes(kind),'aria-label':aria,style:`--ui-metric-tone:var(--${tone})`}})}</div></foreignObject>`;
+ };
+ const reading=(name,value,x,y)=>`<text class="flow-reading" data-flow-value="${name}" data-long="${number(value).length>6}" x="${x}" y="${y}" text-anchor="middle">${uiEscape(number(value))}${value==null?'':`<tspan class="flow-unit"> ${unit}</tspan>`}</text>`;
+ return `<div class="circle-flow" role="group" aria-label="${text('Energiestromen tussen zon, woning en net','Energy flows between solar, home and grid')}"><div class="circle-scene"><svg viewBox="4 0 412 164">
+  ${route('solar','M66 104H184',own,'M126 100l5 4-5 4')}
+  ${route('return','M40 78V18A8 8 0 0 1 48 10H372A8 8 0 0 1 380 18V78',returned,'M126 6l5 4-5 4M289 6l5 4-5 4')}
+  ${route('grid','M354 104H236',incoming,'M294 100l-5 4 5 4')}
+  ${node('sun',text('Zon','Solar'),solar,40,'solar')}${node('home',text('Woning','Home'),home,210,'house')}${node('grid',text('Net','Grid'),incoming==null||outgoing==null?null:incoming+outgoing,380,'grid')}
+  ${reading('return',returned,210,36)}${reading('solar',own,128,89)}${reading('grid',incoming,292,89)}
+ </svg></div></div>`;
+}
+
+
+
+function energyFlowMetrics(data,history,nl,format,compact=false,config={}){
+ const text=(a,b)=>nl?a:b,unit=history?'kWh':'kW';
+ const field=(key,title,icon,tone,info)=>uiMetric({title,iconContent:energyFlowIcon(icon),value:data[key]==null?null:format(data[key]),unit,info,compact,attrs:{'data-metric':key,style:`--ui-metric-tone:var(--${tone})`}});
+ return {
+  solar:config.show_field_1===false?'':field('solar',text('Zonne-energie','Solar generation'),'solar','solar',history?text('Opwek in gekozen periode','Generation in selected period'):text('Opwek op dit moment','Generation right now')),
+  grid:config.show_field_2===false&&config.show_field_3===false?'':`<div class="flow-secondary" data-ui-metric-grid style="--ui-metric-columns:${config.show_field_2===false||config.show_field_3===false?1:2}">${config.show_field_2===false?'':field('import',text('Netafname','Grid import'),'import','grid',history?text('Afgenomen in gekozen periode','Imported in selected period'):text('Van net naar woning','From grid to home'))}${config.show_field_3===false?'':field('export',text('Teruglevering','Grid export'),'export','solar',history?text('Teruggeleverd in gekozen periode','Exported in selected period'):text('Terug naar het net','Returned to the grid'))}</div>`
+ };
+}
+
+
+
+
+
+const ENERGY_FLOW_TABS=[{value:'sun',nl:'Zon',en:'Solar'},{value:'home',nl:'Woning',en:'Home'},{value:'grid',nl:'Net',en:'Grid'}];
+function energyFlowTabs(host,data,nl){
+ const items=host._config.detail_view==='tabs'?ENERGY_FLOW_TABS.filter(tab=>host._config.tabs.includes(tab.value)).map(tab=>({value:tab.value,label:tab[nl?'nl':'en'],content:`<div data-energy-panel="${tab.value}"><div class="energy-detail-body" aria-busy="${host._view==='history'&&!!host._detailLoading}">${energyFlowDetailContent(host,tab.value,data)}</div></div>`})):[];
+ for(const [index,tab] of host._config.custom_tabs.entries())if(tab.show)items.push({value:tab.id,label:tab.title||(nl?'Eigen tabblad ':'Custom tab ')+(index+1),content:entityTabContent(tab,host._hass,nl)});
+ if(!items.length){host._activeTab=null;return '';}
+ if(!items.some(tab=>tab.value===host._activeTab))host._activeTab=items.find(tab=>tab.value===host._config.default_tab)?.value??items[0].value;
+ if(items.length===1)return `<div data-energy-tabs><section id="${uiEscape(host._id+'-tabs-panel-'+encodeURIComponent(items[0].value))}" class="energy-tab-panel energy-single-tab" aria-label="${uiEscape(items[0].label)}">${items[0].content}</section></div>`;
+ return `<div data-energy-tabs>${uiTabs({variant:'card',id:host._id+'-tabs',label:nl?'Energiegegevens':'Energy information',items,selected:host._activeTab,className:'energy-tabs',panelClassName:'energy-tab-panel'})}</div>`;
+}
+const energyFlowTabStyles=`
+[data-energy-tabs]{min-width:0}
+.energy-tab-panel{margin:0;padding:16px 0 0;border:0;min-width:0}
+.energy-single-tab{margin-top:16px}
+.energy-tab-panel>.energy-grid-metrics:first-child,.energy-tab-panel .energy-detail-body>.energy-grid-metrics:first-child{margin-top:0}
+.energy-entity-value{font:inherit;color:inherit;text-align:start;overflow-wrap:anywhere;border:0;background:none;padding:0;cursor:pointer;border-radius:8px}
+.energy-entity-value:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+@container(max-width:300px){.energy-home-devices dd{min-width:0;max-width:none;grid-template-columns:minmax(0,1fr) auto;font-size:15px}.energy-home-devices dd small{font-size:11px}}
+`;
+
+
+
+
+
+class EnergyFlowEditor extends customTabsEditor(HTMLElement){
+ constructor(){super();this._customTabMaxDecimals=2;this.attachShadow({mode:'open'});}
+ setConfig(config){this._config=normalizeEnergyFlowConfig(config);this._render();}
+ set hass(hass){this._hass=hass;this._render();}get hass(){return this._hass;}
+ _emitConfig(){this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:structuredClone(this._config)},bubbles:true,composed:true}));}
+ _setCustomTabs(tabs){this._config=normalizeEnergyFlowConfig({...this._config,custom_tabs:tabs});this._render();this._emitConfig();}
+ _render(){
+  if(!this._config||!this._hass)return;
+  const nl=energyFlowDutch(this._hass),text=(a,b)=>nl?a:b;
+  const labels={detail_view:text('Details tonen als','Show details as'),tabs:text('Zichtbare tabbladen','Visible tabs'),default_tab:text('Standaardtabblad','Default tab'),color:text('Accentkleur','Accent color'),background_strength:text('Achtergrondsterkte','Background intensity'),sync_timeframe:text('Tijdvak synchroniseren','Synchronize timeframe'),hover_sync_group:text('Synchronisatiegroep','Synchronization group'),show_field_1:text('Zonne-energie tonen','Show solar generation'),show_field_2:text('Netafname tonen','Show grid import'),show_field_3:text('Teruglevering tonen','Show grid export'),title:text('Onderschrift hoofdwaarde','Primary value subtitle'),default_view:text('Standaardweergave','Default view'),background:text('Achtergrond','Background'),compact:text('Compacte weergave','Compact layout'),animate_background:text('Achtergrond animeren','Animate background'),hours_to_show:text('Uren bij standaardperiode','Hours in default period'),solar_power_entity:text('Totaal zonnevermogen','Total solar power'),grid_power_entity:text('Netvermogen (positief = afname)','Grid power (positive = import)'),grid_power_inverted:text('Teken van eigen netvermogen omkeren','Invert custom grid power'),grid_import_power_entity:text('Afzonderlijk afnamevermogen','Separate import power'),grid_export_power_entity:text('Afzonderlijk terugleververmogen','Separate export power'),home_power_entity:text('Gemeten totaal woningvermogen','Measured total home power')};
+  const select=(name,options)=>({name,selector:{select:{mode:'dropdown',options}}}),bool=name=>({name,selector:{boolean:{}}}),entity=name=>({name,selector:{entity:{domain:'sensor',device_class:'power'}}}),group=(name,title,schema,expanded=false)=>({type:'expandable',flatten:true,name,title,schema,expanded});
+  const schema=[group('general',text('Algemeen','General'),[{name:'title',selector:{text:{}}},select('default_view',[{value:'live',label:text('Actueel','Live')},{value:'history',label:text('Historisch','History')}])],true),group('appearance',text('Weergave','Appearance'),[select('color',ENERGY_FLOW_COLORS.map(item=>({...item,label:item.label.split(' / ')[nl?0:1]}))),select('background',energyFlowBackgroundOptions(nl)),{name:'background_strength',selector:{number:{min:0,max:100,step:5,mode:'slider',unit_of_measurement:'%'}}},bool('animate_background'),bool('compact'),bool('show_field_1'),bool('show_field_2'),bool('show_field_3')]),group('power',text('Actueel vermogen · optionele afwijkende sensoren','Live power · optional sensor overrides'),[entity('solar_power_entity'),entity('home_power_entity'),entity('grid_power_entity'),...(this._config.grid_power_entity?[bool('grid_power_inverted')]:[entity('grid_import_power_entity'),entity('grid_export_power_entity')])]),group('history',text('Historische gegevens','Historical data'),[{name:'hours_to_show',selector:{number:{min:1,max:8784,step:1,mode:'box'}}},bool('sync_timeframe'),...(this._config.sync_timeframe?[{name:'hover_sync_group',selector:{text:{}}}]:[])])];
+  Object.assign(labels,{price_entity:text('Huidige afnameprijs · optioneel','Current import price · optional'),export_price_entity:text('Huidige terugleverprijs · optioneel','Current export price · optional')});
+  schema.push(group('prices',text('Prijzen','Prices'),[{name:'price_entity',selector:{entity:{domain:'sensor'}}},{name:'export_price_entity',selector:{entity:{domain:'sensor'}}}]));
+  const builtins=ENERGY_FLOW_TABS.map(tab=>({value:tab.value,label:tab[nl?'nl':'en']}));
+  const defaults=[...(this._config.detail_view==='tabs'?builtins.filter(tab=>this._config.tabs.includes(tab.value)):[]),...this._config.custom_tabs.filter(tab=>tab.show).map((tab,i)=>({value:tab.id,label:tab.title||text('Eigen tabblad ','Custom tab ')+(i+1)}))];
+  schema.push(group('tab_settings',text('Tabbladen','Tabs'),[select('detail_view',[{value:'popup',label:text('Pop-ups','Popups')},{value:'tabs',label:text('Tabbladen','Tabs')}]),...(this._config.detail_view==='tabs'?[{name:'tabs',selector:{select:{multiple:true,mode:'list',options:builtins}}}]:[]),...(defaults.length?[select('default_tab',defaults)]:[])],true));
+  if(!this._form){
+   this.shadowRoot.innerHTML='<style>:host,ha-form{display:block;min-width:0}p{font-size:12px;line-height:1.5;color:var(--secondary-text-color);margin:0 0 12px}h3{font-size:16px;margin:24px 0 12px}details{border:1px solid var(--divider-color);border-radius:8px;margin:12px 0;min-width:0}summary{padding:12px;min-height:44px;cursor:pointer;overflow-wrap:anywhere}.tab-body{padding:0 12px 12px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}button{font:inherit;min-height:44px;border:1px solid var(--divider-color);border-radius:8px;padding:8px 12px;background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer}button:disabled{opacity:.4}button:focus-visible,summary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}</style><p></p><ha-form></ha-form><h3></h3><p class="tabs-help"></p><div class="custom-tabs"></div><button type="button" data-action="tab-add"></button>';
+   this._form=this.shadowRoot.querySelector('ha-form');this._form.addEventListener('value-changed',event=>{event.stopPropagation();const value=event.detail.value,next={...this._config,...value};this._config=normalizeEnergyFlowConfig(next);this._render();this._emitConfig();});
+   this.shadowRoot.querySelector('[data-action=tab-add]').onclick=()=>this._customAction('tab-add');
+  }
+  this.shadowRoot.querySelector('p').textContent=text('Bronnen worden automatisch uit het Home Assistant Energy-dashboard gelezen. Historisch gebruikt Recorder in kWh. Actueel gebruikt de ingestelde vermogenssensoren in W of kW. Kies hieronder alleen afwijkende sensoren als dat nodig is. Een eigen zonne- of netsensor moet alle bijbehorende bronnen samen meten; een eigen woningvermogensensor meet het volledige woningverbruik.','Sources are read automatically from the Home Assistant Energy dashboard. History uses Recorder in kWh. Live uses configured power sensors in W or kW. Override sensors only when needed. A solar or grid override must measure all corresponding sources combined; a home override must measure the entire home.');
+  this._form.hass=this._hass;const key=JSON.stringify([nl,schema]);if(key!==this._schemaKey){this._schemaKey=key;this._form.schema=schema;this._form.computeLabel=item=>labels[item.name]??item.name;}this._form.computeHelper=item=>({default_tab:text('Opent bij het laden. Handmatige tabkeuze blijft behouden bij sensorupdates.','Opens on load. Manual tab selection is preserved during sensor updates.'),animate_background:text('Schakelt beweging in voor geanimeerde achtergronden en de actuele energiestroom. Verminderde beweging wordt gerespecteerd.','Enables motion for animated backgrounds and live energy flow. Respects reduced motion.'),color:text('Vaste kleur voor de achtergrond. Tabbladen volgen de themakleur; zon, woning en net behouden hun eigen kleuren.','Fixed colour for the background. Tabs follow the theme colour; solar, home and grid retain their own colours.'),title:text('Tekst onder de hoofdwaarde. Leeg gebruikt Woningverbruik.','Text below the primary value. Empty uses Home consumption.'),sync_timeframe:text('Alleen de historische weergave deelt het tijdvak met andere kaarten in dezelfde groep. Actueel blijft onafhankelijk.','Only history shares its timeframe with other cards in the same group. Live stays independent.'),hover_sync_group:text('Leeg gebruikt de standaardgroep.','Empty uses the default group.')})[item.name];this._form.data=this._config;this._renderCustomTabs(nl);
+  const previousHelper=this._form.computeHelper;
+  this._form.computeHelper=item=>['price_entity','export_price_entity'].includes(item.name)?text('Toont de huidige sensorwaarde in Net · Actueel. Gebruik een prijs per kWh, Wh of MWh. Leeg gebruikt de prijs uit Energy.','Shows the current sensor value in Grid · Live. Use a price per kWh, Wh or MWh. Empty uses the Energy tariff.'):previousHelper(item);
+ }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+let energyFlowSequence=0;
+class EnergyFlowCard extends HTMLElement{
+ constructor(){super();this.attachShadow({mode:'open'});this._id='energy-flow-'+(++energyFlowSequence);this._version=0;this._periodMode='today';this._statistics=null;}
+ static getStubConfig(){return {default_view:'live'};}
+ static async getConfigElement(){
+  if(!customElements.get('ha-form')&&window.loadCardHelpers){const helpers=await window.loadCardHelpers();const card=await helpers.createCardElement({type:'entities',entities:[]});await card.constructor.getConfigElement();}
+  if(!customElements.get('eleven-energy-flow-editor'))customElements.define('eleven-energy-flow-editor',EnergyFlowEditor);
+  return document.createElement('eleven-energy-flow-editor');
+ }
+ getCardSize(){const config=this._config,hasTabs=(config?.detail_view==='tabs'&&config.tabs.length)||config?.custom_tabs?.some(tab=>tab.show);return (config?.compact?5:6)+(hasTabs?4:0);}
+ getGridOptions(){return {columns:12,min_columns:6,rows:this.getCardSize(),min_rows:3};}
+ setConfig(input){
+  const previous=this._config,next=normalizeEnergyFlowConfig(input);this._config=next;
+  if(!previous||previous.default_tab!==next.default_tab||previous.detail_view!==next.detail_view)this._activeTab=next.default_tab;
+  if(previous?.detail_view!==next.detail_view)this._dismissDetails();
+  const changedGroup=previous&&(previous.sync_timeframe!==next.sync_timeframe||previous.hover_sync_group!==next.hover_sync_group);
+  if(changedGroup)this._sharedTimeframe=null;
+  const changedView=!previous||previous.default_view!==next.default_view;
+  if(changedView)this._view=next.default_view;
+  if(!previous||changedView||changedGroup||previous.hours_to_show!==next.hours_to_show)this._reloadPeriod();else this.render();
+  this._sync();
+ }
+ set hass(hass){const changed=this._hass?.connection!==hass?.connection||this._offline()!==(hass?.connected===false||hass?.connection?.connected===false);this._hass=hass;if(changed)this._reset();this.render();this._sync();}
+ get hass(){return this._hass;}
+ _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
+ connectedCallback(){this._attached=true;this._connectTimeframe();if(this._view==='history')this._reloadPeriod();this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._sync());this.render();this._sync();}
+ disconnectedCallback(){this._tabController?.disconnect();this._attached=false;this._connected=false;this._timeframeKey=null;disconnectTimeframeSync(this);this._motionCleanup?.();this._motionCleanup=null;disconnectPeriodControls(this);this._reset();}
+ _reset(){this._dismissDetails();this._baseVersion=(this._baseVersion??0)+1;this._baseResult=null;this._basePendingKey=null;this._detailVersion=(this._detailVersion??0)+1;this._detailResult=null;this._detailLoading=false;this._detailError=false;this._detailInfo=null;this._version++;clearTimeout(this._timer);this._timer=null;this._loading=false;this._prefs=null;this._statistics=null;this._error=null;this._requested=0;}
+ _connectTimeframe(){
+  this._connected=!!this._attached&&this._view==='history';
+  const key=this._connected&&this._config?.sync_timeframe?(this._config.hover_sync_group?.trim()||'default'):null;
+  if(key===this._timeframeKey)return;
+  this._timeframeKey=key;connectTimeframeSync(this);
+ }
+ _reloadPeriod(){this._detailVersion=(this._detailVersion??0)+1;this._detailResult=null;this._detailLoading=false;this._detailError=false;this._connectTimeframe();const range=graphPeriodRange(this);this._start=range.start;this._end=range.end;this._viewStart=range.start;this._viewEnd=range.end;this._status='ready';this._version++;this._loading=false;this._statistics=null;this._requested=0;this.render();this._sync();}
+ _dismissDetails(){
+  this._detailNode=null;
+  for(const binding of Object.values(this._detailBindings??{})){binding.close();binding.disconnect();}
+  this._detailBindings={};
+ }
+ _refreshDetailContent(){
+  const focusedSort=this.shadowRoot.activeElement?.matches?.('[data-energy-device-sort]');
+  const focusedDevice=this.shadowRoot.activeElement?.closest?.('[data-device-stat]')?this.shadowRoot.activeElement?.dataset.entity:null;
+  for(const popup of this.shadowRoot.querySelectorAll('[data-energy-popup],[data-energy-panel]')){
+   const body=popup.querySelector('.energy-detail-body');
+   body.innerHTML=energyFlowDetailContent(this,popup.dataset.energyPopup??popup.dataset.energyPanel,this._displayData??{});
+   body.setAttribute('aria-busy',String(this._view==='history'&&!!this._detailLoading));
+  }
+  // Opening a controller can synchronously refresh loading content. Position
+  // afterwards so native showPopover is never re-entered during that open.
+  queueMicrotask(()=>this._detailBindings?.[this._detailNode]?.position());
+  if(focusedSort)this.shadowRoot.querySelector('[data-energy-device-sort]')?.focus({preventScroll:true});
+  if(focusedDevice)[...this.shadowRoot.querySelectorAll('[data-device-stat] [data-entity]')].find(button=>button.dataset.entity===focusedDevice)?.focus({preventScroll:true});
+ }
+ async _loadBaseConsumption(){
+  if(!this._prefs||this._offline()||!this._attached||document.hidden||this.hasAttribute('data-motion-paused'))return;
+  const end=Math.floor(Math.min(this._view==='history'?this._end:Date.now(),Date.now())/3600000)*3600000;
+  const key=JSON.stringify([end,this._prefs,this._hass?.config?.time_zone]);
+  if(this._basePendingKey===key||this._baseResult?.key===key)return;
+  const ids=energyFlowStatisticIds(this._prefs);if(!ids.length)return;
+  const prefs=this._prefs,zone=this._hass?.config?.time_zone??'UTC',version=this._baseVersion=(this._baseVersion??0)+1;
+  this._basePendingKey=key;this._baseResult=null;
+  try{
+   const statistics=await this._request({type:'recorder/statistics_during_period',start_time:new Date(end-8*86400000).toISOString(),end_time:new Date(end).toISOString(),statistic_ids:ids,period:'hour',units:{energy:'kWh'},types:['change']});
+   if(version===this._baseVersion&&this._attached)this._baseResult={key,value:energyFlowBaseConsumption(prefs,statistics,zone,end)};
+  }catch{if(version===this._baseVersion)this._baseResult=null;}
+  finally{if(version===this._baseVersion){this._basePendingKey=null;this._refreshDetailContent();}}
+ }
+ async _loadDetails(){
+  if(this._detailNode==='home'||this._config.detail_view==='tabs'&&this._activeTab==='home')this._loadBaseConsumption();
+  if(this._view!=='history'||!this._prefs||this._offline()){this._refreshDetailContent();return;}
+  if(!this._attached||document.hidden||this.hasAttribute('data-motion-paused'))return;
+  const key=JSON.stringify([this._start,this._end,this._prefs]);
+  if(this._detailLoading&&this._detailPendingKey===key)return;
+  if(this._detailResult?.key===key&&Date.now()-this._detailResult.time<60000){this._refreshDetailContent();return;}
+  const version=this._detailVersion=(this._detailVersion??0)+1,prefs=this._prefs,start=this._start,end=Math.min(this._end,Date.now());
+  this._detailLoading=true;this._detailError=false;this._detailPendingKey=key;this._refreshDetailContent();
+  try{
+   const info=this._detailInfo??await this._request({type:'energy/info'});
+   const ids=energyFlowDetailIds(prefs,info),costIds=[...new Set(energyFlowGridMeters(prefs).map(m=>m.cost||info.cost_sensors?.[m.energy]).filter(Boolean))];
+   const results=await Promise.all([
+    ids.length?this._request({type:'recorder/statistics_during_period',start_time:new Date(start).toISOString(),end_time:new Date(end).toISOString(),statistic_ids:ids,period:'hour',units:{energy:'kWh'},types:['change']}):{},
+    costIds.length?this._request({type:'recorder/get_statistics_metadata',statistic_ids:costIds}).catch(()=>[]):[],
+   ]);
+   if(version!==this._detailVersion||!this._attached)return;
+   this._detailInfo=info;
+   const metadata=Object.fromEntries((Array.isArray(results[1])?results[1]:[]).map(item=>[item.statistic_id,item]));
+   this._detailResult={key,time:Date.now(),statistics:results[0],metadata,info};
+  }catch{if(version===this._detailVersion)this._detailError=true;}
+  finally{if(version===this._detailVersion){this._detailLoading=false;this._refreshDetailContent();}}
+ }
+ _bindDetails(){
+  if(this._config.detail_view==='tabs')return;
+  const open=this._detailNode;
+  for(const kind of ['home','grid','sun']){
+   const trigger=this.shadowRoot.querySelector(`[data-energy-detail=${kind}]`),popup=this.shadowRoot.querySelector(`[data-energy-popup=${kind}]`);
+   let controller;
+   controller=bindUIPopup({trigger,popup,container:popup,align:'center',
+    topBoundary:()=>Math.max(8,(this.shadowRoot.querySelector('.toolbar')?.getBoundingClientRect().bottom??0)+8),
+    keepOpenOnOutside:event=>event.composedPath().some(node=>node?.getRootNode?.()===this.shadowRoot&&node.matches?.('.toolbar,.period-menu,[data-energy-detail]')),
+    isRequested:()=>this._detailNode===kind,isCurrent:()=>this._detailBindings?.[kind]===controller,
+    beforeOpen:()=>{for(const [name,binding] of Object.entries(this._detailBindings??{}))if(name!==kind)binding.close();},
+     onOpen:()=>{this._detailNode=kind;this._loadDetails();},
+    onClose:()=>{if(this._detailNode===kind)this._detailNode=null;},
+   });
+   this._detailBindings??={};this._detailBindings[kind]=controller;
+  }
+  // Let closed period menus and replaced popup nodes leave the native top layer
+  // before restoring the requested detail popup.
+  if(open){const binding=this._detailBindings[open];requestAnimationFrame(()=>{if(this._detailBindings[open]===binding&&this._detailNode===open)binding.open(false);});}
+ }
+ async _request(message){let timer;try{return await Promise.race([Promise.resolve().then(()=>this._hass.callWS(message)),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('timeout')),15000);})]);}finally{clearTimeout(timer);}}
+ _sync(){
+  clearTimeout(this._timer);this._timer=null;
+  if(!this._attached||!this._config||!this._hass||this._offline()||document.hidden||this.hasAttribute('data-motion-paused')||this._loading)return;
+  const interval=this._view==='history'?60000:300000,elapsed=Date.now()-(this._requested??0);
+  if(elapsed<interval){this._timer=setTimeout(()=>this._sync(),interval-elapsed);return;}
+  if(typeof this._hass.callWS!=='function')return;
+  const version=++this._version;this._loading=true;this._error=null;this._requested=Date.now();this.render();
+  (async()=>{
+   // Refresh preferences periodically so edits in HA Energy are picked up too.
+   const prefs=await this._request({type:'energy/get_prefs'});
+   if(version!==this._version||!this._attached)return;
+   if(!Array.isArray(prefs?.energy_sources))throw Error('invalid preferences');
+   if(JSON.stringify(prefs)!==JSON.stringify(this._prefs)){this._statistics=null;this._detailResult=null;this._detailInfo=null;this._detailVersion=(this._detailVersion??0)+1;this._detailLoading=false;}
+   this._prefs=prefs;
+   if(this._view==='history'){
+    const range=graphPeriodRange(this);this._start=range.start;this._end=range.end;this._viewStart=range.start;this._viewEnd=range.end;
+    const request=energyFlowStatisticsRequest(prefs,range.start,range.end);
+    const statistics=request.statistic_ids.length?await this._request(request):{};
+    if(version!==this._version||!this._attached)return;
+    this._statistics=statistics;
+   }
+  })().catch(()=>{if(version===this._version){this._error=true;this._statistics=null;}}).finally(()=>{
+   if(version!==this._version)return;this._loading=false;this.render();this._sync();
+  });
+ }
+ render(){
+  if(!this._config)return;
+  const config=this._config,nl=energyFlowDutch(this._hass),text=(a,b)=>nl?a:b,history=this._view==='history',offline=this._offline();
+  const empty={solar:null,import:null,export:null,home:null},data=offline||!this._prefs||this._error||!Object.values(energyFlowSources(this._prefs)).some(list=>list.length)?empty:history?(this._statistics?energyFlowHistorical(this._prefs,this._statistics):empty):energyFlowLive(this._prefs,this._hass,config);
+  const unit=history?'kWh':'kW',format=value=>{if(value==null)return '—';try{return new Intl.NumberFormat(this._hass?.locale?.language??this._hass?.language??'en',{maximumFractionDigits:2}).format(value);}catch{return new Intl.NumberFormat('en',{maximumFractionDigits:2}).format(value);}};
+  const metrics=energyFlowMetrics(data,history,nl,format,config.compact,config);
+  const sources=energyFlowSources(this._prefs),configured=Object.values(sources).some(list=>list.length),period=history?periodControls(this,nl?'nl':'en',{popupNavigation:true,tabVariant:'card'}):null;
+  const focusedTab=this.shadowRoot.activeElement?.dataset.uiTab,focusedEntity=this.shadowRoot.activeElement?.dataset.entity;
+  this._tabController?.disconnect();
+  const focused=this.shadowRoot.activeElement?.dataset.viewButton;
+  const focusedDetail=this.shadowRoot.activeElement?.dataset.energyDetail;
+  const active=this.shadowRoot.activeElement;
+  const focusedPopupControl=active?.hasAttribute('data-ui-popup-close')?'[data-ui-popup-close]':active?.hasAttribute('data-detail-retry')?'[data-detail-retry]':null;
+  const openedDetail=this._detailNode,detailScroll=this.shadowRoot.querySelector(`[data-energy-popup=${openedDetail}]`)?.scrollTop??0;
+  for(const binding of Object.values(this._detailBindings??{})){binding.disconnect();binding.close();}
+  this._detailBindings={};this._detailNode=openedDetail;
+  // Recreate closed native popovers before patching their bodies. Reusing a
+  // focused top-layer node across period changes can stall Chromium layout.
+  for(const popup of this.shadowRoot.querySelectorAll('[data-energy-popup]'))popup.remove();
+  this._displayData=data;
+  const tabs=energyFlowTabs(this,data,nl);
+  const details=(config.detail_view==='tabs'?'':['home','grid','sun'].map(kind=>energyFlowDetailPopup(this,kind,data,{id:this._id+'-detail-'+kind})).join(''));
+  const switchButton=uiButton({text:history?text('Actueel','Live'):text('Historisch','History'),variant:'text',attrs:{'data-view-button':history?'live':'history','aria-label':history?text('Toon actueel vermogen','Show live power'):text('Toon historische energie','Show historical energy')}});
+  const toolbar=`<div class="toolbar"><div class="header-actions"><div class="chart-controls" role="group" aria-label="${text('Weergave en tijdvak','View and timeframe')}"><div class="view-period">${switchButton}${history?period.picker:''}</div>${history?period.navigation:''}</div></div></div>`;
+  let notice=offline?text('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'):this._error?text('Energy-gegevens laden mislukt. Controleer de Energy-configuratie en Recorder.','Could not load Energy data. Check Energy configuration and Recorder.'):!this._prefs?text('Energy-configuratie laden…','Loading Energy configuration…'):!configured?text('Stel elektriciteitsbronnen in via het Home Assistant Energy-dashboard.','Configure electricity sources in the Home Assistant Energy dashboard.'):this._loading&&history&&!this._statistics?text('Energiestatistieken laden…','Loading energy statistics…'):Object.values({solar:data.solar,import:data.import,export:data.export,home:data.home}).some(value=>value==null)?history?text('Niet alle energiestatistieken zijn beschikbaar voor deze periode.','Some energy statistics are unavailable for this period.'):text('Actueel vermogen ontbreekt. Stel vermogenssensoren in bij Energy of kies ze in de kaartconfiguratie.','Live power is missing. Configure power sensors in Energy or select them in the card editor.'):'';
+  if(data.battery)notice+=(notice?' ':'')+text('Thuisbatterij meegerekend in woningverbruik.','Home consumption includes the battery balance.');
+  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div>${toolbar}<div class="energy-heading">${uiPrimaryValue({value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
+  if(!this._bound){this._bound=true;this.shadowRoot.addEventListener('click',event=>{
+   const entity=event.target.closest?.('[data-entity]');
+   if(entity){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:entity.dataset.entity},bubbles:true,composed:true}));return;}
+   const endpoint=event.target.closest?.('[data-energy-detail]');
+   if(endpoint&&this._config.detail_view==='tabs'){
+    const kind=endpoint.dataset.energyDetail;
+    if(this._config.tabs.includes(kind)){this._activeTab=kind;this._tabController?.select(kind,{focus:true});this._loadDetails();}
+    return;
+   }
+   const button=event.target.closest?.('[data-view-button]');
+   if(button){if(button.dataset.viewButton===this._view)return;disconnectPeriodControls(this);this._periodMenuOpen=false;this._periodMenuPending=false;this._view=button.dataset.viewButton;this._reloadPeriod();}
+   else if(event.target.closest?.('[data-detail-retry]')){this._detailResult=null;this._loadDetails();}
+   else if(event.target.closest?.('[data-retry]')){this._requested=0;this._sync();}
+  });this.shadowRoot.addEventListener('change',event=>{if(event.target.matches?.('[data-energy-device-sort]')){this._deviceSort=event.target.value==='cost'?'cost':'energy';this._refreshDetailContent();}});this.shadowRoot.addEventListener('keydown',event=>{if(event.key==='Escape'&&this._detailNode&&!this._periodMenuOpen){event.preventDefault();event.stopPropagation();this._detailBindings[this._detailNode]?.close(true);}});}
+  this._tabController=bindUITabs({tabs:this.shadowRoot.querySelectorAll('[data-energy-tabs] [data-ui-tab]'),panels:this.shadowRoot.querySelectorAll('[data-energy-tabs] [data-ui-tab-panel]'),onSelect:value=>{this._activeTab=value;this.render();}});
+  if(focusedTab)([...this.shadowRoot.querySelectorAll('[data-energy-tabs] [data-ui-tab]')].find(tab=>tab.dataset.uiTab===focusedTab)??this.shadowRoot.querySelector('[data-energy-tabs] [aria-selected=true]'))?.focus({preventScroll:true});
+  if(focusedEntity)[...this.shadowRoot.querySelectorAll('[data-entity]')].find(button=>button.dataset.entity===focusedEntity)?.focus({preventScroll:true});
+  this._bindDetails();
+  if(this._config.detail_view==='tabs'&&this._config.tabs.includes(this._activeTab))this._loadDetails();
+  bindPeriodControls(this);
+  if(openedDetail&&config.detail_view!=='tabs'){const popup=this.shadowRoot.querySelector(`[data-energy-popup=${openedDetail}]`);requestAnimationFrame(()=>{if(!popup.isConnected||this._detailNode!==openedDetail)return;popup.scrollTop=detailScroll;if(focusedPopupControl)popup.querySelector(focusedPopupControl)?.focus({preventScroll:true});else if(focusedEntity)[...popup.querySelectorAll('[data-entity]')].find(button=>button.dataset.entity===focusedEntity)?.focus({preventScroll:true});});}
+  if(focusedDetail&&!openedDetail)this.shadowRoot.querySelector(`[data-energy-detail=${focusedDetail}]`)?.focus({preventScroll:true});
+  if(focused&&!this._periodMenuOpen)this.shadowRoot.querySelector('[data-view-button]')?.focus({preventScroll:true});
+ }
+}
+
+if(!customElements.get('eleven-energy-flow-card'))customElements.define('eleven-energy-flow-card',EnergyFlowCard);
+window.customCards=window.customCards||[];
+if(!window.customCards.some(card=>card.type==='eleven-energy-flow-card'))window.customCards.push({type:'eleven-energy-flow-card',name:'Eleven Energy Flow (beta)',description:'Automatic Home Assistant Energy sources, live power and historical energy distribution.',preview:true});
 })();

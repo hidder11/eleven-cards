@@ -10,7 +10,8 @@ let Card;const timers=new Map();let timerId=0;
 vm.runInNewContext(readFileSync(new URL('../src/dynamic-energy-price-card.js',import.meta.url),'utf8').replace(/^import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];\s*/gm,''),{
  ...periods,...graph,...utils,...localization,Date,Intl,URLSearchParams,console,
  setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id),
- HTMLElement:class{attachShadow(){this.shadowRoot={querySelector:()=>null,querySelectorAll:()=>[]};}},
+ CustomEvent:class{constructor(type){this.type=type;}},
+ HTMLElement:class{attachShadow(){this.shadowRoot={querySelector:()=>null,querySelectorAll:()=>[]};}dispatchEvent(event){this.lastEvent=event;return true;}},
  customElements:{get:()=>undefined,define:(n,c)=>{if(n==='eleven-dynamic-energy-price-card')Card=c;}},window:{addEventListener(){},removeEventListener(){}}
 });
 test('new cards have no preselected entity and render a localized source prompt',()=>{
@@ -45,9 +46,20 @@ test('Tibber source calls read-only get_price in EUR with no sensor and caches/d
  assert.equal(utils.localDayKey(message.service_data.end_time,'Europe/Amsterdam'),utils.addDaysToKey(utils.localDayKey(new Date(),'Europe/Amsterdam'),2));
  assert.equal(utils.localHour(message.service_data.end_time,'Europe/Amsterdam'),0);
  assert.equal(c._sourceState('import').attributes.data[0].price_per_kwh,-.0123);
+ assert.equal(c.lastEvent.type,'eleven-prices-changed');
  assert.equal(c._hasExportSource(),true);
  c._ensureTibber('import');assert.equal(calls,1);
  c._tibberCache.values().next().value.fetchedAt-=300001;c._ensureTibber('import');await tick();assert.equal(calls,2);
+});
+
+test('background Price provider supplies current intervals and offsets without drawing a graph',async()=>{
+ const c=new Card(),start=Math.floor(Date.now()/900000)*900000;
+ c.setConfig({price_provider:true,import_source:'tibber_prices',export_source:'tibber_prices',export_price_offset:-.04});
+ c.hass={language:'en',config:{time_zone:'UTC',currency:'EUR'},states:{},callWS:async()=>({response:{success:true,price_info:[0,1].map(i=>({startsAt:new Date(start+i*900000).toISOString(),total:-.12}))}})};
+ await tick();assert.equal(c.currentPrices().import.value,-.12);assert.ok(Math.abs(c.currentPrices().export.value+.16)<1e-9);
+ assert.equal(c._chart,undefined);assert.equal(c.shadowRoot.innerHTML,undefined);assert.equal(c.lastEvent.type,'eleven-prices-changed');
+ assert.equal(c.currentPrices(new Date(start+1800000)).import,null);
+ c.disconnectedCallback();
 });
 test('get_price renders without an entity, preserves negative prices and handles missing service and non-EUR honestly',async()=>{
  const c=new Card();c.setConfig({import_source:'tibber_prices'});

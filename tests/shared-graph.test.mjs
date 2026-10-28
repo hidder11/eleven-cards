@@ -35,7 +35,7 @@ test('both independent bundles use the same renderer and keep domain logic in ad
     const bundle=readFileSync(new URL(`../cards/${card}/dist/eleven-${file}.js`,import.meta.url),'utf8');
     assert.match(bundle,/class SharedGraph/);
     assert.doesNotMatch(bundle,/^import /m);
-    assert.ok(bundle.includes(readFileSync(new URL('../shared/graph.js',import.meta.url),'utf8').replace(/^export /gm,'')));
+    assert.ok(bundle.includes(readFileSync(new URL('../shared/graph.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').trim()));
   }
 });
 test('shared graph renders supplied geometry, fills, layers and energy line styles without domain knowledge', () => {

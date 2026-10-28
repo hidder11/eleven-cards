@@ -1,4 +1,4 @@
-# Eleven Bar Chart (local beta)
+# Eleven Bar Chart
 
 Vertical bars for recorded numeric sensor history, based on Eleven History's renderer, native editor and interactions.
 
@@ -60,7 +60,7 @@ Hover snaps to the selected bar rather than following the exact pointer time. Th
 
 `series_options` supports sensor `entity`, `name`, `visible`, `color_mode`, `color`, `gradient_mode` and `gradient_stops`, using the same color format and semantics as [History](../history-graph-card/README.md). General options retain History's YAML names; grouped bars use `graph_mode: lines` for configuration compatibility. Bars are not a distinct line-interpolation mode and existing History cards are unchanged.
 
-This beta is installed locally as an independent Home Assistant resource and included in local collection builds; it has not been published to HACS. Existing dashboard configurations are unchanged. The standalone build is `dist/eleven-bar-chart.js` and registers only `eleven-bar-chart`. Use either the collection bundle or standalone modules, not both.
+The card is available as an independent Home Assistant resource and is included in the collection build. Existing dashboard configurations are unchanged. The standalone build is `dist/eleven-bar-chart.js` and registers only `eleven-bar-chart`. Use either the collection bundle or standalone modules, not both.
 
 From the collection root:
 
