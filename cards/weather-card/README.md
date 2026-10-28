@@ -88,3 +88,7 @@ Use background_strength: 0-100 (default 100) to adjust the shared header backdro
 compact: true is the standard setting; density: compact is accepted as an alias. Explicit compact takes precedence. Single-source information surfaces open their entity from the whole surface; multiple-source readings retain separate controls.
 
 The **Weather icon** section positions the large header illustration with horizontal and vertical sliders (-150 to 150 px) and a size slider (50-300%). Defaults are 0 px offsets and 100% size. A horizontal offset of 0 centers the illustration in the full card; horizontal offsets are measured from that center. Negative offsets move left/up; positive offsets move right/down. Scaling and moving keep the header height fixed and leave condition/forecast icons unchanged. Works with classic, glass and neon icons, including compact layout.
+
+Car, Energy and Weather share all eleven backgrounds and the exact same localized editor names, including Animated/Static labels: lanes, halo, ribbon, prism-glass, eclipse, aurora, clouds, isobars, hologram, ink and terrain. Existing YAML IDs stay unchanged. New patterns use the shared header renderer, intensity, animation toggle and reduced-motion behavior.
+
+Information surfaces use the shared matte relief from shared/ui-surface.js, matching Energy, Car (including EVCC), Weather and Camera. Cross-card computed-style and narrow-layout checks are available in shared/qa/surface-consistency.html.

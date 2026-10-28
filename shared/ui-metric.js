@@ -1,4 +1,5 @@
 import {uiEscape,uiAttributes} from './ui-button.js';
+import {uiSurfaceStyles} from './ui-surface.js';
 
 // Text is escaped. *Content options are trusted markup owned by the calling card.
 // action renders a native button; do not nest other controls in that variant.
@@ -13,8 +14,8 @@ export function uiMetric({icon='',iconContent='',title='',value,valueContent='',
  </${tag}>`;
 }
 
-export function uiMetricStyles(){return `
-[data-ui-metric]{--_metric-tone:var(--ui-metric-tone,var(--primary-color,#2196f3));box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-content:start;align-items:start;min-width:0;padding:12px;border-radius:var(--ui-metric-radius,8px);background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--_metric-tone) 10%,transparent),color-mix(in srgb,var(--_metric-tone) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee);box-shadow:none;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+export function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
+[data-ui-metric]{--_metric-tone:var(--ui-metric-tone,var(--primary-color,#2196f3));box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-content:start;align-items:start;min-width:0;padding:12px;border-radius:var(--ui-metric-radius,8px);background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--_metric-tone) 10%,transparent),color-mix(in srgb,var(--_metric-tone) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee);color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
 [data-ui-metric]:has(.ui-metric-info){grid-template-rows:auto auto auto}
 [data-ui-metric] .ui-metric-icon{box-sizing:border-box;display:grid;place-items:center;grid-column:2;grid-row:1/span 2;width:26px;height:26px;border-radius:7px;color:var(--_metric-tone);background:transparent;transform:translate(4px,-4px)}
 [data-ui-metric] .ui-metric-icon svg,[data-ui-metric] .ui-metric-icon ha-icon{display:block;width:18px;height:18px;--mdc-icon-size:18px}

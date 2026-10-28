@@ -108,6 +108,8 @@ Omit either bound to let that side scale automatically. Set `title: ""` to hide 
 
 The editor separates Graph (legend and hover), a dedicated **Y-axis / Y-as** expansion (optional minimum, maximum and step), shared Data processing, and Sensors; title and time range remain directly visible above these groups. Open one sensor entry to select its entity once and adjust its name, line and fill. There are no duplicate global appearance controls. Each of two sensors has exactly the same independent controls as a single sensor.
 
+In a live range, measurement legends use the current sensor state when the graph uses Recorder statistics. Unfinished statistics remain gaps in the graph. Fixed historical ranges keep their historical legend values; Delta legends keep the period change rather than the live counter total.
+
 ### Y-axis
 
 Horizontal grid lines sit behind the data at every Y-axis tick. Two vertical lines mark the left and right plot boundaries. Different units share the same grid heights, with an independent round step per unit (for example 5 °C and 500 W). The first visible axis anchors the grid; additional ranges expand to fit without clipping their data. Explicit first-unit bounds and step remain exact. A zero grid line is slightly stronger. Grid colors and legend/tooltip values adapt to the card background: light values on dark cards and dark values on light cards. Series names retain the theme's secondary text color, and markers keep their series color.

@@ -1,5 +1,13 @@
 // Eleven Weather (beta) — self-contained module
 (()=>{
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function uiAttributes(values={}){
@@ -50,6 +58,7 @@ function uiPrimaryValueStyles(){return `
 `;}
 
 
+
 // Text is escaped. *Content options are trusted markup owned by the calling card.
 // action renders a native button; do not nest other controls in that variant.
 function uiMetric({icon='',iconContent='',title='',value,valueContent='',unit='',info='',infoContent='',compact=false,action=false,attrs={}}={}){
@@ -63,8 +72,8 @@ function uiMetric({icon='',iconContent='',title='',value,valueContent='',unit=''
  </${tag}>`;
 }
 
-function uiMetricStyles(){return `
-[data-ui-metric]{--_metric-tone:var(--ui-metric-tone,var(--primary-color,#2196f3));box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-content:start;align-items:start;min-width:0;padding:12px;border-radius:var(--ui-metric-radius,8px);background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--_metric-tone) 10%,transparent),color-mix(in srgb,var(--_metric-tone) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee);box-shadow:none;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
+[data-ui-metric]{--_metric-tone:var(--ui-metric-tone,var(--primary-color,#2196f3));box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-content:start;align-items:start;min-width:0;padding:12px;border-radius:var(--ui-metric-radius,8px);background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--_metric-tone) 10%,transparent),color-mix(in srgb,var(--_metric-tone) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee);color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
 [data-ui-metric]:has(.ui-metric-info){grid-template-rows:auto auto auto}
 [data-ui-metric] .ui-metric-icon{box-sizing:border-box;display:grid;place-items:center;grid-column:2;grid-row:1/span 2;width:26px;height:26px;border-radius:7px;color:var(--_metric-tone);background:transparent;transform:translate(4px,-4px)}
 [data-ui-metric] .ui-metric-icon svg,[data-ui-metric] .ui-metric-icon ha-icon{display:block;width:18px;height:18px;--mdc-icon-size:18px}
@@ -89,12 +98,12 @@ button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]
 `;}
 
 
-function uiTabs({id,label,items,selected,className='',panelClassName=''}={}){
+function uiTabs({id,label,items,selected,className='',panelClassName='',variant=''}={}){
  if(typeof id!=='string'||!id||!items?.length||items.some(item=>typeof item.value!=='string'||!item.value)||new Set(items.map(item=>item.value)).size!==items.length)throw Error('Tabs need an id and distinct text values.');
  const active=items.find(item=>item.value===selected&&!item.disabled)??items.find(item=>!item.disabled);
  const tabId=value=>`${id}-tab-${encodeURIComponent(value)}`,panelId=value=>`${id}-panel-${encodeURIComponent(value)}`;
- const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'',role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
- const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
+ const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'','data-ui-card-tabs':variant==='card'?true:null,role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
+ const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,'data-ui-card-tab-panel':variant==='card'?true:null,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
  return bar+panels;
 }
 function bindUITabs({tabs,panels,onSelect=()=>{}}){
@@ -124,6 +133,10 @@ function uiTabsStyles(){return `
 [data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
 [data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
 [data-ui-tab-panel][hidden]{display:none!important}
+[data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
+[data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
+[data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
+[data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
 
 // Decorative header layers; all paint inherits the weather state's --tone.
@@ -136,6 +149,9 @@ function observeCardMotion(host,onVisibility=()=>{}){
  return ()=>{observer?.disconnect();document.removeEventListener('visibilitychange',update);};
 }
 function headerAtmosphere(background){
+ if(background==='terrain')return '<div class="header-pattern" aria-hidden="true">'+Array.from({length:10},(_,n)=>`<i style="--n:${n}"></i>`).join('')+'</div>';
+ if(background==='hologram'||background==='ink')return '<div class="header-pattern" aria-hidden="true">'+'<i></i>'.repeat(background==='ink'?3:2)+'</div>';
+
  if(!['aurora','clouds','isobars'].includes(background))return '';
  let body='';
  if(background==='aurora')body=Array.from({length:32},(_,i)=>`<i style="--star-x:${i*37%100}%;--star-y:${i*19%72}%;--star-duration:${2+i%5}s;--star-delay:${-i*.37}s"></i>`).join('');
@@ -164,6 +180,24 @@ const headerAtmosphereStyles=`
 .content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere *,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::before,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::after{animation:none!important}
 :host([data-motion-paused]) *,:host([data-motion-paused]) *::before,:host([data-motion-paused]) *::after{animation-play-state:paused!important}
 @media(prefers-reduced-motion:reduce){.header-atmosphere,.header-atmosphere *,.header-atmosphere::before,.header-atmosphere::after{animation:none!important}}
+
+.header-pattern{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.header-pattern i{position:absolute;display:block;pointer-events:none}
+.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::before,.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::after{display:none}
+[data-background=hologram] .header-pattern{perspective:380px;background:radial-gradient(ellipse at 50% 60%,color-mix(in srgb,var(--tone) 15%,transparent),transparent 70%)}
+[data-background=hologram] .header-pattern i:first-child{inset:-25%;background:repeating-linear-gradient(0deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px),repeating-linear-gradient(90deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px);transform:rotateX(52deg);transform-origin:50% 80%;animation:energy-background-grid 26s linear infinite}
+[data-background=hologram] .header-pattern i:last-child{inset:0;background:linear-gradient(180deg,transparent 25%,color-mix(in srgb,var(--tone) 14%,transparent) 48%,transparent 65%);animation:energy-background-scan 16s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i{width:100%;height:100%;left:-20%;top:-35%;border-radius:36% 64% 55% 45% / 65% 45% 55% 35%;background:radial-gradient(ellipse,color-mix(in srgb,var(--tone) 25%,transparent),transparent 70%);filter:blur(15px);animation:energy-background-ink 29s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i:nth-child(2){left:35%;top:-20%;opacity:.75;animation-delay:-14s;animation-duration:37s}
+[data-background=ink] .header-pattern i:nth-child(3){left:5%;top:25%;opacity:.45;animation-delay:-24s;animation-duration:41s}
+[data-background=terrain] .header-pattern i{width:calc(130px + var(--n)*38px);height:calc(80px + var(--n)*25px);left:65%;top:20%;border:1px solid color-mix(in srgb,var(--tone) 20%,transparent);border-radius:42% 58% 63% 37% / 52% 37% 63% 48%;transform:translate(-50%,-50%) rotate(-18deg);animation:energy-background-terrain 24s ease-in-out infinite alternate;animation-delay:calc(var(--n)*-1.5s)}
+@keyframes energy-background-grid{to{background-position:0 72px,0 72px}}
+@keyframes energy-background-scan{from{transform:translateY(-25%)}to{transform:translateY(25%)}}
+@keyframes energy-background-ink{from{transform:rotate(-12deg) scale(.9)}to{transform:translate(10%,8%) rotate(25deg) scale(1.15)}}
+@keyframes energy-background-terrain{from{translate:-2% -2%;rotate:-2deg}to{translate:3% 5%;rotate:5deg}}
+.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-pattern i{animation:none!important}
+:host([data-motion-paused]) .header-pattern i{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.header-pattern i{animation:none!important}}
 `;
 
 // Shared designs; each card supplies its own state color through --tone.
@@ -199,8 +233,16 @@ const HEADER_BACKGROUNDS = [
  {
   "value": "isobars",
   "label": "Atmospheric flow"
- }
-];
+ },
+ {value:'hologram',label:'Holographic grid',labelNl:'Holografisch raster'},
+ {value:'ink',label:'Liquid ink',labelNl:'Vloeibare inkt'},
+ {value:'terrain',label:'Relief map',labelNl:'Reliëfkaart'}
+].map(item=>({...item,animated:['aurora','clouds','isobars','hologram','ink','terrain'].includes(item.value)}));
+function headerBackgroundOptions(nl){
+ return HEADER_BACKGROUNDS.map(item=>({value:item.value,label:`${nl?(item.labelNl??item.label):item.label} · ${nl?(item.animated?'Geanimeerd':'Statisch'):(item.animated?'Animated':'Static')}`}));
+}
+
+
 const headerBackgroundStyles = `
 :is(.scene-background,.header-background)::before,:is(.scene-background,.header-background)::after{content:"";position:absolute;z-index:-1;pointer-events:none;inset:auto;transform:none;border:0;box-shadow:none;border-radius:0;width:auto;height:auto}
 :where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::before{inset:0;background:linear-gradient(143deg,transparent 0 43%,color-mix(in srgb,var(--tone) 19%,transparent) 43.2% 70%,color-mix(in srgb,var(--tone) 5%,transparent) 70.2% 88%,transparent 88.2%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 11%,transparent),transparent 75%)}:where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::after{inset:20% -16% -30% 24%;transform:skewY(-36deg);background:repeating-linear-gradient(0deg,transparent 0 25px,color-mix(in srgb,var(--tone) 13%,transparent) 26px,transparent 27px 58px)}
@@ -541,6 +583,7 @@ function patchWeatherDOM(root,markup){
 
 
 
+
 const weatherEditorLabels={entity:['Weerentiteit','Weather entity'],title:['Kaartnaam (toegankelijkheid)','Card name (accessibility)'],background_strength:['Achtergrondsterkte','Background intensity'],background:['Achtergrond','Background'],animate_icons:['Weericonen animeren','Animate weather icons'],compact:['Compacte weergave','Compact layout'],tabs:['Zichtbare tabbladen','Visible tabs'],forecast_type:['Standaardtabblad','Default tab'],forecast_count:['Aantal voorspellingen','Forecast count']};
 weatherEditorLabels.metric_status_icon=['Icoon (optioneel)','Icon (optional)'];
 weatherEditorLabels.icon_scale=['Grootte weericoon','Weather icon size'];
@@ -570,7 +613,7 @@ class WeatherEditor extends HTMLElement{
   const metrics=[{value:'none',label:nl?'Niet tonen':'Hide'},{value:'custom',label:nl?'Eigen entiteit':'Custom entity'},...Object.entries(WEATHER_METRICS).map(([value,labels])=>({value,label:labels[nl?0:1]}))];
   const schema=[group('general',nl?'Algemeen':'General',[text('title'),{name:'entity',required:true,selector:{entity:{domain:'weather'}}}],true),
    group('weather_icon',nl?'Weericoon':'Weather icon',[slider('icon_scale',50,300,5,'%'),slider('icon_offset_x',-150,150,1,'px'),slider('icon_offset_y',-150,150,1,'px')]),
-   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',WEATHER_BACKGROUNDS),{name:'background_strength',selector:{number:{min:0,max:100,step:5,mode:'slider',unit_of_measurement:'%'}}},select('icon_style',[{value:'classic',label:nl?'Klassiek':'Classic'},{value:'glass',label:'Liquid glass'},{value:'neon',label:'Neon'}]),boolean('animate_background'),boolean('animate_icons')])];
+   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',headerBackgroundOptions(nl)),{name:'background_strength',selector:{number:{min:0,max:100,step:5,mode:'slider',unit_of_measurement:'%'}}},select('icon_style',[{value:'classic',label:nl?'Klassiek':'Classic'},{value:'glass',label:'Liquid glass'},{value:'neon',label:'Neon'}]),boolean('animate_background'),boolean('animate_icons')])];
   for(const [field,title] of [['metric_status',nl?'Breed gegevensveld':'Wide data field'],['metric_primary',nl?'Gegevensveld links':'Left data field'],['metric_secondary',nl?'Gegevensveld rechts':'Right data field']]){
    const fields=[select(field,field==='metric_status'?[...metrics.slice(0,2),{value:'condition',label:nl?'Weerstatus':'Weather conditions'},...metrics.slice(2)]:metrics)];
    if(config[field]!=='none')fields.push(...(config[field]==='custom'?[{name:field+'_entity',selector:{entity:{}}},text(field+'_attribute')]:[]),text(field+'_label'),boolean(field+'_show_unit'),...(config[field+'_show_unit']?[text(field+'_unit')]:[]),number(field+'_decimals',0,6));

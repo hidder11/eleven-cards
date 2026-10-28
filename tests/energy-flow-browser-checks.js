@@ -8,7 +8,7 @@
   for(const width of [260,360,480,640])for(const card of cards){
    card.style.width=width+'px';card.render();const r=card.shadowRoot;
    check(r.querySelector('.content').scrollWidth<=card.clientWidth,'no horizontal overflow');
-   check(r.querySelectorAll('.circle-node').length===3&&r.querySelectorAll('[data-ui-metric]').length===3,'three flow nodes');
+   check(r.querySelectorAll('.circle-node').length===3&&r.querySelectorAll('[data-ui-metric]').length===6,'three flow nodes');
    check(!r.querySelector('.tabs,.energy-panel,.chart,.consumer-node,.other-node,.share-track'),'no tabs, chart or extra content');
    check(r.querySelectorAll('[data-view-button]').length===1,'one opposite view button');
    check(r.querySelectorAll('[data-ui-primary-value]').length===1,'shared primary measurement');
@@ -29,7 +29,8 @@
    check(!r.querySelector('[data-view-button][role=tab]'),'buttons have no tab semantics');
    const rect=s=>r.querySelector(s).getBoundingClientRect();
    check(r.querySelectorAll('.flow-route').length===3,'three distinct connections');
-   for(const node of r.querySelectorAll('.circle-node')){const box=node.getBoundingClientRect();check(Math.abs(box.width-box.height)<.1,'round diagram nodes');}
+   for(const node of r.querySelectorAll('.circle-node')){check(getComputedStyle(node).borderRadius==='8px','nodes share metric rounding');check(getComputedStyle(node).backgroundImage.includes('radial-gradient'),'nodes share metric tint');}
+   check(r.querySelectorAll('.flow-reading').length===3,'three uniform route values');
    check(r.querySelector('[data-metric=solar] [data-energy-icon=solar]')!=null,'solar panel icon');
    check(r.querySelector('[data-metric=import] [data-energy-icon=import]')!=null,'import direction icon');
    check(r.querySelector('[data-metric=export] [data-energy-icon=export]')!=null,'export direction icon');
@@ -99,7 +100,7 @@
  check(Math.abs(Number(getComputedStyle(root.querySelector('.scene-background')).opacity)-.35)<.001,'background intensity is shared');
  for(let mask=0;mask<8;mask++){
   probe.setConfig({...base,show_field_1:!!(mask&1),show_field_2:!!(mask&2),show_field_3:!!(mask&4)});
-  check(root.querySelectorAll('[data-ui-metric]').length===Number(!!(mask&1))+Number(!!(mask&2))+Number(!!(mask&4)),'independent metric visibility '+mask);
+  check(root.querySelectorAll('[data-ui-metric]:not(.circle-node)').length===Number(!!(mask&1))+Number(!!(mask&2))+Number(!!(mask&4)),'independent metric visibility '+mask);
   check(!!root.querySelector('.flow-secondary')===!!(mask&6),'no empty lower metric grid '+mask);
   check(root.querySelector('.content').scrollWidth<=probe.clientWidth,'hidden fields retain narrow layout '+mask);
  }

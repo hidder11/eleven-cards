@@ -54,5 +54,7 @@ try {
 
 const result=await evaluate('('+(await readFile(resolve(root,'tests/energy-flow-browser-checks.js'),'utf8'))+')()');
 assert.deepEqual(exceptions,[],'no runtime exceptions');console.log('PASS: '+result+' energy flow example browser checks, no screenshots.');
+const detailChecks=await evaluate("import('/tests/energy-flow-details-browser-checks.js').then(module=>module.runEnergyFlowDetailChecks())");
+assert.deepEqual(exceptions,[],'no detail popup exceptions');console.log('PASS: '+detailChecks+' Energy detail popup browser checks, no screenshots.');
 await send('Browser.close').catch(()=>{});
 }finally{clearTimeout(watchdog);socket?.close();browser.kill();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

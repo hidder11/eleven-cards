@@ -1,3 +1,5 @@
+import {HEADER_BACKGROUNDS} from '../../../shared/header-backgrounds.js';
+import {normalizeEntityTabs} from '../../../shared/entity-tabs.js';
 import {normalizeEvccConfig} from './evcc/evcc-utils.js';
 export const CAR_COLORS = [
  {value:'charging',label:'Goud / Gold'}, {value:'waiting',label:'Blauw / Blue'},
@@ -5,15 +7,7 @@ export const CAR_COLORS = [
 ];
 const carText = value => typeof value === 'string' ? value.trim() : '';
 const carClamp = (value, fallback, min, max) => value !== '' && value != null && Number.isFinite(Number(value)) ? Math.max(min,Math.min(max,Number(value))) : fallback;
-export function normalizeCarTabs(input){
- const used=new Set();return (Array.isArray(input)?input:[]).filter(tab=>tab&&typeof tab==='object').map((tab,index)=>{
-  let id=/^custom-[a-z0-9_-]+$/.test(tab.id)?tab.id:'custom-'+(index+1);let n=1;while(used.has(id))id='custom-'+(index+1)+'-'+n++;used.add(id);
-  return {id,title:typeof tab.title==='string'?tab.title:'',show:tab.show!==false,entities:(Array.isArray(tab.entities)?tab.entities:[]).map(row=>{
-   row=typeof row==='string'?{entity:row}:row??{};
-   return {entity:carText(row.entity),name:typeof row.name==='string'?row.name:'',attribute:carText(row.attribute),unit:carText(row.unit),show_unit:row.show_unit!==false,decimals:row.decimals==null||row.decimals===''?null:Math.round(carClamp(row.decimals,2,0,6))};
-  })};
- });
-}
+export const normalizeCarTabs=input=>normalizeEntityTabs(input);
 export function normalizeCarConfig(config={}) {
  const evcc=config.evcc_enabled===true;
  const tabs=Array.isArray(config.tabs)?['controls','session','technical'].filter(tab=>config.tabs.includes(tab)):['controls','session','technical'].filter((tab,i)=>config[['show_controls','show_session','show_details'][i]]!==false);
@@ -26,13 +20,15 @@ export function normalizeCarConfig(config={}) {
  });
  return {...normalized,...fields,type:config.type||'custom:eleven-car-card',evcc_enabled:evcc,tabs,custom_tabs,default_tab:availableTabs.includes(config.default_tab)?config.default_tab:(availableTabs[0]??'controls'),show_controls:tabs.includes('controls'),show_session:tabs.includes('session'),show_details:tabs.includes('technical'),title:carText(config.title),percentage_entity:carText(config.percentage_entity),
   percentage:carClamp(config.percentage,0,0,100),image_entity:carText(config.image_entity),
+  image_source:['entity','media'].includes(config.image_source)?config.image_source:(config.image_media?'media':'entity'),
+  image_media:typeof config.image_media==='string'?{media_content_id:carText(config.image_media),media_content_type:'image/*'}:config.image_media&&typeof config.image_media==='object'&&!Array.isArray(config.image_media)?{...config.image_media,media_content_id:carText(config.image_media.media_content_id)}:undefined,
   range_source:['none','entity','calculated'].includes(config.range_source)?config.range_source:(config.range_entity?'entity':config.range_full>0?'calculated':'none'),
   range_entity:carText(config.range_entity),range_full:carClamp(config.range_full,null,0,100000),range_unit:config.range_unit==='mi'?'mi':'km',
   image_scale:carClamp(config.image_scale,100,50,300),image_offset_y:carClamp(config.image_offset_y,0,-150,150),
   image_offset_x:carClamp(config.image_offset_x,0,-150,150),animation_speed:carClamp(config.animation_speed,1,0.25,3),animation_max_kw:carClamp(config.animation_max_kw,11,0.1,500),
   battery_style:['classic','slim','soft','line'].includes(config.battery_style)?config.battery_style:'soft',
   animate_background:config.animate_background!==false,background_strength:carClamp(config.background_strength,100,0,100),
-  background:['lanes','halo','ribbon','prism-glass','eclipse','aurora','clouds','isobars'].includes(config.background)?config.background:'lanes',
+  background:HEADER_BACKGROUNDS.some(item=>item.value===config.background)?config.background:'lanes',
   color:CAR_COLORS.some(item=>item.value===config.color)?config.color:'charging',compact:(config.compact??(config.density==='compact'))===true,
   field_1_entity:carText(config.field_1_entity),field_1_label:carText(config.field_1_label),field_1_icon:carText(config.field_1_icon)||'mdi:car',
   field_2_entity:carText(config.field_2_entity),field_2_label:carText(config.field_2_label),

@@ -180,7 +180,22 @@ async function carChecks(){
  editor.shadowRoot.querySelectorAll('[data-action=tab-up]')[1].click();check('editor reorders tabs without changing IDs',changed.custom_tabs[0].id===stableId);
  editor.shadowRoot.querySelector('[data-action=tab-remove]').click();check('editor removes selected tab',changed.custom_tabs.length===1&&changed.custom_tabs[0].title==='Onderhoud');
  editor.shadowRoot.querySelector('[data-action=row-remove]').click();check('editor removes selected entity',changed.custom_tabs[0].entities.length===1&&changed.custom_tabs[0].entities[0].entity==='sensor.range');
- car.remove();check('removal clears clock and actions',!car._clockTimer&&!car._pendingMode&&!car._pendingSolar);
+ const media={media_content_id:'media-source://media_source/local/car.svg',media_content_type:'image/svg+xml',metadata:{title:'Auto'}};
+ const imageUrl='/cards/car-card/qa/evcc/car.svg?media=1',mediaCalls=[];
+ const mediaHass={...hass,callWS:async request=>{if(request.type==='media_source/resolve_media'){mediaCalls.push(request);return {url:imageUrl,mime_type:'image/svg+xml'};}return [];}};
+ for(const evcc_enabled of [false,true]){
+  const selected={...(evcc_enabled?evccConfig:config),evcc_enabled,image_source:'media',image_media:media};
+  car.hass=mediaHass;car.setConfig(selected);
+  for(let i=0;i<100&&q('img')?.getAttribute('src')!==imageUrl;i++)await new Promise(resolve=>setTimeout(resolve,20));
+  check('media image rendered in either mode '+evcc_enabled,q('img')?.getAttribute('src')===imageUrl);
+  const count=mediaCalls.length;car.hass={...mediaHass,states:{...mediaHass.states}};
+  check('telemetry reuses media URL '+evcc_enabled,mediaCalls.length===count&&q('img')?.getAttribute('src')===imageUrl);
+  editor.setConfig(selected);check('editor uses image-only media selector '+evcc_enabled,schema().some(item=>item.name==='image_media'&&item.selector.media.accept.includes('image/*')));
+  form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_source:'entity'}}}));
+  check('source switch retains both image choices '+evcc_enabled,changed.image_entity===config.image_entity&&changed.image_media.media_content_id===media.media_content_id);
+  car.setConfig({...selected,image_source:'entity'});check('entity image restored '+evcc_enabled,q('img')?.getAttribute('src')==='/cards/car-card/qa/evcc/car.svg');
+ }
+ car.remove();check('removal clears clock, media renewal and actions',!car._clockTimer&&!car._pendingMode&&!car._pendingSolar&&!car._mediaImage.timer);
  for(const defaultTab of ['controls','technical'])for(const manual of [false,true]){
   const card=document.createElement('eleven-car-card');
   let complete;
@@ -223,5 +238,6 @@ async function carChecks(){
    check('clock tick updates countdown '+elapsed,text?countdown.shadowRoot.textContent.includes('Starts in '+text):!countdown.shadowRoot.textContent.includes('Starts in'));
   }
  }finally{Date.now=originalNow;countdown.remove();}
+
  return reports;
 }

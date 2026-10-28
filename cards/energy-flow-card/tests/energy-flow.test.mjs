@@ -1,4 +1,6 @@
 import {test} from 'node:test';
+import {ENERGY_FLOW_BACKGROUNDS,energyFlowBackgroundOptions,energyFlowBackground} from '../src/energy-flow-backgrounds.js';
+import {chooseCustomGraphPeriod} from '../../../shared/periods.js';
 import assert from 'node:assert/strict';
 import {normalizeEnergyFlowConfig,energyFlowPower,energyFlowMeters,energyFlowLive,energyFlowHistorical,energyFlowStatisticsRequest} from '../src/energy-flow-data.js';
 const state=(value,unit='W')=>({state:String(value),attributes:{unit_of_measurement:unit}});
@@ -7,6 +9,12 @@ test('automatic configuration needs no entities and validates overrides',()=>{
  assert.equal(normalizeEnergyFlowConfig().default_view,'live');assert.equal(normalizeEnergyFlowConfig({default_view:'history'}).default_view,'history');
  assert.equal(normalizeEnergyFlowConfig({hours_to_show:Infinity}).hours_to_show,24);
  assert.throws(()=>normalizeEnergyFlowConfig({grid_power_entity:'switch.grid'}));
+});
+
+test('accent colours accept the Car presets and safely fall back to existing gold',()=>{
+ assert.equal(normalizeEnergyFlowConfig().color,'charging');
+ for(const color of ['charging','waiting','done','planned','off'])assert.equal(normalizeEnergyFlowConfig({color}).color,color);
+ for(const color of ['red','"><img src=x>',null,{},42])assert.equal(normalizeEnergyFlowConfig({color}).color,'charging');
 });
 test('power units are converted while unavailable and non-power values remain unknown',()=>{
  const hass={states:{a:state(3500),b:state(3.5,'kW'),c:state(.0035,'MW'),d:state('unavailable'),e:state(10,'kWh')}};
@@ -67,6 +75,14 @@ test('production requests prefs before querying the configured statistics',async
  const calls=[],c=card({callWS:async request=>{calls.push(request);return request.type==='energy/get_prefs'?prefs:{'solar:one':[{change:3}]};}});
  c._sync();await tick();assert.deepEqual(calls.map(r=>r.type),['energy/get_prefs','recorder/statistics_during_period']);assert.equal(c._statistics['solar:one'][0].change,3);c._attached=false;c._reset();
 });
+
+test('changing accent colour retains loaded statistics and the open detail selection',async()=>{
+ const calls=[],c=card({callWS:async request=>{calls.push(request);return request.type==='energy/get_prefs'?prefs:{'solar:one':[{change:3}]};}});
+ c._sync();await tick();const statistics=c._statistics,count=calls.length;c._detailNode='grid';
+ c.setConfig({...c._config,color:'planned'});await tick();
+ assert.equal(c._config.color,'planned');assert.equal(c._statistics,statistics);assert.equal(calls.length,count);assert.equal(c._detailNode,'grid');
+ c._attached=false;c._reset();
+});
 test('switching periods ignores stale responses',async()=>{
  const deferred=[];const c=card({callWS:request=>request.type==='energy/get_prefs'?Promise.resolve(prefs):new Promise(resolve=>deferred.push(resolve))});
  c._sync();await tick();c._periodMode='24h';c._reloadPeriod();await tick();assert.equal(deferred.length,2);
@@ -80,4 +96,31 @@ test('hidden, detached and disconnected cards issue no requests',()=>{
 });
 test('live mode only loads preferences and waits for hass state changes',async()=>{
  const calls=[],c=card({callWS:async request=>{calls.push(request.type);return prefs;}},'live');c._sync();await tick();assert.deepEqual(calls,['energy/get_prefs']);c._sync();assert.equal(calls.length,1);c._attached=false;c._reset();
+});
+
+test('popup day navigation preserves the active popup and requests the selected HA day',async()=>{
+ const calls=[],c=card({config:{time_zone:'Europe/Amsterdam'},callWS:async request=>{calls.push(request);return request.type==='energy/get_prefs'?prefs:{'solar:one':[{change:3}]};}},'live');
+ c._sync();await tick();c._detailNode='grid';c._detailResult={old:true};c._detailError=true;
+ c._view='history';chooseCustomGraphPeriod(c,Date.parse('2025-10-25T22:00:00Z'),Date.parse('2025-10-26T23:00:00Z'));await tick();
+ assert.equal(c._view,'history');assert.equal(c._detailNode,'grid');assert.equal(c._detailResult,null);assert.equal(c._detailError,false);
+ assert.equal(c._end-c._start,25*3600000);
+ const request=calls.find(request=>request.type==='recorder/statistics_during_period');
+ assert.equal(request.start_time,'2025-10-25T22:00:00.000Z');assert.equal(request.end_time,'2025-10-26T23:00:00.000Z');
+ const start=c._start;chooseCustomGraphPeriod(c,NaN,NaN);assert.equal(c._start,start);assert.equal(c._detailNode,'grid');
+ // Navigation from the card keeps the detail selection; disconnect still clears it.
+ c._reloadPeriod();assert.equal(c._detailNode,'grid');c._attached=false;c._reset();assert.equal(c._detailNode,null);
+});
+
+test('background choices preserve existing YAML and label animation in both languages',()=>{
+ assert.equal(normalizeEnergyFlowConfig().background,'lanes');
+ assert.equal(normalizeEnergyFlowConfig({background:'unknown'}).background,'lanes');
+ for(const item of ENERGY_FLOW_BACKGROUNDS){
+  assert.equal(normalizeEnergyFlowConfig({background:item.value}).background,item.value);
+  for(const nl of [true,false])assert.ok(energyFlowBackgroundOptions(nl).find(option=>option.value===item.value).label.endsWith(nl?(item.animated?'Geanimeerd':'Statisch'):(item.animated?'Animated':'Static')));
+ }
+ for(const background of ['hologram','ink','terrain']){
+  assert.ok(energyFlowBackground(background).includes('class="header-pattern"'));
+  assert.equal(normalizeEnergyFlowConfig({background,animate_background:false}).animate_background,false);
+ }
+ assert.equal(energyFlowBackground('<img src=x>'),'');
 });

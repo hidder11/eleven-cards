@@ -1,3 +1,4 @@
+import {headerBackgroundOptions} from '../../../shared/header-backgrounds.js';
 import {normalizeWeatherConfig,weatherDutch,weatherVisibleTabs,weatherForecastFields,WEATHER_METRICS,WEATHER_FORECAST_FIELDS} from './weather-utils.js';
 import {WEATHER_BACKGROUNDS} from './weather-backgrounds.js';
 
@@ -30,7 +31,7 @@ export class WeatherEditor extends HTMLElement{
   const metrics=[{value:'none',label:nl?'Niet tonen':'Hide'},{value:'custom',label:nl?'Eigen entiteit':'Custom entity'},...Object.entries(WEATHER_METRICS).map(([value,labels])=>({value,label:labels[nl?0:1]}))];
   const schema=[group('general',nl?'Algemeen':'General',[text('title'),{name:'entity',required:true,selector:{entity:{domain:'weather'}}}],true),
    group('weather_icon',nl?'Weericoon':'Weather icon',[slider('icon_scale',50,300,5,'%'),slider('icon_offset_x',-150,150,1,'px'),slider('icon_offset_y',-150,150,1,'px')]),
-   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',WEATHER_BACKGROUNDS),{name:'background_strength',selector:{number:{min:0,max:100,step:5,mode:'slider',unit_of_measurement:'%'}}},select('icon_style',[{value:'classic',label:nl?'Klassiek':'Classic'},{value:'glass',label:'Liquid glass'},{value:'neon',label:'Neon'}]),boolean('animate_background'),boolean('animate_icons')])];
+   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',headerBackgroundOptions(nl)),{name:'background_strength',selector:{number:{min:0,max:100,step:5,mode:'slider',unit_of_measurement:'%'}}},select('icon_style',[{value:'classic',label:nl?'Klassiek':'Classic'},{value:'glass',label:'Liquid glass'},{value:'neon',label:'Neon'}]),boolean('animate_background'),boolean('animate_icons')])];
   for(const [field,title] of [['metric_status',nl?'Breed gegevensveld':'Wide data field'],['metric_primary',nl?'Gegevensveld links':'Left data field'],['metric_secondary',nl?'Gegevensveld rechts':'Right data field']]){
    const fields=[select(field,field==='metric_status'?[...metrics.slice(0,2),{value:'condition',label:nl?'Weerstatus':'Weather conditions'},...metrics.slice(2)]:metrics)];
    if(config[field]!=='none')fields.push(...(config[field]==='custom'?[{name:field+'_entity',selector:{entity:{}}},text(field+'_attribute')]:[]),text(field+'_label'),boolean(field+'_show_unit'),...(config[field+'_show_unit']?[text(field+'_unit')]:[]),number(field+'_decimals',0,6));

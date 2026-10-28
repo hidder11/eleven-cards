@@ -127,7 +127,10 @@ test('both cards expose localized source and render statistics through the real 
   const oldEnd=Date.now()-2*3600000;
   card.hass={...card.hass,callWS:async msg=>msg.type==='recorder/get_statistics_metadata'?[{statistic_id:'sensor.a',has_mean:true,unit_of_measurement:'°C'}]:{'sensor.a':[{start:oldEnd-3600000,end:oldEnd,mean:12}]}};
   await card._refresh();
-  assert.match(card.shadowRoot.innerHTML,/<strong>Unavailable<\/strong>/,'a missing tail must not show an older value as current');
+  assert.match(card.shadowRoot.innerHTML,/<strong>12<\/strong>/,'live legend uses the sensor, not the unfinished statistics tail');
+  assert.equal(u.valueAt(card._series[0].points,card._end-1),null,'graph retains its trailing gap');
+  card._periodEnd=card._end;card._render();
+  assert.match(card.shadowRoot.innerHTML,/<strong>Unavailable<\/strong>/,'a fixed historical range never falls back to the live sensor');
   card.disconnectedCallback();
  }
 });
@@ -149,7 +152,34 @@ test('90-day stacked daily Delta bar chart loads counter statistics for all thre
   assert.equal(calls[1].period,'day');assert.deepEqual(calls[1].types,['change']);
   assert.deepEqual(calls[1].statistic_ids,entities);
   assert.deepEqual(card._series.map(s=>s.source),['statistics','statistics','statistics']);
+  assert.equal(card._legendValue(card._series[0]),1,'Delta legend keeps the period change, not the live counter total');
   assert.deepEqual(card._series.map(s=>s.points.filter(p=>p.v!==null).length),[90,90,90]);
   assert.deepEqual(card._plotSeries.map(s=>s.points[0].v),[1,3,6]);
+ }finally{card.disconnectedCallback();}
+});
+
+test('long live history legend follows actual sensor updates without filling statistics gaps',async()=>{
+ const {HistoryGraphCard}=await import('../src/history-graph-card.js');
+ const card=new HistoryGraphCard();let requests=0;
+ card.setConfig({entities:['sensor.a'],hours_to_show:72});
+ const hass={language:'nl',states:{'sensor.a':{state:'23.5',attributes:{unit_of_measurement:'W'}}},callWS:async msg=>{
+  requests++;
+  return msg.type==='recorder/get_statistics_metadata'?[{statistic_id:'sensor.a',has_mean:true,unit_of_measurement:'W'}]:{'sensor.a':[{start:Date.now()-7200000,end:Date.now()-3600000,mean:12}]};
+ },callApi:()=>{throw Error('long view must use statistics');}};
+ card.hass=hass;card.connectedCallback();await new Promise(r=>setImmediate(r));
+ try{
+  assert.match(card.shadowRoot.innerHTML,/<strong>23,5<\/strong>/);
+  for(const [state,expected] of [['0','0'],['unavailable','Niet beschikbaar'],['unknown','Niet beschikbaar'],['8.25','8,25']]){
+   card.hass={...hass,states:{'sensor.a':{...hass.states['sensor.a'],state}}};
+   assert.ok(card.shadowRoot.innerHTML.includes('<strong>'+expected+'</strong>'));
+  }
+  assert.equal(requests,2,'live state updates do not fetch Recorder again');
+  assert.equal(u.valueAt(card._series[0].points,card._end-1),null);
+  card._periodEnd=card._end;card._render();
+  assert.match(card.shadowRoot.innerHTML,/<strong>Niet beschikbaar<\/strong>/);
+  card._periodEnd=null;card._periodOffset=-1;card._render();
+  assert.match(card.shadowRoot.innerHTML,/<strong>Niet beschikbaar<\/strong>/);
+  card._end=card._series[0].points.at(-1).t;card._render();
+  assert.match(card.shadowRoot.innerHTML,/<strong>12<\/strong>/,'historical ranges use the recorded value, not the current sensor');
  }finally{card.disconnectedCallback();}
 });

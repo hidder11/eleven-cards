@@ -1,5 +1,13 @@
 // Eleven Car (beta) - self-contained standalone module
 (()=>{
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
+`;}
+
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function uiAttributes(values={}){
@@ -50,6 +58,7 @@ function uiPrimaryValueStyles(){return `
 `;}
 
 
+
 // Text is escaped. *Content options are trusted markup owned by the calling card.
 // action renders a native button; do not nest other controls in that variant.
 function uiMetric({icon='',iconContent='',title='',value,valueContent='',unit='',info='',infoContent='',compact=false,action=false,attrs={}}={}){
@@ -63,8 +72,8 @@ function uiMetric({icon='',iconContent='',title='',value,valueContent='',unit=''
  </${tag}>`;
 }
 
-function uiMetricStyles(){return `
-[data-ui-metric]{--_metric-tone:var(--ui-metric-tone,var(--primary-color,#2196f3));box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-content:start;align-items:start;min-width:0;padding:12px;border-radius:var(--ui-metric-radius,8px);background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--_metric-tone) 10%,transparent),color-mix(in srgb,var(--_metric-tone) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee);box-shadow:none;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
+[data-ui-metric]{--_metric-tone:var(--ui-metric-tone,var(--primary-color,#2196f3));box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-content:start;align-items:start;min-width:0;padding:12px;border-radius:var(--ui-metric-radius,8px);background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--_metric-tone) 10%,transparent),color-mix(in srgb,var(--_metric-tone) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee);color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
 [data-ui-metric]:has(.ui-metric-info){grid-template-rows:auto auto auto}
 [data-ui-metric] .ui-metric-icon{box-sizing:border-box;display:grid;place-items:center;grid-column:2;grid-row:1/span 2;width:26px;height:26px;border-radius:7px;color:var(--_metric-tone);background:transparent;transform:translate(4px,-4px)}
 [data-ui-metric] .ui-metric-icon svg,[data-ui-metric] .ui-metric-icon ha-icon{display:block;width:18px;height:18px;--mdc-icon-size:18px}
@@ -89,12 +98,12 @@ button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]
 `;}
 
 
-function uiTabs({id,label,items,selected,className='',panelClassName=''}={}){
+function uiTabs({id,label,items,selected,className='',panelClassName='',variant=''}={}){
  if(typeof id!=='string'||!id||!items?.length||items.some(item=>typeof item.value!=='string'||!item.value)||new Set(items.map(item=>item.value)).size!==items.length)throw Error('Tabs need an id and distinct text values.');
  const active=items.find(item=>item.value===selected&&!item.disabled)??items.find(item=>!item.disabled);
  const tabId=value=>`${id}-tab-${encodeURIComponent(value)}`,panelId=value=>`${id}-panel-${encodeURIComponent(value)}`;
- const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'',role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
- const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
+ const bar=`<div${uiAttributes({class:className||null,'data-ui-tabs':'','data-ui-card-tabs':variant==='card'?true:null,role:'tablist','aria-label':label})}>${items.map(item=>uiButton({variant:'tab',text:item.label,disabled:item.disabled,attrs:{role:'tab',id:tabId(item.value),'data-ui-tab':item.value,'aria-controls':panelId(item.value),'aria-selected':item===active,tabindex:item===active?0:-1,...item.tabAttrs}})).join('')}</div>`;
+ const panels=items.map(item=>`<section${uiAttributes({class:[panelClassName,item.className].filter(Boolean).join(' ')||null,id:panelId(item.value),role:'tabpanel','aria-labelledby':tabId(item.value),'data-ui-tab-panel':item.value,'data-ui-card-tab-panel':variant==='card'?true:null,...item.panelAttrs,hidden:item!==active})}>${item.content??''}</section>`).join('');
  return bar+panels;
 }
 function bindUITabs({tabs,panels,onSelect=()=>{}}){
@@ -124,7 +133,96 @@ function uiTabsStyles(){return `
 [data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
 [data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
 [data-ui-tab-panel][hidden]{display:none!important}
+[data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
+[data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
+[data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
+[data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
+
+
+const entityTabText=value=>typeof value==='string'?value.trim():'';
+const entityTabClamp=(value,fallback,min,max)=>value!==''&&value!=null&&Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
+function normalizeEntityTabs(input,maxDecimals=6){
+ const used=new Set();return (Array.isArray(input)?input:[]).filter(tab=>tab&&typeof tab==='object').map((tab,index)=>{
+  let id=/^custom-[a-z0-9_-]+$/.test(tab.id)?tab.id:'custom-'+(index+1);let n=1;while(used.has(id))id='custom-'+(index+1)+'-'+n++;used.add(id);
+  return {id,title:typeof tab.title==='string'?tab.title:'',show:tab.show!==false,entities:(Array.isArray(tab.entities)?tab.entities:[]).map(row=>{
+   row=typeof row==='string'?{entity:row}:row??{};
+   return {entity:entityTabText(row.entity),name:typeof row.name==='string'?row.name:'',attribute:entityTabText(row.attribute),unit:entityTabText(row.unit),show_unit:row.show_unit!==false,decimals:row.decimals==null||row.decimals===''?null:Math.round(entityTabClamp(row.decimals,2,0,maxDecimals))};
+  })};
+ });
+}
+
+function entityTabReading(row,hass){
+ const entity=hass?.states?.[row.entity];
+ if(!entity||entity.state==null||['','unknown','unavailable'].includes(String(entity.state).trim()))return '—';
+ const raw=row.attribute?entity.attributes?.[row.attribute]:entity.state;
+ if(raw==null||typeof raw==='object')return '—';
+ const unit=row.show_unit===false?'':row.unit||(row.attribute?'':entity.attributes?.unit_of_measurement);
+ let value=String(raw);
+ if(value.trim()!==''&&Number.isFinite(Number(value))){
+  try{value=new Intl.NumberFormat(hass?.locale?.language??hass?.language??'en',{maximumFractionDigits:row.decimals??2,...(row.decimals!=null?{minimumFractionDigits:row.decimals}:{})}).format(Number(value));}catch{value=String(Number(value));}
+ }else if(!row.attribute&&typeof hass?.formatEntityState==='function')return hass.formatEntityState(entity);
+ return value+(unit?' '+unit:'');
+}
+function entityTabContent(tab,hass,nl){
+ const rows=tab.entities.filter(row=>row.entity);
+ if(!rows.length)return '<p class="energy-detail-note">'+(nl?'Voeg entiteiten toe aan dit tabblad in de kaartconfiguratie.':'Add entities to this tab in the card configuration.')+'</p>';
+ return '<dl class="energy-grid-metrics">'+rows.map(row=>{
+  const label=row.name||hass?.states?.[row.entity]?.attributes?.friendly_name||row.entity;
+  return '<div><dt>'+uiEscape(label)+'</dt><dd><button type="button" class="energy-entity-value" data-entity="'+uiEscape(row.entity)+'">'+uiEscape(entityTabReading(row,hass))+'</button></dd></div>';
+ }).join('')+'</dl>';
+}
+
+// Adapter supplies _config, _hass and _setCustomTabs().
+const customTabsEditor=Base=>class extends Base{
+ _customAction(action,index,rowIndex){
+  const tabs=this._config.custom_tabs.map(tab=>({...tab,entities:tab.entities.map(row=>({...row}))}));
+  const move=(list,from,to)=>{if(to>=0&&to<list.length)[list[from],list[to]]=[list[to],list[from]];};
+  if(action==='tab-add'){let n=1;while(tabs.some(tab=>tab.id==='custom-'+n))n++;tabs.push({id:'custom-'+n,title:'',show:true,entities:[]});}
+  if(action==='tab-remove')tabs.splice(index,1);
+  if(action==='tab-up')move(tabs,index,index-1);if(action==='tab-down')move(tabs,index,index+1);
+  if(action==='row-add')tabs[index].entities.push({entity:''});
+  if(action==='row-remove')tabs[index].entities.splice(rowIndex,1);
+  if(action==='row-up')move(tabs[index].entities,rowIndex,rowIndex-1);if(action==='row-down')move(tabs[index].entities,rowIndex,rowIndex+1);
+  this._setCustomTabs(tabs);
+  if(action==='tab-add')this.shadowRoot.querySelector('.custom-tabs').lastElementChild.open=true;
+  if(action==='row-add')this.shadowRoot.querySelector('.custom-tabs').children[index].querySelector('.tab-entities').lastElementChild.open=true;
+ }
+ _renderCustomTabs(nl){
+  const container=this.shadowRoot.querySelector('.custom-tabs'),tabs=this._config.custom_tabs;
+  this.shadowRoot.querySelector('h3').textContent=nl?'Eigen tabbladen':'Custom tabs';
+  this.shadowRoot.querySelector('.tabs-help').textContent=nl?'Voeg je eigen tabbladen en entiteiten toe, ook in compacte weergave. Entiteiten tonen altijd hun actuele waarde.':'Add your own tabs and entities, including compact layouts. Entities always show their current value.';
+  const add=this.shadowRoot.querySelector('[data-action=tab-add]');add.textContent=nl?'Tabblad toevoegen':'Add tab';
+  const buttons=(actions)=>actions.map(([action,label])=>`<button type="button" data-action="${action}">${label}</button>`).join('');
+  for(const element of [...container.children])if(!tabs.some(tab=>tab.id===element.dataset.tabId))element.remove();
+  tabs.forEach((tab,index)=>{
+   let element=[...container.children].find(el=>el.dataset.tabId===tab.id);
+   if(!element){element=document.createElement('details');element.dataset.tabId=tab.id;element.innerHTML='<summary></summary><div class="tab-body"><ha-form class="tab-form"></ha-form><div class="tab-entities"></div><div class="actions">'+buttons([['row-add',nl?'Entiteit toevoegen':'Add entity'],['tab-up',nl?'Omhoog':'Move up'],['tab-down',nl?'Omlaag':'Move down'],['tab-remove',nl?'Tabblad verwijderen':'Remove tab']])+'</div></div>';
+    element.querySelector('.tab-form').addEventListener('value-changed',event=>{event.stopPropagation();const i=Number(element.dataset.index),next=this._config.custom_tabs.map((item,j)=>j===i?{...item,...event.detail.value}:item);this._setCustomTabs(next);});
+    element.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(!button)return;this._customAction(button.dataset.action,Number(element.dataset.index),Number(button.closest('[data-row]')?.dataset.row));});
+   }
+   element.dataset.index=index;
+   // Moving an already-positioned node disconnects its focused input.
+   if(container.children[index]!==element)container.insertBefore(element,container.children[index]??null);
+   element.querySelector('summary').textContent=tab.title||(nl?'Eigen tabblad ':'Custom tab ')+(index+1);
+   Object.assign(element.querySelector('.tab-form'),{hass:this._hass,data:tab,schema:[{name:'title',selector:{text:{}}},{name:'show',selector:{boolean:{}}}],computeLabel:item=>item.name==='title'?(nl?'Naam tabblad':'Tab name'):(nl?'Tabblad tonen':'Show tab')});
+   element.querySelector('[data-action=tab-up]').disabled=index===0;element.querySelector('[data-action=tab-down]').disabled=index===tabs.length-1;
+   const rows=element.querySelector('.tab-entities');while(rows.children.length>tab.entities.length)rows.lastElementChild.remove();
+   tab.entities.forEach((row,rowIndex)=>{
+    let rowElement=rows.children[rowIndex];
+    if(!rowElement){rowElement=document.createElement('details');rowElement.innerHTML='<summary></summary><div class="tab-body"><ha-form></ha-form><div class="actions">'+buttons([['row-up',nl?'Omhoog':'Move up'],['row-down',nl?'Omlaag':'Move down'],['row-remove',nl?'Verwijderen':'Remove']])+'</div></div>';rows.append(rowElement);
+     rowElement.querySelector('ha-form').addEventListener('value-changed',event=>{event.stopPropagation();const i=Number(element.dataset.index),r=Number(rowElement.dataset.row),next=this._config.custom_tabs.map((item,j)=>j===i?{...item,entities:item.entities.map((value,k)=>k===r?{...value,...event.detail.value}:value)}:item);this._setCustomTabs(next);});
+    }
+    rowElement.dataset.row=rowIndex;rowElement.querySelector('summary').textContent=row.name||this._hass.states?.[row.entity]?.attributes?.friendly_name||row.entity||(nl?'Nieuwe entiteit':'New entity');
+    const rowLabels={entity:nl?'Entiteit':'Entity',name:nl?'Label (optioneel)':'Label (optional)',attribute:nl?'Attribuut (optioneel)':'Attribute (optional)',unit:nl?'Eigen eenheid (optioneel)':'Custom unit (optional)',show_unit:nl?'Eenheid tonen':'Show unit',decimals:nl?'Decimalen (optioneel)':'Decimal places (optional)'};
+    Object.assign(rowElement.querySelector('ha-form'),{hass:this._hass,data:row,schema:[{name:'entity',selector:{entity:{}}},...['name','attribute'].map(name=>({name,selector:{text:{}}})),{name:'show_unit',selector:{boolean:{}}},...(row.show_unit?[{name:'unit',selector:{text:{}}}]:[]),{name:'decimals',selector:{number:{min:0,max:this._customTabMaxDecimals??6,step:1,mode:'box'}}}],computeLabel:item=>rowLabels[item.name]});
+    rowElement.querySelector('[data-action=row-up]').disabled=rowIndex===0;rowElement.querySelector('[data-action=row-down]').disabled=rowIndex===tab.entities.length-1;
+   });
+  });
+  const actionLabels={'row-add':nl?'Entiteit toevoegen':'Add entity','tab-up':nl?'Omhoog':'Move up','tab-down':nl?'Omlaag':'Move down','tab-remove':nl?'Tabblad verwijderen':'Remove tab','row-up':nl?'Omhoog':'Move up','row-down':nl?'Omlaag':'Move down','row-remove':nl?'Verwijderen':'Remove'};
+  for(const button of container.querySelectorAll('[data-action]'))button.textContent=actionLabels[button.dataset.action];
+ }
+};
 
 // Decorative header layers; all paint inherits the weather state's --tone.
 function observeCardMotion(host,onVisibility=()=>{}){
@@ -136,6 +234,9 @@ function observeCardMotion(host,onVisibility=()=>{}){
  return ()=>{observer?.disconnect();document.removeEventListener('visibilitychange',update);};
 }
 function headerAtmosphere(background){
+ if(background==='terrain')return '<div class="header-pattern" aria-hidden="true">'+Array.from({length:10},(_,n)=>`<i style="--n:${n}"></i>`).join('')+'</div>';
+ if(background==='hologram'||background==='ink')return '<div class="header-pattern" aria-hidden="true">'+'<i></i>'.repeat(background==='ink'?3:2)+'</div>';
+
  if(!['aurora','clouds','isobars'].includes(background))return '';
  let body='';
  if(background==='aurora')body=Array.from({length:32},(_,i)=>`<i style="--star-x:${i*37%100}%;--star-y:${i*19%72}%;--star-duration:${2+i%5}s;--star-delay:${-i*.37}s"></i>`).join('');
@@ -164,6 +265,24 @@ const headerAtmosphereStyles=`
 .content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere *,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::before,.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-atmosphere::after{animation:none!important}
 :host([data-motion-paused]) *,:host([data-motion-paused]) *::before,:host([data-motion-paused]) *::after{animation-play-state:paused!important}
 @media(prefers-reduced-motion:reduce){.header-atmosphere,.header-atmosphere *,.header-atmosphere::before,.header-atmosphere::after{animation:none!important}}
+
+.header-pattern{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.header-pattern i{position:absolute;display:block;pointer-events:none}
+.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::before,.content:is([data-background=hologram],[data-background=ink],[data-background=terrain]) :is(.scene-background,.header-background)::after{display:none}
+[data-background=hologram] .header-pattern{perspective:380px;background:radial-gradient(ellipse at 50% 60%,color-mix(in srgb,var(--tone) 15%,transparent),transparent 70%)}
+[data-background=hologram] .header-pattern i:first-child{inset:-25%;background:repeating-linear-gradient(0deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px),repeating-linear-gradient(90deg,transparent 0 35px,color-mix(in srgb,var(--tone) 17%,transparent) 36px,transparent 37px);transform:rotateX(52deg);transform-origin:50% 80%;animation:energy-background-grid 26s linear infinite}
+[data-background=hologram] .header-pattern i:last-child{inset:0;background:linear-gradient(180deg,transparent 25%,color-mix(in srgb,var(--tone) 14%,transparent) 48%,transparent 65%);animation:energy-background-scan 16s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i{width:100%;height:100%;left:-20%;top:-35%;border-radius:36% 64% 55% 45% / 65% 45% 55% 35%;background:radial-gradient(ellipse,color-mix(in srgb,var(--tone) 25%,transparent),transparent 70%);filter:blur(15px);animation:energy-background-ink 29s ease-in-out infinite alternate}
+[data-background=ink] .header-pattern i:nth-child(2){left:35%;top:-20%;opacity:.75;animation-delay:-14s;animation-duration:37s}
+[data-background=ink] .header-pattern i:nth-child(3){left:5%;top:25%;opacity:.45;animation-delay:-24s;animation-duration:41s}
+[data-background=terrain] .header-pattern i{width:calc(130px + var(--n)*38px);height:calc(80px + var(--n)*25px);left:65%;top:20%;border:1px solid color-mix(in srgb,var(--tone) 20%,transparent);border-radius:42% 58% 63% 37% / 52% 37% 63% 48%;transform:translate(-50%,-50%) rotate(-18deg);animation:energy-background-terrain 24s ease-in-out infinite alternate;animation-delay:calc(var(--n)*-1.5s)}
+@keyframes energy-background-grid{to{background-position:0 72px,0 72px}}
+@keyframes energy-background-scan{from{transform:translateY(-25%)}to{transform:translateY(25%)}}
+@keyframes energy-background-ink{from{transform:rotate(-12deg) scale(.9)}to{transform:translate(10%,8%) rotate(25deg) scale(1.15)}}
+@keyframes energy-background-terrain{from{translate:-2% -2%;rotate:-2deg}to{translate:3% 5%;rotate:5deg}}
+.content:is([data-background-animated=false],[data-animated=false]:not([data-background-animated])) .header-pattern i{animation:none!important}
+:host([data-motion-paused]) .header-pattern i{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.header-pattern i{animation:none!important}}
 `;
 
 // Shared designs; each card supplies its own state color through --tone.
@@ -199,8 +318,16 @@ const HEADER_BACKGROUNDS = [
  {
   "value": "isobars",
   "label": "Atmospheric flow"
- }
-];
+ },
+ {value:'hologram',label:'Holographic grid',labelNl:'Holografisch raster'},
+ {value:'ink',label:'Liquid ink',labelNl:'Vloeibare inkt'},
+ {value:'terrain',label:'Relief map',labelNl:'Reliëfkaart'}
+].map(item=>({...item,animated:['aurora','clouds','isobars','hologram','ink','terrain'].includes(item.value)}));
+function headerBackgroundOptions(nl){
+ return HEADER_BACKGROUNDS.map(item=>({value:item.value,label:`${nl?(item.labelNl??item.label):item.label} · ${nl?(item.animated?'Geanimeerd':'Statisch'):(item.animated?'Animated':'Static')}`}));
+}
+
+
 const headerBackgroundStyles = `
 :is(.scene-background,.header-background)::before,:is(.scene-background,.header-background)::after{content:"";position:absolute;z-index:-1;pointer-events:none;inset:auto;transform:none;border:0;box-shadow:none;border-radius:0;width:auto;height:auto}
 :where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::before{inset:0;background:linear-gradient(143deg,transparent 0 43%,color-mix(in srgb,var(--tone) 19%,transparent) 43.2% 70%,color-mix(in srgb,var(--tone) 5%,transparent) 70.2% 88%,transparent 88.2%),linear-gradient(180deg,color-mix(in srgb,var(--tone) 11%,transparent),transparent 75%)}:where(.content[data-background="lanes"]) :is(.scene-background,.header-background)::after{inset:20% -16% -30% 24%;transform:skewY(-36deg);background:repeating-linear-gradient(0deg,transparent 0 25px,color-mix(in srgb,var(--tone) 13%,transparent) 26px,transparent 27px 58px)}
@@ -219,6 +346,7 @@ const headerSceneStyles=`
 --header-fade:linear-gradient(180deg,#000 0%,#000 25%,rgba(0,0,0,.9) 40%,rgba(0,0,0,.65) 55%,rgba(0,0,0,.32) 72%,rgba(0,0,0,.08) 88%,transparent 100%);
 -webkit-mask-image:var(--header-fade);mask-image:var(--header-fade)}
 `;
+
 
 // Domain-neutral SVG renderer. Adapters own data, geometry, colors and annotations.
 function graphLineStyle(style, width = 3.5) {
@@ -271,7 +399,7 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return `.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:8px 10px;border:1px solid var(--divider-color,#ddd);border-radius:6px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));box-shadow:0 3px 12px #0002;font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:4px;white-space:normal}.tooltip span{display:grid;grid-template-columns:9px minmax(0,1fr);column-gap:6px;margin-top:5px;white-space:normal}.tooltip i{display:block;width:9px;height:9px;margin:4px 0 0;border:0;border-radius:3px;flex-shrink:0;background:var(--series-color)}.tooltip b{font-weight:600;min-width:0;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -774,7 +902,7 @@ const evccHistoryMethods = {
   const svg = graph.render({shadowRoot: this.shadowRoot, isConnected: false}, {viewBox: '0 0 300 120', defs: '<defs><linearGradient id="evcc-power-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--primary-color,#2196f3)" stop-opacity=".22"/><stop offset="100%" stop-color="var(--primary-color,#2196f3)" stop-opacity="0"/></linearGradient></defs>', before: '<path class="grid-line" d="M38 12H294M38 56H294"/><path class="grid-line grid-zero" d="M38 100H294"/>', fills: [{d: evccHistoryArea(coordinates, 100), className: 'power-area', fill: 'url(#evcc-power-fade)'}], lines: [{d: SharedGraph.path(coordinates, 'step'), className: 'series-line', appearance: {...graphLineStyle('solid', 2), stroke: 'var(--primary-color,#2196f3)'}}], after: '<path class="cursor" hidden/>'});
   const format = time => new Intl.DateTimeFormat(this._hass.locale?.language ?? this._hass.language ?? 'en', {...(end-start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(time);
   this._historyGeometry = {x, y, points};
-  return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><div class="plot" tabindex="0" role="group" aria-label="${dutch ? 'Laadvermogen. Gebruik links en rechts voor meetpunten.' : 'Charging power. Use left and right for readings.'}">${svg}<span class="point hover-dot" aria-hidden="true" hidden></span>${[max, max / 2, 0].map((value, index) => `<span class="axis-y" style="top:${10 + index * 36.6667}%">${value}</span>`).join('')}<div class="tooltip" hidden><strong></strong><span><i style="--series-color:var(--primary-color)"></i><b></b></span></div></div><div class="chart-axis">${[start, (start + end) / 2, end].map(time => `<span>${uiEscape(format(time))}</span>`).join('')}</div><p class="sr-only chart-readout" aria-live="polite"></p></div>`;
+  return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><div class="plot" tabindex="0" role="group" aria-label="${dutch ? 'Laadvermogen. Gebruik links en rechts voor meetpunten.' : 'Charging power. Use left and right for readings.'}">${svg}<span class="point hover-dot" aria-hidden="true" hidden></span>${[max, max / 2, 0].map((value, index) => `<span class="axis-y" style="top:${10 + index * 36.6667}%">${value}</span>`).join('')}<div class="tooltip" hidden><strong></strong><span><i style="--series-color:var(--primary-color)"></i><b>${dutch ? 'Laadvermogen' : 'Charging power'} <em class="tooltip-value"></em></b></span></div></div><div class="chart-axis">${[start, (start + end) / 2, end].map(time => `<span>${uiEscape(format(time))}</span>`).join('')}</div><p class="sr-only chart-readout" aria-live="polite"></p></div>`;
  },
  _bindHistory() {
   const plot = this.shadowRoot.querySelector('.plot');
@@ -789,7 +917,7 @@ const evccHistoryMethods = {
    cursor.removeAttribute('hidden'); dot.removeAttribute('hidden'); cursor.setAttribute('d', `M${x(point.time)} 12V100`); dot.style.left = `${x(point.time) / 300 * 100}%`; dot.style.top = `${y(point.value) / 120 * 100}%`;
    const language = this._hass.locale?.language ?? this._hass.language ?? 'en';
    tooltip.hidden = false; tooltip.querySelector('strong').textContent = new Intl.DateTimeFormat(language, {...(this._historyRange.end-this._historyRange.start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(point.time);
-   tooltip.querySelector('b').textContent = new Intl.NumberFormat(language, {maximumFractionDigits: 2}).format(point.value) + ' kW';
+   tooltip.querySelector('.tooltip-value').textContent = new Intl.NumberFormat(language, {maximumFractionDigits: 2}).format(point.value) + ' kW';
    tooltip.style.left = x(point.time) < 166 ? 'auto' : '38px'; tooltip.style.right = x(point.time) < 166 ? '6px' : 'auto';
    this.shadowRoot.querySelector('.chart-readout').textContent = tooltip.textContent;
   };
@@ -1122,7 +1250,7 @@ class EvccCard extends HTMLElement {
   // Keep the requested tab while uiTabs displays a temporary fallback.
   if (!this._registryLoading && !items.some(item => item.value === this._activeTab)) this._activeTab = items[0].value;
   if(items.length===1)return `<section class="evcc-tabs evcc-panel" aria-label="${uiEscape(items[0].label)}">${items[0].content}</section>`;
-  return uiTabs({id: 'evcc', label: dutch ? 'Laadinformatie' : 'Charging information', items, selected: this._activeTab, className: 'evcc-tabs', panelClassName: 'evcc-panel'});
+  return uiTabs({variant:'card',id: 'evcc', label: dutch ? 'Laadinformatie' : 'Charging information', items, selected: this._activeTab, className: 'evcc-tabs', panelClassName: 'evcc-panel'});
  }
  _sessionMarkup(dutch) {
   const metrics = this._metrics(EVCC_SESSION, dutch);
@@ -1169,12 +1297,12 @@ class EvccCard extends HTMLElement {
   const configured = Object.values(this._entities).some(Boolean), status = offline ? 'unknown' : evccStatus(this._entities, states);
   const vehicle = evccVehicleName(states[this._entities.vehicle]) || (dutch ? 'Elektrische auto' : 'Electric vehicle');
   const soc = evccPercent(states[this._entities.soc]), target = evccPercent(states[this._entities.target_soc]);
-  const image = evccImageUrl(states[config.image_entity], hass);
+  const image = this._vehicleImage ? this._vehicleImage() : evccImageUrl(states[config.image_entity], hass);
   const imageWarning = dutch ? 'Autoafbeelding niet beschikbaar' : 'Vehicle image unavailable';
   this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
    <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene"><div class="gallery-top">${!configured ? `<header><h2>${uiEscape(this._title(dutch))}</h2></header>` : ''}
    ${offline ? `<p class="notice warning" role="status">${dutch ? 'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.' : 'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>` : ''}
-   ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${config.image_entity ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? `<div class="battery-track" role="progressbar" aria-label="${dutch ? 'Accuniveau' : 'Battery level'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${soc}"><div class="battery-fill" style="width:${soc}%"></div>${target != null ? `<span class="target-marker" style="left:${target}%"></span>` : ''}</div>` : ''}</div>
+   ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${(this._hasVehicleImage?.()??config.image_entity) ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? `<div class="battery-track" role="progressbar" aria-label="${dutch ? 'Accuniveau' : 'Battery level'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${soc}"><div class="battery-fill" style="width:${soc}%"></div>${target != null ? `<span class="target-marker" style="left:${target}%"></span>` : ''}</div>` : ''}</div>
     </div>${this._statusMarkup(view)}</div>${this._liveMarkup(dutch, view, now)}</div>
     ${this._tabsMarkup(dutch)}` : `<p class="empty">${dutch ? 'Kies de EVCC-laadvermogensensor van je laadpunt in de configuratie. Je kunt ook afzonderlijke entiteiten opgeven.' : 'Select your loadpoint’s EVCC charge power sensor in the editor, or configure individual entities.'}</p>`}
    ${configured ? '' : '</div></div></div>'}</div></ha-card>`;
@@ -1210,21 +1338,15 @@ class EvccCard extends HTMLElement {
 Object.assign(EvccCard.prototype, evccSolarMethods, evccHistoryMethods);
 
 
+
+
 const CAR_COLORS = [
  {value:'charging',label:'Goud / Gold'}, {value:'waiting',label:'Blauw / Blue'},
  {value:'done',label:'Groen / Green'}, {value:'planned',label:'Paars / Purple'}, {value:'off',label:'Grijs / Gray'},
 ];
 const carText = value => typeof value === 'string' ? value.trim() : '';
 const carClamp = (value, fallback, min, max) => value !== '' && value != null && Number.isFinite(Number(value)) ? Math.max(min,Math.min(max,Number(value))) : fallback;
-function normalizeCarTabs(input){
- const used=new Set();return (Array.isArray(input)?input:[]).filter(tab=>tab&&typeof tab==='object').map((tab,index)=>{
-  let id=/^custom-[a-z0-9_-]+$/.test(tab.id)?tab.id:'custom-'+(index+1);let n=1;while(used.has(id))id='custom-'+(index+1)+'-'+n++;used.add(id);
-  return {id,title:typeof tab.title==='string'?tab.title:'',show:tab.show!==false,entities:(Array.isArray(tab.entities)?tab.entities:[]).map(row=>{
-   row=typeof row==='string'?{entity:row}:row??{};
-   return {entity:carText(row.entity),name:typeof row.name==='string'?row.name:'',attribute:carText(row.attribute),unit:carText(row.unit),show_unit:row.show_unit!==false,decimals:row.decimals==null||row.decimals===''?null:Math.round(carClamp(row.decimals,2,0,6))};
-  })};
- });
-}
+const normalizeCarTabs=input=>normalizeEntityTabs(input);
 function normalizeCarConfig(config={}) {
  const evcc=config.evcc_enabled===true;
  const tabs=Array.isArray(config.tabs)?['controls','session','technical'].filter(tab=>config.tabs.includes(tab)):['controls','session','technical'].filter((tab,i)=>config[['show_controls','show_session','show_details'][i]]!==false);
@@ -1237,13 +1359,15 @@ function normalizeCarConfig(config={}) {
  });
  return {...normalized,...fields,type:config.type||'custom:eleven-car-card-test',evcc_enabled:evcc,tabs,custom_tabs,default_tab:availableTabs.includes(config.default_tab)?config.default_tab:(availableTabs[0]??'controls'),show_controls:tabs.includes('controls'),show_session:tabs.includes('session'),show_details:tabs.includes('technical'),title:carText(config.title),percentage_entity:carText(config.percentage_entity),
   percentage:carClamp(config.percentage,0,0,100),image_entity:carText(config.image_entity),
+  image_source:['entity','media'].includes(config.image_source)?config.image_source:(config.image_media?'media':'entity'),
+  image_media:typeof config.image_media==='string'?{media_content_id:carText(config.image_media),media_content_type:'image/*'}:config.image_media&&typeof config.image_media==='object'&&!Array.isArray(config.image_media)?{...config.image_media,media_content_id:carText(config.image_media.media_content_id)}:undefined,
   range_source:['none','entity','calculated'].includes(config.range_source)?config.range_source:(config.range_entity?'entity':config.range_full>0?'calculated':'none'),
   range_entity:carText(config.range_entity),range_full:carClamp(config.range_full,null,0,100000),range_unit:config.range_unit==='mi'?'mi':'km',
   image_scale:carClamp(config.image_scale,100,50,300),image_offset_y:carClamp(config.image_offset_y,0,-150,150),
   image_offset_x:carClamp(config.image_offset_x,0,-150,150),animation_speed:carClamp(config.animation_speed,1,0.25,3),animation_max_kw:carClamp(config.animation_max_kw,11,0.1,500),
   battery_style:['classic','slim','soft','line'].includes(config.battery_style)?config.battery_style:'soft',
   animate_background:config.animate_background!==false,background_strength:carClamp(config.background_strength,100,0,100),
-  background:['lanes','halo','ribbon','prism-glass','eclipse','aurora','clouds','isobars'].includes(config.background)?config.background:'lanes',
+  background:HEADER_BACKGROUNDS.some(item=>item.value===config.background)?config.background:'lanes',
   color:CAR_COLORS.some(item=>item.value===config.color)?config.color:'charging',compact:(config.compact??(config.density==='compact'))===true,
   field_1_entity:carText(config.field_1_entity),field_1_label:carText(config.field_1_label),field_1_icon:carText(config.field_1_icon)||'mdi:car',
   field_2_entity:carText(config.field_2_entity),field_2_label:carText(config.field_2_label),
@@ -1290,6 +1414,56 @@ function carImageUrl(entity,hass) {
 }
 
 
+// Media URLs are authenticated, expiring URLs, not the persisted media-source ID.
+class CarMediaImage {
+ constructor(onChange){this.onChange=onChange;this.version=0;}
+ reset(){
+  this.version++;clearTimeout(this.timer);clearTimeout(this.timeout);
+  this.timer=null;this.timeout=null;this.pending=false;this.url=null;this.id=null;this.connection=null;this.expires=0;this.retry=0;
+ }
+ update(hass,media){
+  const id=media?.media_content_id||'',connection=hass?.connection??hass?.callWS;
+  if(id!==this.id||connection!==this.connection){this.reset();this.id=id;this.connection=connection;}
+  this.hass=hass;this.media=media;
+  if(!id)return;
+  if(!id.startsWith('media-source://')){this.url=carImageUrl({state:'available',attributes:{entity_picture:id}},hass);return;}
+  if(!hass?.callWS)return;
+  if(hass.connected===false||hass.connection?.connected===false){
+   clearTimeout(this.timer);this.timer=null;
+   if(this.pending){this.version++;clearTimeout(this.timeout);this.pending=false;}
+   return;
+  }
+  if(this.pending||Date.now()<this.retry)return;
+  if(this.url&&Date.now()<this.expires){if(!this.timer)this._schedule(this.expires-Date.now());return;}
+  this._resolve(hass,id);
+ }
+ _schedule(delay){
+  clearTimeout(this.timer);this.timer=setTimeout(()=>{this.timer=null;this.update(this.hass,this.media);},delay);
+  this.timer.unref?.();
+ }
+ async _resolve(hass,id){
+  const version=++this.version;this.pending=true;
+  try{
+   const result=await Promise.race([
+    Promise.resolve().then(()=>hass.callWS({type:'media_source/resolve_media',media_content_id:id})),
+    new Promise((_,reject)=>{this.timeout=setTimeout(()=>reject(new Error('Media timeout')),10000);this.timeout.unref?.();}),
+   ]);
+   if(version!==this.version)return;
+   const url=carImageUrl({state:'available',attributes:{entity_picture:result?.url}},hass);
+   if(!url||(result.mime_type&&!result.mime_type.startsWith('image/')))throw new Error('Invalid media image');
+   this.url=url;this.expires=Date.now()+23*60*60*1000;this.retry=0;this._schedule(this.expires-Date.now());
+  }catch{
+   if(version!==this.version)return;
+   this.url=null;this.expires=0;this.retry=Date.now()+60000;this._schedule(60000);
+  }finally{
+   if(version===this.version){clearTimeout(this.timeout);this.timeout=null;this.pending=false;this.onChange();}
+  }
+ }
+}
+
+
+
+
 
 
 
@@ -1298,7 +1472,7 @@ const CAR_EDITOR_LABELS={
  title:['Kaartnaam (toegankelijkheid)','Card name (accessibility)'],evcc_enabled:['EVCC-koppeling gebruiken','Use EVCC integration'],entity:['Laadvermogensensor van het laadpunt','Loadpoint charge power sensor'],
  percentage_entity:['Percentage-entiteit (optioneel)','Percentage entity (optional)'],percentage:['Vast percentage','Fixed percentage'],
  range_source:['Actieradius tonen','Show range'],range_entity:['Resterende actieradius-entiteit','Remaining range entity'],range_full:['Totaal bereik bij 100%','Total range at 100%'],range_unit:['Afstandseenheid','Distance unit'],
- image_entity:['Afbeeldingsentiteit auto (optioneel)','Vehicle image entity (optional)'],image_scale:['Grootte autoafbeelding','Vehicle image size'],image_offset_y:['Verticale positie auto','Vehicle vertical position'],
+ image_source:['Afbeeldingsbron','Image source'],image_media:['Afbeelding uit Media','Image from Media'],image_entity:['Afbeeldingsentiteit auto (optioneel)','Vehicle image entity (optional)'],image_scale:['Grootte autoafbeelding','Vehicle image size'],image_offset_y:['Verticale positie auto','Vehicle vertical position'],
  image_offset_x:['Horizontale positie auto','Vehicle horizontal position'],battery_style:['Stijl percentagebalk','Percentage bar style'],animation_speed:['Animatiesnelheid','Animation speed'],animation_max_kw:['Maximaal laadvermogen voor animatie','Maximum charge power for animation'],
  background_strength:['Achtergrondsterkte','Background intensity'],background:['Achtergrond','Background'],color:['Accentkleur','Accent color'],animate_background:['Achtergrond animeren','Animate background'],compact:['Compacte weergave','Compact layout'],tabs:['Zichtbare tabbladen','Visible tabs'],default_tab:['Standaardtabblad','Default tab'],
 };
@@ -1319,6 +1493,8 @@ const CAR_EDITOR_HELPERS={
  range_entity:['Gebruik een sensor met de resterende afstand. De sensoreenheid wordt overgenomen; zonder eenheid wordt km gebruikt.','Use a sensor with the remaining distance. The sensor unit is retained; km is used if no unit is provided.'],
  range_full:['Schatting = totaal bereik × huidig percentage / 100. Bijvoorbeeld: 800 km bij 100% en 50% resterend geeft circa 400 km.','Estimate = total range × current percentage / 100. For example: 800 km at 100% and 50% remaining gives approximately 400 km.'],
  image_entity:['Kies een image-entiteit met de afbeelding van je auto. Zonder afbeelding verschijnt een auto-icoon.','Choose an image entity with your vehicle picture. Without an image a car icon is shown.'],
+ image_source:['Kies een afbeelding-entiteit of een afbeelding uit Home Assistant Media. Beide keuzes blijven bewaard bij omschakelen.','Choose an image entity or a picture from Home Assistant Media. Switching preserves both selections.'],
+ image_media:['Kies een afbeelding in je Home Assistant-mediabibliotheek.','Choose an image in your Home Assistant media library.'],
  image_scale:['Vergroot de auto binnen de vaste headerhoogte. Een grote afbeelding kan vóór het percentage komen.','Scale the car within the fixed header height. A large image may overlap the percentage.'],
  image_offset_y:['Negatief = omhoog, positief = omlaag. De headerhoogte blijft gelijk.','Negative moves up, positive moves down. Header height stays fixed.'],
  image_offset_x:['Negatief = naar links, positief = naar rechts. Nul plaatst de afbeelding horizontaal in het midden van de kaart.','Negative moves left, positive moves right. Zero centers the image horizontally in the card.'],
@@ -1330,7 +1506,7 @@ const CAR_EDITOR_HELPERS={
  tabs:['Kies welke tabbladen zichtbaar zijn, ook in compact. Leeg = geen tabbladen. Een tab zonder beschikbare entiteiten wordt niet getoond.','Choose visible tabs, including in compact. Empty means no tabs. Tabs without source entities are omitted.'],
  default_tab:['Dit tabblad opent bij het laden van de kaart. Een handmatige tabkeuze blijft behouden bij sensorupdates.','Opens when the card loads. Manual tab selection is preserved during sensor updates.'],
 };
-class CarEditor extends EvccEditor {
+class CarEditor extends customTabsEditor(EvccEditor) {
  setConfig(config){this._config=normalizeCarConfig(config);if(this._hass&&this._config.evcc_enabled)this.hass=this._hass;else this._render();}
  set hass(hass){if(this._config?.evcc_enabled)super.hass=hass;else{this._hass=hass;this._render();}}get hass(){return this._hass;}
  _schema(nl){
@@ -1341,8 +1517,8 @@ class CarEditor extends EvccEditor {
   const number=(name,min,max,step,unit,mode='slider')=>({name,selector:{number:{min,max,step,mode,...(unit?{unit_of_measurement:unit}:{})}}});
   const config=this._config,evcc=config.evcc_enabled;
   const schema=[group('general',nl?'Algemeen':'General',[text('title'),boolean('evcc_enabled')],true),
-   group('vehicle_image',nl?'Autoafbeelding':'Vehicle image',[entity('image_entity','image'),number('image_scale',50,300,5,'%'),number('image_offset_x',-150,150,1,'px'),number('image_offset_y',-150,150,1,'px')]),
-   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',EVCC_BACKGROUNDS),number('background_strength',0,100,5,'%'),boolean('animate_background'),select('battery_style',[{value:'classic',label:nl?'Klassiek · 12 px':'Classic · 12 px'},{value:'slim',label:nl?'Slanke capsule · 8 px':'Slim capsule · 8 px'},{value:'soft',label:nl?'Zacht licht · 8 px (standaard)':'Soft light · 8 px (default)'},{value:'line',label:nl?'Fijne lijn · 4 px':'Fine line · 4 px'}]),...(!evcc?[select('color',CAR_COLORS.map(item=>({...item,label:item.label.split(' / ')[nl?0:1]})))]:[]),...(evcc?[number('animation_speed',0.25,3,0.25,'×'),number('animation_max_kw',0.1,500,0.1,'kW','box')]:[])])];
+   group('vehicle_image',nl?'Autoafbeelding':'Vehicle image',[select('image_source',[{value:'entity',label:nl?'Afbeelding-entiteit':'Image entity'},{value:'media',label:'Media'}]),...(config.image_source==='media'?[{name:'image_media',selector:{media:{accept:['image/*']}}}]:[entity('image_entity','image')]),number('image_scale',50,300,5,'%'),number('image_offset_x',-150,150,1,'px'),number('image_offset_y',-150,150,1,'px')]),
+   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',headerBackgroundOptions(nl)),number('background_strength',0,100,5,'%'),boolean('animate_background'),select('battery_style',[{value:'classic',label:nl?'Klassiek · 12 px':'Classic · 12 px'},{value:'slim',label:nl?'Slanke capsule · 8 px':'Slim capsule · 8 px'},{value:'soft',label:nl?'Zacht licht · 8 px (standaard)':'Soft light · 8 px (default)'},{value:'line',label:nl?'Fijne lijn · 4 px':'Fine line · 4 px'}]),...(!evcc?[select('color',CAR_COLORS.map(item=>({...item,label:item.label.split(' / ')[nl?0:1]})))]:[]),...(evcc?[number('animation_speed',0.25,3,0.25,'×'),number('animation_max_kw',0.1,500,0.1,'kW','box')]:[])])];
   if(!evcc){
    schema.push(group('percentage_settings',nl?'Percentage':'Percentage',[entity('percentage_entity'),...(!config.percentage_entity?[number('percentage',0,100,1,'%')]:[])],true));
    schema.push(group('range_settings',nl?'Actieradius':'Range',[
@@ -1393,53 +1569,7 @@ class CarEditor extends EvccEditor {
  }
  _emitConfig(){this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:{...this._config,entities:{...this._config.entities},custom_tabs:this._config.custom_tabs.map(tab=>({...tab,entities:tab.entities.map(row=>({...row}))}))}},bubbles:true,composed:true}));}
  _setCustomTabs(tabs){this._config=normalizeCarConfig({...this._config,custom_tabs:tabs});this._render();this._emitConfig();}
- _customAction(action,index,rowIndex){
-  const tabs=this._config.custom_tabs.map(tab=>({...tab,entities:tab.entities.map(row=>({...row}))}));
-  const move=(list,from,to)=>{if(to>=0&&to<list.length)[list[from],list[to]]=[list[to],list[from]];};
-  if(action==='tab-add'){let n=1;while(tabs.some(tab=>tab.id==='custom-'+n))n++;tabs.push({id:'custom-'+n,title:'',show:true,entities:[]});}
-  if(action==='tab-remove')tabs.splice(index,1);
-  if(action==='tab-up')move(tabs,index,index-1);if(action==='tab-down')move(tabs,index,index+1);
-  if(action==='row-add')tabs[index].entities.push({entity:''});
-  if(action==='row-remove')tabs[index].entities.splice(rowIndex,1);
-  if(action==='row-up')move(tabs[index].entities,rowIndex,rowIndex-1);if(action==='row-down')move(tabs[index].entities,rowIndex,rowIndex+1);
-  this._setCustomTabs(tabs);
-  if(action==='tab-add')this.shadowRoot.querySelector('.custom-tabs').lastElementChild.open=true;
-  if(action==='row-add')this.shadowRoot.querySelector('.custom-tabs').children[index].querySelector('.tab-entities').lastElementChild.open=true;
- }
- _renderCustomTabs(nl){
-  const container=this.shadowRoot.querySelector('.custom-tabs'),tabs=this._config.custom_tabs;
-  this.shadowRoot.querySelector('h3').textContent=nl?'Eigen tabbladen':'Custom tabs';
-  this.shadowRoot.querySelector('.tabs-help').textContent=nl?'Voeg je eigen tabbladen en entiteiten toe. Deze werken met en zonder EVCC, ook in compact.':'Add your own tabs and entities. They work with or without EVCC, including compact.';
-  const add=this.shadowRoot.querySelector('[data-action=tab-add]');add.textContent=nl?'Tabblad toevoegen':'Add tab';
-  const buttons=(actions)=>actions.map(([action,label])=>`<button type="button" data-action="${action}">${label}</button>`).join('');
-  for(const element of [...container.children])if(!tabs.some(tab=>tab.id===element.dataset.tabId))element.remove();
-  tabs.forEach((tab,index)=>{
-   let element=[...container.children].find(el=>el.dataset.tabId===tab.id);
-   if(!element){element=document.createElement('details');element.dataset.tabId=tab.id;element.innerHTML='<summary></summary><div class="tab-body"><ha-form class="tab-form"></ha-form><div class="tab-entities"></div><div class="actions">'+buttons([['row-add',nl?'Entiteit toevoegen':'Add entity'],['tab-up',nl?'Omhoog':'Move up'],['tab-down',nl?'Omlaag':'Move down'],['tab-remove',nl?'Tabblad verwijderen':'Remove tab']])+'</div></div>';
-    element.querySelector('.tab-form').addEventListener('value-changed',event=>{event.stopPropagation();const i=Number(element.dataset.index),next=this._config.custom_tabs.map((item,j)=>j===i?{...item,...event.detail.value}:item);this._setCustomTabs(next);});
-    element.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(!button)return;this._customAction(button.dataset.action,Number(element.dataset.index),Number(button.closest('[data-row]')?.dataset.row));});
-   }
-   element.dataset.index=index;
-   // Moving an already-positioned node disconnects its focused input.
-   if(container.children[index]!==element)container.insertBefore(element,container.children[index]??null);
-   element.querySelector('summary').textContent=tab.title||(nl?'Eigen tabblad ':'Custom tab ')+(index+1);
-   Object.assign(element.querySelector('.tab-form'),{hass:this._hass,data:tab,schema:[{name:'title',selector:{text:{}}},{name:'show',selector:{boolean:{}}}],computeLabel:item=>item.name==='title'?(nl?'Naam tabblad':'Tab name'):(nl?'Tabblad tonen':'Show tab')});
-   element.querySelector('[data-action=tab-up]').disabled=index===0;element.querySelector('[data-action=tab-down]').disabled=index===tabs.length-1;
-   const rows=element.querySelector('.tab-entities');while(rows.children.length>tab.entities.length)rows.lastElementChild.remove();
-   tab.entities.forEach((row,rowIndex)=>{
-    let rowElement=rows.children[rowIndex];
-    if(!rowElement){rowElement=document.createElement('details');rowElement.innerHTML='<summary></summary><div class="tab-body"><ha-form></ha-form><div class="actions">'+buttons([['row-up',nl?'Omhoog':'Move up'],['row-down',nl?'Omlaag':'Move down'],['row-remove',nl?'Verwijderen':'Remove']])+'</div></div>';rows.append(rowElement);
-     rowElement.querySelector('ha-form').addEventListener('value-changed',event=>{event.stopPropagation();const i=Number(element.dataset.index),r=Number(rowElement.dataset.row),next=this._config.custom_tabs.map((item,j)=>j===i?{...item,entities:item.entities.map((value,k)=>k===r?{...value,...event.detail.value}:value)}:item);this._setCustomTabs(next);});
-    }
-    rowElement.dataset.row=rowIndex;rowElement.querySelector('summary').textContent=row.name||this._hass.states?.[row.entity]?.attributes?.friendly_name||row.entity||(nl?'Nieuwe entiteit':'New entity');
-    const rowLabels={entity:nl?'Entiteit':'Entity',name:nl?'Label (optioneel)':'Label (optional)',attribute:nl?'Attribuut (optioneel)':'Attribute (optional)',unit:nl?'Eigen eenheid (optioneel)':'Custom unit (optional)',show_unit:nl?'Eenheid tonen':'Show unit',decimals:nl?'Decimalen (optioneel)':'Decimal places (optional)'};
-    Object.assign(rowElement.querySelector('ha-form'),{hass:this._hass,data:row,schema:[{name:'entity',selector:{entity:{}}},...['name','attribute'].map(name=>({name,selector:{text:{}}})),{name:'show_unit',selector:{boolean:{}}},...(row.show_unit?[{name:'unit',selector:{text:{}}}]:[]),{name:'decimals',selector:{number:{min:0,max:6,step:1,mode:'box'}}}],computeLabel:item=>rowLabels[item.name]});
-    rowElement.querySelector('[data-action=row-up]').disabled=rowIndex===0;rowElement.querySelector('[data-action=row-down]').disabled=rowIndex===tab.entities.length-1;
-   });
-  });
-  const actionLabels={'row-add':nl?'Entiteit toevoegen':'Add entity','tab-up':nl?'Omhoog':'Move up','tab-down':nl?'Omlaag':'Move down','tab-remove':nl?'Tabblad verwijderen':'Remove tab','row-up':nl?'Omhoog':'Move up','row-down':nl?'Omlaag':'Move down','row-remove':nl?'Verwijderen':'Remove'};
-  for(const button of container.querySelectorAll('[data-action]'))button.textContent=actionLabels[button.dataset.action];
- }
+
  _render(){
   if(!this._config||!this._hass)return;
   if(!this._form){
@@ -1464,10 +1594,14 @@ class CarEditor extends EvccEditor {
 
 
 
+
 const carDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
 
 class CarCard extends EvccCard {
- constructor(){super();}
+ constructor(){super();this._mediaImage=new CarMediaImage(()=>{this._signature=null;this._render();});}
+ disconnectedCallback(){this._mediaImage.reset();super.disconnectedCallback();}
+ _hasVehicleImage(){return this._config.image_source==='media'?!!this._config.image_media?.media_content_id:!!this._config.image_entity;}
+ _vehicleImage(){return this._config.image_source==='media'?this._mediaImage.url:carImageUrl(this._hass?.states?.[this._config.image_entity],this._hass);}
  static async getConfigElement(){
   if(!customElements.get('ha-form')){const helpers=await window.loadCardHelpers();const card=await helpers.createCardElement({type:'entities',entities:[]});await card.constructor.getConfigElement();await customElements.whenDefined('ha-form');}
   if(!customElements.get('eleven-car-editor-test'))customElements.define('eleven-car-editor-test',CarEditor);
@@ -1492,7 +1626,6 @@ class CarCard extends EvccCard {
   return id?`<button type="button" data-entity="${uiEscape(id)}" aria-label="${uiEscape(label+': '+value)}">${markup}</button>`:markup;}
  _extraSignature(){return this._config.custom_tabs.flatMap(tab=>tab.entities.map(row=>this._hass?.states?.[row.entity]));}
  _extraStyles(){return `
-  .evcc-tabs{overflow-x:auto;scrollbar-width:thin}.evcc-tabs [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;overflow:hidden;text-overflow:ellipsis;text-align:center;display:block}
   .content[data-battery-style=slim] .battery-track,.content[data-battery-style=soft] .battery-track{height:8px}
   .content[data-battery-style=line] .battery-track{height:4px}
   .content:is([data-battery-style=slim],[data-battery-style=soft],[data-battery-style=line]) .target-marker{top:-2px;height:calc(100% + 4px);width:1px}
@@ -1537,13 +1670,14 @@ class CarCard extends EvccCard {
  }
  _render(){
   if(!this._config)return;
+  if(this.isConnected)this._mediaImage.update(this._hass,this._config.image_source==='media'?this._config.image_media:null);
   if(this._config.evcc_enabled){super._render();this._applyPresentation();return;}
   const config=this._config,hass=this._hass,states=hass?.states??{},nl=carDutch(hass),percent=carPercentage(config,states);
   const offline=hass?.connected===false||hass?.connection?.connected===false;
   const signature=JSON.stringify([config,hass?.themes?.darkMode,hass?.locale,hass?.language,offline,...[config.percentage_entity,config.range_entity,config.image_entity,config.field_1_entity,config.field_2_entity,config.field_3_entity].map(id=>states[id]),this._extraSignature()]);
   if(signature===this._signature)return;this._signature=signature;
   const scroll=this.shadowRoot.querySelector('.content')?.scrollTop??0,focused=this.shadowRoot.activeElement?.dataset.entity,focusedTab=this.shadowRoot.activeElement?.dataset.uiTab;
-  const title=config.title||(nl?'Mijn auto':'My car'),image=carImageUrl(states[config.image_entity],hass),percentage=percent==null?'\u2014':carReading({state:String(percent),attributes:{unit_of_measurement:'%'}},hass);
+  const title=config.title||(nl?'Mijn auto':'My car'),image=this._vehicleImage(),percentage=percent==null?'\u2014':carReading({state:String(percent),attributes:{unit_of_measurement:'%'}},hass);
   const fields=[2,3].filter(i=>config['show_field_'+i]);
   this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${evccCardStyles()}${this._extraStyles()}
    .car-status{margin-top:16px}.car-readings{margin:0}.content{--ui-metric-tone:var(--tone)}
@@ -1554,7 +1688,7 @@ class CarCard extends EvccCard {
    <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
     ${offline?`<p class="notice warning" role="status">${nl?'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.':'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>`:''}
     <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}</div>
-     <div class="picture">${image?`<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:`<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>${config.image_entity?`<small>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:''}`}</div>
+     <div class="picture">${image?`<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:`<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>${this._hasVehicleImage()?`<small>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:''}`}</div>
     </div><div class="battery-track" ${percent==null?`aria-label="${nl?'Percentage niet beschikbaar':'Percentage unavailable'}"`:`role="progressbar" aria-label="Percentage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"`}><div class="battery-fill" style="width:${percent??0}%"></div></div></div>
    </div>${config.show_field_1?`${this._field(1,nl)}`:''}</div>
    ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:${fields.length}">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;

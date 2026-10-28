@@ -7,12 +7,13 @@ const utilsPath = resolve(root, 'src/price-utils.js');
 const cardPath = resolve(root, 'src/dynamic-energy-price-card.js');
 const outputPath = resolve(root, 'dist/eleven-dynamic-energy-price-card.js');
 
-const [utilsSource, cardSource, localizationSource, graphSource, periodsSource] = await Promise.all([
+const [utilsSource, cardSource, localizationSource, graphSource, periodsSource, surfaceSource] = await Promise.all([
   readFile(utilsPath, 'utf8'),
   readFile(cardPath, 'utf8'),
   readFile(resolve(root, 'src/localization.js'), 'utf8'),
   readFile(resolve(root, '../../shared/graph.js'), 'utf8'),
   readFile(resolve(root, '../../shared/periods.js'), 'utf8'),
+  readFile(resolve(root, '../../shared/ui-surface.js'), 'utf8'),
 ]);
 
 const importPattern = /^import\s*\{[\s\S]*?\}\s*from\s*['"]\.\/price-utils\.js['"];\s*/;
@@ -27,6 +28,6 @@ const banner = '// Eleven Dynamic Energy Price Card — standalone dashboard bun
 
 await mkdir(dirname(outputPath), { recursive: true });
 const temporaryPath = resolve(dirname(outputPath), `.energy-${process.pid}.tmp`);
-await writeFile(temporaryPath, `${banner}(()=>{\n"use strict";\n${graphSource.replace(/^export /gm, '')}\n${periodsSource.replace(/^export /gm, '')}\n${bundledUtils}\n${bundledLocalization}\n${bundledCard}\n})();\n`, 'utf8');
+await writeFile(temporaryPath, `${banner}(()=>{\n"use strict";\n${surfaceSource.replace(/^export /gm, '')}\n${graphSource.replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '')}\n${periodsSource.replace(/^export /gm, '')}\n${bundledUtils}\n${bundledLocalization}\n${bundledCard}\n})();\n`, 'utf8');
 await rename(temporaryPath, outputPath);
 console.log(`Built ${outputPath}`);

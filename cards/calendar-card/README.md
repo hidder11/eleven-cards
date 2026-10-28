@@ -45,7 +45,7 @@ The legend works like the graph legends: each agenda can be temporarily hidden o
 
 Calendar data comes from Home Assistant's `calendar/event/subscribe` WebSocket API. The card receives the current date range and later event updates from each calendar. Changing the range replaces the subscriptions. Weather uses `weather/subscribe_forecast` with a daily forecast; older weather entities can provide the legacy `forecast` attribute. A weather entity without a daily forecast can still show the current condition for today. Future dates without forecast data stay empty. Calendar and weather subscriptions are released when the card is removed.
 
-The first appointment that starts in the future is subtly highlighted, including in event detail lists. The marker advances automatically without replacing an open popup. A small warning in the legend identifies a calendar whose subscription failed or whose entity is unavailable; the other calendars remain usable.
+The first appointment that starts in the future uses a slightly stronger title, without an extra background or outline. The marker advances automatically without replacing an open popup. A small warning in the legend identifies a calendar whose subscription failed or whose entity is unavailable; the other calendars remain usable.
 
 The calendar has its own day and month navigation. Graph timeframe synchronization is not applied to calendar events. The calendar layout uses Home Assistant theme colors and Dutch or English labels. Its day and month boundaries use the configured Home Assistant timezone, including 23 and 25-hour dates.
 
@@ -56,3 +56,5 @@ For a local browser preview with generated appointments, open [the test page](qa
 ## Compact compatibility
 
 The visual editor now uses the same Compact layout switch in Appearance as Car, Weather and Energy. YAML accepts compact: true/false as well as the existing density: compact/expanded. An explicit compact value takes precedence on input; the editor saves the established density key to avoid conflicting persisted settings. Compact reduces event density while retaining the same 16 px outer padding as the other cards.
+
+The information popup uses one shared detail surface per calendar, with the appointment count and next appointment. All shared popups use 12px inner padding, including below the last detail surface.

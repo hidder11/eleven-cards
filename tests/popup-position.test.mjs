@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {bindCardPopupPosition} from '../shared/card-header.js';
+import {bindUIPopupPosition} from '../shared/ui-popup.js';
 
 function fixture({width=900,height=700}={}){
  globalThis.window={innerWidth:width,innerHeight:height};
@@ -34,4 +35,15 @@ test('closed or replaced popups ignore late layout notifications',async()=>{
   f.resolve();await Promise.resolve();f.notify();assert.equal(f.popup.style.left,undefined);assert.equal(f.shown(),0);
   f.placement.disconnect();
  }
+});
+
+test('centred detail positioning falls below the endpoint and clamps at viewport edges',()=>{
+ globalThis.window={innerWidth:900,innerHeight:700};
+ globalThis.ResizeObserver=class{observe(){}disconnect(){}};
+ let left=404;
+ const popup={style:{},getBoundingClientRect:()=>({height:200})};
+ const placement=bindUIPopupPosition({trigger:{getBoundingClientRect:()=>({left,right:left+72,top:150,bottom:222,width:72,height:72})},popup,isRequested:()=>true,align:'center'});
+ placement.position();assert.equal(popup.style.left,'250px');assert.equal(popup.style.top,'228px');
+ left=4;placement.position();assert.equal(popup.style.left,'8px');
+ left=824;placement.position();assert.equal(popup.style.left,'512px');placement.disconnect();
 });

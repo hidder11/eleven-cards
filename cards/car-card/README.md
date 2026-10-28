@@ -1,12 +1,23 @@
 # Eleven Car (beta)
 
-A single vehicle card with optional EVCC integration. The vehicle image, header, five backgrounds and soft fade are shared between both modes. The standalone module includes the EVCC engine; no other card resource is needed.
+A single vehicle card with optional EVCC integration. The vehicle image, header, eleven backgrounds and soft fade are shared between both modes. The standalone module includes the EVCC engine; no other card resource is needed.
 
 The visual editor starts with **Use EVCC integration**. When off, it offers a percentage and three custom readings. When on, it offers the loadpoint sensor, entity overrides and visible charging tabs. Settings for the other mode remain stored when you switch.
 
 The editor uses collapsible sections consistent with the other Eleven cards: General, Vehicle image, Appearance, then Percentage and the three custom fields, or EVCC integration and Tabs. Optional EVCC overrides are grouped by vehicle/status, live data, controls, session and details. Empty overrides use automatic detection; helper text lists the detected entity when available. Only settings relevant to the selected mode are shown.
 
 Use the collection bundle or the standalone [module](dist/eleven-car-card.js). The visual editor supports all options below.
+
+Under **Vehicle image → Image source**, choose **Image entity** or **Media**. Media opens Home Assistant's image media picker. Both selections are preserved when switching sources and work with and without EVCC. Existing `image_entity` configurations keep using the entity. Media IDs are resolved through Home Assistant into authenticated image URLs and refreshed before expiry; signed URLs are never saved in YAML. If an image cannot be loaded, the card shows its unavailable-image message.
+
+```yaml
+image_source: media
+image_media:
+  media_content_id: media-source://media_source/local/auto.png
+  media_content_type: image/png
+```
+
+Switch back with `image_source: entity` to use `image_entity`. Image scale and position apply to either source. The local test collection includes this change in `custom:eleven-car-card-test`.
 
 ```yaml
 type: custom:eleven-car-card
@@ -144,3 +155,7 @@ Use background_strength: 0-100 (default 100) to adjust the shared header backdro
 compact: true is the standard setting; density: compact is accepted as an alias. Explicit compact takes precedence. Single-source information surfaces open their entity from the whole surface; multiple-source readings retain separate controls.
 
 A horizontal image offset of 0 centers the vehicle in the full card, in both custom and EVCC mode and both densities. Horizontal offsets are measured from this center, independently of image scaling.
+
+Car, Energy and Weather share all eleven backgrounds and the exact same localized editor names, including Animated/Static labels: lanes, halo, ribbon, prism-glass, eclipse, aurora, clouds, isobars, hologram, ink and terrain. Existing YAML IDs stay unchanged. New patterns use the shared header renderer, intensity, animation toggle and reduced-motion behavior.
+
+Information surfaces use the shared matte relief from shared/ui-surface.js, matching Energy, Car (including EVCC), Weather and Camera. Cross-card computed-style and narrow-layout checks are available in shared/qa/surface-consistency.html.

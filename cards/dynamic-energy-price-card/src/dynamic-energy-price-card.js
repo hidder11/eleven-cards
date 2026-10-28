@@ -3,6 +3,7 @@ import {
   calculateAveragePrice,
   classifyPriceLevel,
   countMissingIntervals,
+  currentPricePoint,
   consumptionFromHistory,
   consumptionFromStatistics,
   createPriceTicks,
@@ -724,6 +725,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       }
       this._scheduleTibberRefresh();
       this._render();
+      this.dispatchEvent(new CustomEvent('eleven-prices-changed'));
     })();
   }
 
@@ -921,7 +923,21 @@ class DynamicEnergyPriceCard extends HTMLElement {
     })();
   }
 
+  currentPrices(now = new Date()) {
+    const zone=this._hass?.config?.time_zone||'Europe/Amsterdam';
+    return Object.fromEntries(['import','export'].map(prefix=>{
+      const raw=this._sourceState(prefix)?.attributes?.data;
+      const configured=Number(this._config?.export_price_offset);
+      const offset=prefix==='export'&&Number.isFinite(configured)?configured:0;
+      const point=currentPricePoint(raw,now,zone,this._config?.tomorrow_after??14,offset);
+      return [prefix,point?{value:point.price,currency:'EUR'}:null];
+    }));
+  }
+
   _render() {
+    if(this._config.price_provider===true){
+      this._ensureTibber('import');this._ensureTibber('export');return;
+    }
     const tibberImport=this._config.import_source==='tibber_prices';
     if (!tibberImport && !this._config.entity) {
       this.shadowRoot.innerHTML = this._stateCard(this._t("Kies een prijsbron"), this._t("Selecteer een prijsbron bij Afname in de kaartinstellingen."));
@@ -1199,8 +1215,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
       ? `<div class="data-status warning">${statusParts.map((part) => `<span>${escapeHtml(part)}</span>`).join('<i aria-hidden="true">·</i>')}</div>`
       : '';
 
-    const currentImport = findCurrentPoint(getVisiblePoints(rawImportData,now,timeZone,this._config.tomorrow_after), now);
-    const currentExport = findCurrentPoint(getVisiblePoints(rawExportData,now,timeZone,this._config.tomorrow_after), now);
+    const currentImport = currentPricePoint(rawImportData,now,timeZone,this._config.tomorrow_after);
+    const currentExport = currentPricePoint(rawExportData,now,timeZone,this._config.tomorrow_after);
     const currentCards = [];
     if (currentShowsImport) currentCards.push(this._currentMetric(this._t("Afname"), currentImport, 'import', importSelected, cheapestEnabled));
     if (currentShowsExport) currentCards.push(this._currentMetric(this._t("Teruglevering"), currentExport, 'export', exportSelected, exportBestEnabled));
@@ -1482,7 +1498,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       : '—';
     const appearance = this._chart.consumptionAppearance;
     const range = point ? `${this._formatTime(point.timestamp, this._chart.timeZone)}–${this._formatTime(point.endTimestamp, this._chart.timeZone)}` : '';
-    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b>${this._t('Netafname')}: ${value}</b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
+    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b>${this._t('Netafname')} <em class="tooltip-value">${value}</em></b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
       live: `${this._t('Netafname')} ${value}, ${range}` };
   }
 
@@ -1533,7 +1549,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       else dot.style.removeProperty('border-color');
       dot.setAttribute('class', `hover-dot${type === 'export' ? ' export-dot' : ''} ${priceClass}`);
       const favorable = selected.has(point.timestamp);
-      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b>${type === 'import' ? this._t("Afname") : this._t("Teruglevering")}: ${this._formatPrice(price)} ct/kWh</b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
+      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b>${type === 'import' ? this._t("Afname") : this._t("Teruglevering")} <em class="tooltip-value">${this._formatPrice(price)} ct/kWh</em></b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
       liveEntries.push(`${type === 'import' ? this._t("afname") : this._t("teruglevering")} ${this._formatPrice(price)} ${this._t("cent per kilowattuur")}${favorable ? `, ${favorableLabel} ${hours} ${this._t("uur")}` : ''}`);
     };
     if (this._chart.graphShowsImport) showDot('import', point.importPrice, this._chart.importSelected, this._config.cheapest_hours, this._t("goedkoopste"));
@@ -1789,6 +1805,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         .current { justify-content: center; }
       }
       @media (prefers-reduced-motion: reduce) { .tooltip { transition: none; } }
+      ${this._config?.embedded===true?`:host{height:auto;min-width:0}ha-card{height:auto;background:transparent;border:0;border-radius:0;box-shadow:none}.card-content{height:auto;padding:0}.state{padding:8px 0}.chart{flex:0 0 auto;height:260px;min-height:180px}.current{border-radius:8px}.cheapest-table .period-type{border-radius:8px}`:''}
     `;
   }
 }

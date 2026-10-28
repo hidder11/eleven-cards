@@ -253,7 +253,8 @@ class CardSourceTests(unittest.TestCase):
         self.assertIn('.tooltip[data-horizontal="center"][data-vertical="above"]', card)
         self.assertIn('${SharedGraph.tooltipStyles()}', card)
         shared = (CARD.parents[3] / 'shared' / 'graph.js').read_text(encoding='utf-8')
-        self.assertIn('.tooltip b{font-weight:600;min-width:0;', shared)
+        self.assertIn('.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;', shared)
+        self.assertIn('.tooltip .tooltip-value{font-weight:600;', shared)
         self.assertNotIn("tooltip.style.top = '48%';", card)
 
     def test_native_editor_uses_flat_expandable_subgroups(self):

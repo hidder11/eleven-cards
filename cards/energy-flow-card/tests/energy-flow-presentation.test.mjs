@@ -28,6 +28,16 @@ test('history keeps both import/export totals accessible without animated dots',
  assert.ok(html.includes('Grid import 5 kWh, Grid export 10 kWh'));
  assert.ok(html.includes('data-direction="both"'));
 });
+test('compact distribution has shared endpoints and three safely formatted route readings',()=>{
+ const html=energyFlowDiagram({solar:4.6,home:3.8,import:0,export:.8},false,false,value=>`<${value}>`);
+ assert.equal((html.match(/class="circle-node"/g)||[]).length,3);
+ assert.equal((html.match(/class="flow-reading"/g)||[]).length,3);
+ assert.ok(html.includes('viewBox="4 0 412 164"'));
+ assert.ok(html.includes('data-flow-value="return"'));
+ assert.ok(html.includes('&lt;0.8&gt;'));
+ assert.ok(!html.includes('<0.8>'));
+ assert.ok(!html.includes('Naar net'));
+});
 test('shared metrics preserve unknown, zero, localization and safe formatted values',()=>{
  const metrics=energyFlowMetrics({solar:null,import:0,export:.8},false,false,value=>`<${value}>`,true);
  assert.ok(metrics.solar.includes('data-unavailable="true"'));

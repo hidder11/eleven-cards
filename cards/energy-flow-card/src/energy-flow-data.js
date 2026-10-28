@@ -1,20 +1,31 @@
+import {normalizeEntityTabs} from '../../../shared/entity-tabs.js';
+import {ENERGY_FLOW_BACKGROUNDS} from './energy-flow-backgrounds.js';
 export const energyFlowDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
+export const ENERGY_FLOW_COLORS=[{value:'charging',label:'Goud / Gold'},{value:'waiting',label:'Blauw / Blue'},{value:'done',label:'Groen / Green'},{value:'planned',label:'Paars / Purple'},{value:'off',label:'Grijs / Gray'}];
 export const energyFlowNumber=value=>value==null||value===''||typeof value==='boolean'||!Number.isFinite(Number(value))?null:Number(value);
 export function normalizeEnergyFlowConfig(input={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Invalid energy flow configuration');
  const config={...input,title:typeof input.title==='string'?input.title:'',default_view:input.default_view==='history'?'history':'live',hours_to_show:Math.min(8784,Math.max(1,energyFlowNumber(input.hours_to_show)??24)),show_navigation:true,animate_background:input.animate_background!==false,compact:(input.compact??(input.density==='compact'))===true,grid_power_inverted:input.grid_power_inverted===true};
  for(const key of ['sync_timeframe','show_field_1','show_field_2','show_field_3'])if(input[key]!=null&&typeof input[key]!=='boolean')throw Error('Invalid '+key);
  config.background_strength=input.background_strength==null||!Number.isFinite(Number(input.background_strength))?100:Math.max(0,Math.min(100,Number(input.background_strength)));
+ config.color=ENERGY_FLOW_COLORS.some(item=>item.value===input.color)?input.color:'charging';
  config.sync_timeframe=input.sync_timeframe===true;
  const group=input.hover_sync_group??input.timeframe_sync_group;
  if(group!=null&&typeof group!=='string')throw Error('Invalid synchronization group');
  config.hover_sync_group=group?.trim()||'';
  for(let i=1;i<=3;i++)config['show_field_'+i]=input['show_field_'+i]!==false;
- config.background=['lanes','halo','ribbon','prism-glass','eclipse','aurora','clouds','isobars'].includes(input.background)?input.background:'lanes';
- for(const key of ['solar_power_entity','grid_power_entity','grid_import_power_entity','grid_export_power_entity','home_power_entity']){
+ config.background=ENERGY_FLOW_BACKGROUNDS.some(item=>item.value===input.background)?input.background:'lanes';
+ // Ignore retired price-graph options in older dashboards.
+ delete config.show_prices;delete config.price_card;
+ for(const key of ['solar_power_entity','grid_power_entity','grid_import_power_entity','grid_export_power_entity','home_power_entity','price_entity','export_price_entity']){
   if(input[key]&&!(typeof input[key]==='string'&&/^sensor\.[a-z0-9_]+$/.test(input[key])))throw Error('Invalid '+key);
   config[key]=input[key]||'';
  }
+ config.detail_view=input.detail_view==='tabs'?'tabs':'popup';
+ config.tabs=Array.isArray(input.tabs)?['sun','home','grid'].filter(tab=>input.tabs.includes(tab)):['sun','home','grid'];
+ config.custom_tabs=normalizeEntityTabs(input.custom_tabs,2);
+ const available=[...(config.detail_view==='tabs'?config.tabs:[]),...config.custom_tabs.filter(tab=>tab.show).map(tab=>tab.id)];
+ config.default_tab=available.includes(input.default_tab)?input.default_tab:(available[0]??'');
  return config;
 }
 const total=values=>values.some(value=>value==null)?null:values.reduce((a,b)=>a+b,0);
