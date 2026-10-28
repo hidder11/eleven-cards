@@ -4,6 +4,27 @@ Verified locally on October 28, 2026, on `feat/charts-ready` in the dedicated
 `eleven-charts-ready` checkout. This checks the **combined** summed-sensor and
 graph-improvements branch, not just either original feature branch.
 
+## Publication revalidation against current develop
+
+Before publication, merged `origin/develop` at `e311aab` (Shopping PR #6)
+into the task branch without conflicts. Rebuilt the collection from source;
+the incoming Shopping implementation, build scripts, tests and CI remain
+unchanged relative to develop.
+
+Reran successfully on this integrated tree:
+
+- `npm test`, `npm run check` and `git diff --check`.
+- Graph improvements matrix: 24 width/theme/card cases.
+- Summed series: six width/theme cases covering Graph, Bar and Heatmap.
+- Native touch regressions: standalone and combined bundles, both widths.
+- Updated collection browser smoke test, Bar hover/touch and tooltip scrolling.
+
+Local reports/captures are under `/opt/data/cache/scratch/charts-develop/`;
+the root test log is `/opt/data/cache/scratch/charts-develop-npm-test.log`.
+These remain synthetic browser checks, not live Home Assistant integration.
+The no-publication statements below describe the earlier preparation phase;
+remote CI and the PR merge are verified separately during publication.
+
 ## Integrated scope and review fix
 
 The starting branch contains `3de2c1d`, `773f6b7`, `8412b10` and `10d62cc`

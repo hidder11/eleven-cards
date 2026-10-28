@@ -42,3 +42,5 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Browser smoke test
         run: python tests/browser-smoke.py
+      - name: Shopping card browser regressions (synthetic HA)
+        run: BUILT=1 python cards/shopping-card/tests/browser_test.py
