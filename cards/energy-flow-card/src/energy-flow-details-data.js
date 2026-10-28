@@ -60,6 +60,14 @@ export function energyFlowCurrentPrice(meter,hass){
 }
 export function energyFlowHistoricalCost(meter,info,statistics,metadata,hass){
  const id=meter.cost||info?.cost_sensors?.[meter.energy];
+ const rows=Array.isArray(statistics?.[id])?statistics[id]:[];
+ // A sum of the available bins is not a complete period cost. Require every
+ // returned cost bin and coverage of the corresponding energy timestamps.
+ if(!rows.length||rows.some(row=>energyFlowNumber(row.change)==null))return null;
+ const timestamp=row=>row.start==null?null:new Date(row.start).getTime();
+ const covered=new Set(rows.map(timestamp).filter(Number.isFinite));
+ const energyRows=Array.isArray(statistics?.[meter.energy])?statistics[meter.energy]:[];
+ if(energyRows.some(row=>{const time=timestamp(row);return time!=null&&(!Number.isFinite(time)||!covered.has(time));}))return null;
  const value=energyFlowChange(statistics,id);
  const currency=metadata?.[id]?.unit_of_measurement||hass?.states?.[id]?.attributes?.unit_of_measurement;
  // Do not apply today's price or assume the currency of an external statistic.

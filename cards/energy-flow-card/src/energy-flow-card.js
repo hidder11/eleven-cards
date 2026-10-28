@@ -85,7 +85,7 @@ export class EnergyFlowCard extends HTMLElement{
   try{
    const statistics=await this._request({type:'recorder/statistics_during_period',start_time:new Date(end-8*86400000).toISOString(),end_time:new Date(end).toISOString(),statistic_ids:ids,period:'hour',units:{energy:'kWh'},types:['change']});
    if(version===this._baseVersion&&this._attached)this._baseResult={key,value:energyFlowBaseConsumption(prefs,statistics,zone,end)};
-  }catch{if(version===this._baseVersion)this._baseResult={key,value:null};}
+  }catch{if(version===this._baseVersion)this._baseResult=null;}
   finally{if(version===this._baseVersion){this._basePendingKey=null;this._refreshDetailContent();}}
  }
  async _loadDetails(){
@@ -98,7 +98,7 @@ export class EnergyFlowCard extends HTMLElement{
   const version=this._detailVersion=(this._detailVersion??0)+1,prefs=this._prefs,start=this._start,end=Math.min(this._end,Date.now());
   this._detailLoading=true;this._detailError=false;this._detailPendingKey=key;this._refreshDetailContent();
   try{
-   const info=this._detailInfo??await this._request({type:'energy/info'}).catch(()=>({}));
+   const info=this._detailInfo??await this._request({type:'energy/info'});
    const ids=energyFlowDetailIds(prefs,info),costIds=[...new Set(energyFlowGridMeters(prefs).map(m=>m.cost||info.cost_sensors?.[m.energy]).filter(Boolean))];
    const results=await Promise.all([
     ids.length?this._request({type:'recorder/statistics_during_period',start_time:new Date(start).toISOString(),end_time:new Date(end).toISOString(),statistic_ids:ids,period:'hour',units:{energy:'kWh'},types:['change']}):{},
