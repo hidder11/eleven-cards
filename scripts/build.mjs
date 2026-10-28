@@ -12,10 +12,11 @@ const paths = [
   'cards/weather-card/dist/eleven-weather-card.js',
   'cards/car-card/dist/eleven-car-card.js',
   'cards/energy-flow-card/dist/eleven-energy-flow-card.js',
+  'cards/shopping-card/dist/eleven-shopping-card.js',
 ];
 // Each standalone module already has its own scope and duplicate-load guard.
 const modules = await Promise.all(paths.map(path => readFile(new URL(path, root), 'utf8')));
 await mkdir(new URL('dist/', root), {recursive: true});
 await writeFile(new URL('dist/eleven-cards.js', root),
-  '// Eleven Cards — HACS collection; ten card types, no external dependencies.\n' + modules.join('\n;\n'));
+  '// Eleven Cards — HACS collection; eleven card types, no external dependencies.\n' + modules.join('\n;\n'));
 console.log('Built dist/eleven-cards.js');

@@ -10,6 +10,7 @@ CARDS = [
     'eleven-timeline-card', 'eleven-overview-card', 'eleven-bar-chart',
     'eleven-heatmap-card', 'eleven-calendar-card',
     'eleven-car-card', 'eleven-weather-card', 'eleven-energy-flow-card',
+    'eleven-shopping-card',
 ]
 
 
