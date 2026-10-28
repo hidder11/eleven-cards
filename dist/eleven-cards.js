@@ -62,7 +62,15 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -537,7 +545,19 @@ function createPriceTicks(minimum, maximum, count = 5) {
 }
 
 // get_price returns unscaled base-currency totals, not chartdata metadata.
-function tibberPriceData(response) {
+function tibberPriceData(response, source = 'tibber_prices', home) {
+  if(source==='tibber') {
+    const prices=response?.prices;
+    if(!prices || typeof prices!=='object' || Array.isArray(prices))throw Error('format');
+    const homes=Object.keys(prices);
+    if(!home && homes.length!==1)throw Error('home');
+    const selected=home || homes[0];
+    if(!Object.hasOwn(prices,selected) || !Array.isArray(prices[selected]))throw Error('home');
+    return prices[selected].flatMap(row=>{
+      if(typeof row?.price!=='number' || !Number.isFinite(row.price) || typeof row.start_time!=='string' || !Number.isFinite(Date.parse(row.start_time)))return [];
+      return [{start_time:row.start_time,price_per_kwh:row.price}];
+    });
+  }
   if(response?.success===false)throw Error('unavailable');
   if(!Array.isArray(response?.price_info))throw Error('format');
   return response.price_info.flatMap(row=>{
@@ -727,7 +747,15 @@ const ENGLISH = Object.freeze({
  "Volgt het gekozen tijdvak van ingeschakelde kaarten in dezelfde groep. Alleen beschikbare bronprijzen worden getoond.":"Follows the selected timeframe of enabled cards in the same group. Only available source prices are shown.",
  "Dezelfde sleutel koppelt kaarten op deze pagina. Leeg gebruikt de standaardgroep.":"The same key links cards on this page. Empty uses the default group.",
  "De prijsbron bevat geen prijsintervallen voor het gekozen tijdvak.":"The price source has no price intervals for the selected timeframe.",
+  "Horizontaal Y-raster": "Horizontal Y grid",
+  "Toont een horizontale rasterlijn bij elk zichtbaar Y-aslabel.": "Shows a horizontal grid line at each displayed Y-axis tick.",
   "Prijsbron":"Price source",
+  "Tibber (get_prices)":"Tibber (get_prices)",
+  "Tibber-woning":"Tibber home",
+  "Kies een prijs-/templatesensor, standaard Tibber get_prices, Tibber Prices get_price of Zonneplan One forecast.":"Choose a price/template sensor, built-in Tibber get_prices, Tibber Prices get_price or Zonneplan One forecast.",
+  "Leeg kiest automatisch de enige woning. Bij meerdere woningen: vul de exacte Tibber-woningnaam in. Geen entiteit nodig. Alleen EUR/kWh.":"Leave blank to select the only home automatically. For multiple homes, enter the exact Tibber home name. No entity required. EUR/kWh only.",
+  "Vul de exacte Tibber-woningnaam in bij meerdere woningen.":"Enter the exact Tibber home name when multiple homes exist.",
+  "Controleer de standaard Tibber-integratie, get_prices en de woningnaam.":"Check the built-in Tibber integration, get_prices and the home name.",
   "Tibber-aansluiting":"Tibber connection",
   "Prijs-/templatesensor":"Price/template sensor",
   "Tibber Prices (get_price)":"Tibber Prices (get_price)",
@@ -965,6 +993,7 @@ const DEFAULT_CONFIG = Object.freeze({
   sync_hover: true,
   hover_sync_group: '',
   show_average_line: false,
+  show_y_grid: false,
   show_period_average: false,
   show_period_day: true,
   show_period_type: true,
@@ -1171,13 +1200,15 @@ class DynamicEnergyPriceCard extends HTMLElement {
       field(p+'_favorable_color'),field(p==='import'?'show_cheapest_table':'show_export_table')
     ]);
     const source=p=>[
-      select(p+'_source',[['sensor','Prijs-/templatesensor'],['tibber_prices','Tibber Prices (get_price)'],['zonneplan','Zonneplan One (forecast)']]),
+      select(p+'_source',[['sensor','Prijs-/templatesensor'],['tibber','Tibber (get_prices)'],['tibber_prices','Tibber Prices (get_price)'],['zonneplan','Zonneplan One (forecast)']]),
       ...(data[p+'_source']==='tibber_prices'
         ? [{name:p+'_tibber_entry',selector:{config_entry:{integration:'tibber_prices'}}}]
-        : [field(p==='import'?'entity':'export_entity')])
+        : data[p+'_source']==='tibber'
+          ? [{name:p+'_tibber_home',selector:{text:{}}}]
+          : [field(p==='import'?'entity':'export_entity')])
     ];
     const schema=[
-      group('graph_settings','Algemeen',['title','show_title','graph_mode','current_price_mode','tomorrow_after','show_average_line','show_price_levels','show_hover_line','sync_hover','sync_timeframe',...(data.sync_hover||data.sync_timeframe?['hover_sync_group']:[])].map(field)),
+      group('graph_settings','Algemeen',['title','show_title','graph_mode','current_price_mode','tomorrow_after','show_average_line','show_y_grid','show_price_levels','show_hover_line','sync_hover','sync_timeframe',...(data.sync_hover||data.sync_timeframe?['hover_sync_group']:[])].map(field)),
       group('price_settings','Prijsgrenzen en prijskleuren',[
         ...['cheap_price','normal_price','expensive_price'].map(field),
         group('price_color_settings','Prijskleuren',['cheap_color','normal_color','expensive_color','zero_color','negative_color'].map(field))
@@ -1188,10 +1219,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
       group('table_settings','Tabelkolommen',['day','type','start','end','duration','average'].map(c=>field('show_period_'+c)))
     ];
     const newLabels={graph_settings:'Algemeen',price_settings:'Prijsgrenzen en prijskleuren',table_settings:'Tabelkolommen'};
-    const suffix={source:'Prijsbron',tibber_entry:'Tibber-aansluiting',line_interpolation:'Lijnverloop',color_mode:'Lijnkleur',fill_mode:'Vulkleurmodus',fill_opacity:'Dekking',line_settings:'Lijn',fill_settings:'Vulling'};
+    const suffix={source:'Prijsbron',tibber_home:'Tibber-woning',tibber_entry:'Tibber-aansluiting',line_interpolation:'Lijnverloop',color_mode:'Lijnkleur',fill_mode:'Vulkleurmodus',fill_opacity:'Dekking',line_settings:'Lijn',fill_settings:'Vulling'};
     return {schema,computeLabel:function(s){const key=s?.name??'',label=newLabels[key]??suffix[key.replace(/^(import|export|consumption)_/,'')];return label?translate(label,resolveLanguage(this?.hass??frontendHass())):base.computeLabel.call(this,s);},computeHelper:function(s){
       const key=s?.name??'',lang=resolveLanguage(this?.hass??frontendHass());
-      if(key.endsWith('_source'))return translate('Kies een prijs-/templatesensor, Tibber Prices get_price of Zonneplan One forecast.',lang);
+      if(key.endsWith('_source'))return translate('Kies een prijs-/templatesensor, standaard Tibber get_prices, Tibber Prices get_price of Zonneplan One forecast.',lang);
+      if(key.endsWith('_tibber_home'))return translate('Leeg kiest automatisch de enige woning. Bij meerdere woningen: vul de exacte Tibber-woningnaam in. Geen entiteit nodig. Alleen EUR/kWh.',lang);
       if((key==='entity' && data.import_source==='zonneplan') || (key==='export_entity' && data.export_source==='zonneplan'))
         return translate('Selecteer de Zonneplan One-tariefsensor met forecast. Uur- en kwartierprijzen worden omgerekend naar EUR/kWh.',lang);
       if(key.endsWith('_tibber_entry'))return translate('Optioneel bij één aansluiting. Kies de aansluiting bij meerdere Tibber Prices-configuraties. Alleen EUR/kWh.',lang);
@@ -1233,6 +1265,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       sync_hover: "Hover synchroniseren",
       hover_sync_group: "Synchronisatiegroep",
       show_average_line: "Gemiddelde prijslijn",
+      show_y_grid: "Horizontaal Y-raster",
       show_period_average: "Gemiddelde prijs in tabel",
       show_period_day: "Dag in tabel",
       show_period_type: "Tarief in tabel",
@@ -1317,6 +1350,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
             { name: 'sync_hover', default: true, selector: { boolean: {} } },
             { name: 'hover_sync_group', selector: { text: {} } },
             { name: 'show_average_line', default: DEFAULT_CONFIG.show_average_line, selector: { boolean: {} } },
+            { name: 'show_y_grid', default: DEFAULT_CONFIG.show_y_grid, selector: { boolean: {} } },
             { name: 'show_period_average', default: DEFAULT_CONFIG.show_period_average, selector: { boolean: {} } },
             ...['day', 'type', 'start', 'end', 'duration'].map(column => ({ name: `show_period_${column}`, default: DEFAULT_CONFIG[`show_period_${column}`], selector: { boolean: {} } })),
             { name: 'show_price_levels', default: DEFAULT_CONFIG.show_price_levels, selector: { boolean: {} } },
@@ -1440,6 +1474,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         sync_hover: "Deelt het gekozen tijdstip met andere Eleven-grafieken op deze pagina.",
         hover_sync_group: "Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.",
         show_average_line: "Toont per zichtbare tariefreeks een gelabeld gemiddelde.",
+        show_y_grid: "Toont een horizontale rasterlijn bij elk zichtbaar Y-aslabel.",
         show_period_average: "Toont de gemiddelde prijs per periode in de afname- en teruglevertabel, in ct/kWh.",
         show_price_levels: "Toont de lijnen en prijslabels voor goedkoop, normaal en duur.",
         import_line_style: "Kies doorgetrokken, gestreept of gestippeld.",
@@ -1491,6 +1526,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   setConfig(config) {
     config ??= {};
     timeframeSyncConfig(config);
+    if (config.show_y_grid !== undefined && typeof config.show_y_grid !== 'boolean') throw new Error('show_y_grid');
     if (config.sync_hover !== undefined && typeof config.sync_hover !== 'boolean') throw new Error('sync_hover');
     if (config.hover_sync_group != null && typeof config.hover_sync_group !== 'string') throw new Error('hover_sync_group');
     SharedGraph.clearHover(this);
@@ -1498,9 +1534,10 @@ class DynamicEnergyPriceCard extends HTMLElement {
       ...DEFAULT_CONFIG,
       ...config,
       ...timeframeSyncConfig(config),
+      show_y_grid: config.show_y_grid ?? DEFAULT_CONFIG.show_y_grid,
     };
     for(const prefix of ['import','export']) {
-      if(!['sensor','tibber_prices','zonneplan'].includes(this._config[`${prefix}_source`]))throw Error(`${prefix}_source`);
+      if(!['sensor','tibber','tibber_prices','zonneplan'].includes(this._config[`${prefix}_source`]))throw Error(`${prefix}_source`);
     }
     this._resetTibber();
     this._watchTibberConnection();
@@ -1538,12 +1575,12 @@ class DynamicEnergyPriceCard extends HTMLElement {
   _formatDay(timestamp, timeZone) { return formatDay(timestamp, timeZone, this._language); }
 
   _hasExportSource() {
-    return this._config?.export_source === 'tibber_prices' || Boolean(this._config?.export_entity);
+    return ['tibber','tibber_prices'].includes(this._config?.export_source) || Boolean(this._config?.export_entity);
   }
 
   _tibberKey(prefix) {
     const zone=this._hass?.config?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return `${this._config[`${prefix}_tibber_entry`] || ''}|${localDayKey(new Date(),zone)}`;
+    return JSON.stringify([this._config[`${prefix}_source`],this._config[`${prefix}_source`]==='tibber' ? this._config[`${prefix}_tibber_home`] || '' : this._config[`${prefix}_tibber_entry`] || '',zone,localDayKey(new Date(),zone)]);
   }
 
   _sourceState(prefix) {
@@ -1551,7 +1588,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       const state=this._hass?.states?.[this._config[prefix==='import'?'entity':'export_entity']];
       return state ? {...state,attributes:{...state.attributes,data:zonneplanPriceData(state.attributes?.forecast)}} : null;
     }
-    if(this._config[`${prefix}_source`] !== 'tibber_prices')
+    if(!['tibber','tibber_prices'].includes(this._config[`${prefix}_source`]))
       return this._hass?.states?.[this._config[prefix==='import'?'entity':'export_entity']];
     const cached=this._tibberCache?.get(this._tibberKey(prefix));
     return cached?.status==='ready' ? {attributes:{data:cached.data}} : null;
@@ -1583,7 +1620,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _watchTibberConnection() {
-    const needed=this._config?.import_source==='tibber_prices' || (this._exportRequired() && this._config?.export_source==='tibber_prices');
+    const needed=['tibber','tibber_prices'].includes(this._config?.import_source) || (this._exportRequired() && ['tibber','tibber_prices'].includes(this._config?.export_source));
     const connection=needed?this._hass?.connection:undefined;
     if(connection===this._tibberConnection)return;
     this._unwatchTibberConnection();this._resetTibber();this._tibberConnection=connection;
@@ -1599,12 +1636,12 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const label=this._t(prefix==='import'?'Afname':'Teruglevering');
     return this._stateCard(
       this._t(status==='loading'?'Tibber-prijzen laden…':'Tibber-prijzen niet beschikbaar'),
-      `${label}: ${this._t(status==='currency'?'Alleen EUR/kWh wordt ondersteund.':status==='loading'?'Prijsgegevens worden opgehaald.':'Controleer de Tibber Prices-integratie, get_price en de gekozen aansluiting.')}`,
+      `${label}: ${this._t(status==='currency'?'Alleen EUR/kWh wordt ondersteund.':status==='home'?'Vul de exacte Tibber-woningnaam in bij meerdere woningen.':status==='loading'?'Prijsgegevens worden opgehaald.':this._config[`${prefix}_source`]==='tibber'?'Controleer de standaard Tibber-integratie, get_prices en de woningnaam.':'Controleer de Tibber Prices-integratie, get_price en de gekozen aansluiting.')}`,
     );
   }
 
   _ensureTibber(prefix) {
-    if(this._config[`${prefix}_source`] !== 'tibber_prices' || !this._hass || this._hass.connection?.connected===false) return;
+    if(!['tibber','tibber_prices'].includes(this._config[`${prefix}_source`]) || !this._hass || this._hass.connection?.connected===false) return;
     const key=this._tibberKey(prefix);
     this._tibberCache ??= new Map();
     const previous=this._tibberCache.get(key);
@@ -1620,15 +1657,18 @@ class DynamicEnergyPriceCard extends HTMLElement {
         // HA's configured currency is a guard, not proof of the Tibber home's currency.
         if(this._hass.config?.currency && this._hass.config.currency!=='EUR')throw Error('currency');
         const zone=this._hass.config?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const service_data=tibberPriceRange(new Date(),zone);
+        const source=this._config[`${prefix}_source`];
+        const home=this._config[`${prefix}_tibber_home`];
+        const range=tibberPriceRange(new Date(),zone);
+        const service_data=source==='tibber'?{start:range.start_time,end:range.end_time}:range;
         const entry=this._config[`${prefix}_tibber_entry`];
-        if(entry)service_data.entry_id=entry;
-        const {response}=await priceRequestWithTimeout(this._hass.callWS({type:'call_service',domain:'tibber_prices',service:'get_price',service_data,return_response:true}),15000);
+        if(source==='tibber_prices' && entry)service_data.entry_id=entry;
+        const {response}=await priceRequestWithTimeout(this._hass.callWS({type:'call_service',domain:source,service:source==='tibber'?'get_prices':'get_price',service_data,return_response:true}),15000);
         if(this._tibberCache?.get(key)!==request)return;
-        Object.assign(request,{status:'ready',data:tibberPriceData(response),fetchedAt:Date.now()});
+        Object.assign(request,{status:'ready',data:tibberPriceData(response,source,home),fetchedAt:Date.now()});
       } catch(error) {
         if(this._tibberCache?.get(key)!==request)return;
-        Object.assign(request,{status:error?.message==='currency'?'currency':'error',fetchedAt:Date.now()});
+        Object.assign(request,{status:['currency','home'].includes(error?.message)?error.message:'error',fetchedAt:Date.now()});
       }
       this._scheduleTibberRefresh();
       this._render();
@@ -1845,7 +1885,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     if(this._config.price_provider===true){
       this._ensureTibber('import');this._ensureTibber('export');return;
     }
-    const tibberImport=this._config.import_source==='tibber_prices';
+    const tibberImport=['tibber','tibber_prices'].includes(this._config.import_source);
     if (!tibberImport && !this._config.entity) {
       this.shadowRoot.innerHTML = this._stateCard(this._t("Kies een prijsbron"), this._t("Selecteer een prijsbron bij Afname in de kaartinstellingen."));
       return;
@@ -1872,7 +1912,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       return;
     }
     const exportState = this._sourceState('export');
-    if(this._exportRequired() && this._config.export_source==='tibber_prices' && !exportState) {
+    if(this._exportRequired() && ['tibber','tibber_prices'].includes(this._config.export_source) && !exportState) {
       this.shadowRoot.innerHTML=this._tibberStatusCard('export');
       return;
     }
@@ -2067,6 +2107,10 @@ class DynamicEnergyPriceCard extends HTMLElement {
       : '';
 
     const yTicks = createPriceTicks(minimum, maximum, 5);
+    const yGrid = this._config.show_y_grid === true ? yTicks.map((price) => {
+      const y = yFor(price);
+      return `<line class="y-grid-line" x1="${PLOT.left}" y1="${y}" x2="${svgWidth - plotRight}" y2="${y}" />`;
+    }).join('') : '';
     const yLabels = yTicks.map((price) => {
       const y = yFor(price);
       return `<span class="chart-label y-label" style="top:${(y / svgHeight) * 100}%">${this._formatPrice(price, 0)}</span>`;
@@ -2208,7 +2252,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
                 </linearGradient>
                 ${['import','export','consumption'].map(p=>`<linearGradient id="${p}-follow-fade"><stop offset="0" stop-color="white"/><stop offset="1" stop-color="white" stop-opacity="${.01/(p==='consumption'?.18:.22)}"/></linearGradient><mask id="${p}-follow-mask" maskUnits="userSpaceOnUse" x="0" y="${PLOT.top}" width="${svgWidth}" height="${plotHeight}"><rect x="0" y="${PLOT.top}" width="${svgWidth}" height="${plotHeight}" fill="url(#${p}-follow-fade)"/></mask>`).join('')}
               </defs>`,
-              before: selectionBandRects + levelLines + averageLine,
+              before: selectionBandRects + yGrid + levelLines + averageLine,
               fills: [
                 {d: importAreaPath, className: importAreaClass},
                 {d: exportAreaPath, className: exportAreaClass},
@@ -2267,7 +2311,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const hidden = this._hiddenSeries.has(type);
     return `<button type="button" class="compact-current legend-series" data-series="${type}" aria-pressed="${!hidden}" title="${hidden ? this._t("Toon") : this._t("Verberg")} ${label.toLowerCase()}">
       <i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i>
-      ${label} <span>${this._t("nu")}</span> <strong class="${priceClass}">${priceText}</strong><small>ct/kWh</small>${favorable ? `<em>${this._t("Goedkoopst")}</em>` : ''}
+      <span class="legend-label">${label}</span> <span>${this._t("nu")}</span> <strong class="legend-value ${priceClass}">${priceText}</strong><small>ct/kWh</small>${favorable ? `<em>${this._t("Goedkoopst")}</em>` : ''}
     </button>`;
   }
 
@@ -2324,7 +2368,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   _seriesLegendItem(type, label) {
     const appearance = this._seriesAppearance(type);
     const hidden = this._hiddenSeries.has(type);
-    return `<button type="button" class="legend-series" data-series="${type}" aria-pressed="${!hidden}" title="${hidden ? this._t("Toon") : this._t("Verberg")} ${label.toLowerCase()}"><i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i>${label}</button>`;
+    return `<button type="button" class="legend-series" data-series="${type}" aria-pressed="${!hidden}" title="${hidden ? this._t("Toon") : this._t("Verberg")} ${label.toLowerCase()}"><i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i><span class="legend-label">${label}</span></button>`;
   }
 
   _toggleSeries(type) {
@@ -2405,7 +2449,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       : '—';
     const appearance = this._chart.consumptionAppearance;
     const range = point ? `${this._formatTime(point.timestamp, this._chart.timeZone)}–${this._formatTime(point.endTimestamp, this._chart.timeZone)}` : '';
-    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b>${this._t('Netafname')} <em class="tooltip-value">${value}</em></b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
+    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b><em class="tooltip-label">${this._t('Netafname')}: </em><em class="tooltip-value">${value}</em></b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
       live: `${this._t('Netafname')} ${value}, ${range}` };
   }
 
@@ -2456,7 +2500,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       else dot.style.removeProperty('border-color');
       dot.setAttribute('class', `hover-dot${type === 'export' ? ' export-dot' : ''} ${priceClass}`);
       const favorable = selected.has(point.timestamp);
-      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b>${type === 'import' ? this._t("Afname") : this._t("Teruglevering")} <em class="tooltip-value">${this._formatPrice(price)} ct/kWh</em></b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
+      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b><em class="tooltip-label">${type === 'import' ? this._t("Afname") : this._t("Teruglevering")}: </em><em class="tooltip-value">${this._formatPrice(price)} ct/kWh</em></b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
       liveEntries.push(`${type === 'import' ? this._t("afname") : this._t("teruglevering")} ${this._formatPrice(price)} ${this._t("cent per kilowattuur")}${favorable ? `, ${favorableLabel} ${hours} ${this._t("uur")}` : ''}`);
     };
     if (this._chart.graphShowsImport) showDot('import', point.importPrice, this._chart.importSelected, this._config.cheapest_hours, this._t("goedkoopste"));
@@ -2574,12 +2618,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .compact-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 30px; margin-bottom: 2px; }
       .compact-current { min-width: 0; white-space: nowrap; color: var(--primary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
       .compact-current span, .compact-current small { color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); }
+      .compact-current .legend-label { font-size: inherit; font-weight: inherit; }
       .compact-current strong { font-size: 16px; font-variant-numeric: tabular-nums; }
-      .compact-current strong.negative { color: var(--negative-color); }
-      .compact-current strong.cheap { color: var(--cheap); }
-      .compact-current strong.normal { color: var(--normal); }
-      .compact-current strong.expensive { color: var(--expensive); }
-      .compact-current strong.unavailable { color: var(--secondary-text-color); }
       .compact-current em { padding: 2px 5px; border-radius: 999px; color: var(--import-best); background: var(--cheapest-fill); font-size: var(--font-size-meta); font-style: normal; }
       .compact-context { overflow: hidden; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); text-overflow: ellipsis; white-space: nowrap; }
       .current-block { display: flex; justify-content: flex-end; align-items: flex-start; gap: 8px; flex: none; margin-left: auto; }
@@ -2596,8 +2636,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .current-window { color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
       .current-window.active { color: var(--import-best); }
       .current-metric.export .current-window.active { color: var(--export-best); }
+      .y-grid-line { stroke: var(--divider-color,#ddd); stroke-width: 0.8; vector-effect: non-scaling-stroke; }
       .legend { display: flex; flex-wrap: wrap; gap: 7px 16px; margin: 12px 0 2px; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
       .legend span { display: inline-flex; align-items: center; gap: 6px; }
+      .legend-label { color: var(--secondary-text-color); }
+      .legend-value { color: var(--primary-text-color,#20252b); }
       .legend-series { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 1px 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
       .legend-series[aria-pressed="false"] { opacity: 0.45; text-decoration: line-through; }
       .legend-series:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; border-radius: 3px; }
@@ -2790,7 +2833,15 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -3638,7 +3689,7 @@ function seriesAppearance(config,index,seen=new Set()) {
  return structuredClone(row);
 }
 function editorConfig(config) {
- const data={hours_to_show:24,data_source:'auto',graph_mode:'lines',aggregation_period:'none',aggregation_method:'avg',show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,align_zero:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,...config,...timeframeSyncConfig(config,{draft:true}),entities:(config.entities??[]).map((entity,index)=>{
+ const data={hours_to_show:24,data_source:'auto',graph_mode:'lines',aggregation_period:'none',aggregation_method:'avg',show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,show_y_grid:false,connect_nulls:false,align_zero:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,...config,...timeframeSyncConfig(config,{draft:true}),entities:(config.entities??[]).map((entity,index)=>{
   const row=seriesAppearance(config,index);
   for(const key of ['color','fill_color'])if(validColor(row[key]))row[key]=[...rgb(row[key])];
   row.gradient_stops=row.gradient_stops.map(s=>({...s,color:validColor(s.color)?[...rgb(s.color)]:s.color}));
@@ -3704,7 +3755,7 @@ function validateConfig(config) {
  const hours=config.hours_to_show??24;
  if(typeof hours!=='number'||!Number.isFinite(hours)||hours<1||hours>8760) throw new Error('hours');
  if(config.title!==undefined&&typeof config.title!=='string') throw new Error('title');
- const result={line_interpolation:'step',line_width:3.5,show_fill:false,fill_fade:true,fill_opacity:0.18,show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,align_zero:true,sync_hover:true,hover_sync_group:'',...config,entities:[...entities],hours_to_show:hours};
+ const result={line_interpolation:'step',line_width:3.5,show_fill:false,fill_fade:true,fill_opacity:0.18,show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,show_y_grid:false,connect_nulls:false,align_zero:true,sync_hover:true,hover_sync_group:'',...config,entities:[...entities],hours_to_show:hours};
  Object.assign(result,timeframeSyncConfig(config));
  if(typeof result.sync_hover!=='boolean')throw new Error('sync_hover');
  if(result.hover_sync_group==null)result.hover_sync_group='';
@@ -3722,7 +3773,7 @@ function validateConfig(config) {
  if(!Number.isFinite(result.line_width)||result.line_width<1||result.line_width>8) throw new Error('line_width');
  if(result.line_style!=null&&!['solid','dashed','dotted'].includes(result.line_style)) throw new Error('line_style');
  for(const key of ['line_color','fill_color']) if(result[key]!=null&&result[key]!==''&&!validColor(result[key])) throw new Error(key);
- for(const key of ['show_fill','fill_fade','show_hover_line','show_legend','show_navigation','show_grid','align_zero']) if(typeof result[key]!=='boolean') throw new Error(key);
+ for(const key of ['show_fill','fill_fade','show_hover_line','show_legend','show_navigation','show_grid','show_y_grid','connect_nulls','align_zero']) if(typeof result[key]!=='boolean') throw new Error(key);
  if(!Number.isFinite(result.fill_opacity)||result.fill_opacity<0||result.fill_opacity>1) throw new Error('fill_opacity');
  const stops=result.gradient_stops??[];
  if(!Array.isArray(stops)||(stops.length!==0&&stops.length<2)||stops.length>32||stops.some(s=>!s||!Number.isFinite(s.value)||!validColor(s.color))||new Set(stops.map(s=>s.value)).size!==stops.length) throw new Error('gradient_stops');
@@ -4076,6 +4127,8 @@ Object.assign(translations,{
  show_grid:['Show grid','Grid tonen'],
  show_gridHelper:['Show horizontal Y-axis grid lines and the left and right plot boundaries. Axis labels and data remain visible.','Toon horizontale Y-aslijnen en de linker- en rechterrand van de grafiek. Aslabels en gegevens blijven zichtbaar.'],
  show_navigationHelper:['Show the timeframe menu, previous/next, Now and the selected date range. The configured hours remain the default; aggregation is unchanged.','Toon het tijdvakmenu, vorige/volgende, Nu en het gekozen datumbereik. De ingestelde uren blijven de standaard; aggregatie verandert niet.'],
+ connect_nulls:['Connect gaps','Lijn over gaten doortrekken'],
+ connect_nullsHelper:['Display only: connects existing readings across interior gaps using the selected line shape. No readings are added; tooltips and fills retain unavailable values.','Alleen weergave: trekt de lijn tussen bestaande meetpunten over gaten door met het gekozen lijnverloop. Geen extra meetpunten; tooltips en vulling behouden ontbrekende waarden.'],
  data_source:['Data source','Gegevensbron'],auto:['Automatic','Automatisch'],history:['Raw history','Ruwe historie'],statistics:['Statistics','Statistics'],
  data_sourceHelper:['Automatic: statistics for ranges longer than 48 hours or ending more than 48 hours ago; raw history otherwise. Unsupported sensors fall back to history. Statistics use hour/day/week/month summaries (None uses hour). Delta uses counter change statistics, including counter resets. Minute and quarter-hour require history.','Automatisch: statistics bij periodes langer dan 48 uur of die meer dan 48 uur geleden eindigen; anders ruwe historie. Sensoren zonder ondersteuning vallen terug op historie. Statistics gebruikt uur/dag/week/maand (Geen gebruikt uur). Delta gebruikt tellerstatistieken, inclusief tellerresets. Minuut en kwartier vereisen historie.'],
  statistics_config:['Statistics requires hour, day, week or month. None uses hour for minimum, maximum or average; Delta requires an explicit period. Choose History for minute or quarter-hour.','Statistics vereist uur, dag, week of maand. Geen gebruikt uur bij minimum, maximum of gemiddelde; Delta vereist een expliciet tijdvak. Kies Historie voor minuut of kwartier.'],
@@ -4097,6 +4150,7 @@ Object.assign(translations,{
  y_step_error:['Invalid Y-axis step: enter a finite positive number or leave it empty for automatic steps.','Ongeldige stapgrootte Y-as: voer een eindig positief getal in of laat leeg voor automatische stappen.'],
  y_step_count:['Y-axis step cannot be drawn (maximum 200 ticks or numeric precision exceeded). Increase the step or narrow the Y-axis bounds.','Stapgrootte Y-as kan niet worden getekend (maximaal 200 maatstreepjes of numerieke precisie overschreden). Vergroot de stap of verklein het Y-asbereik.'],
  align_zero:['Align zero points','Nulpunten uitlijnen'],
+ show_y_grid:['Show horizontal grid','Horizontaal raster tonen'],
  align_zeroHelper:['Align zero on negative Y-axes. Explicit first-axis bounds take priority.','Zet de nulpunten van negatieve Y-assen op dezelfde hoogte. Handmatige grenzen van de eerste as gaan voor.'],
  y_axis:['Y-axis','Y-as'],y_step:['Y-axis step','Stapgrootte Y-as'],
  y_stepHelper:['Optional positive tick interval in the sensor unit. Empty uses round 1/2/5 steps automatically. Maximum 200 ticks; increase the step or narrow the bounds if exceeded.','Optionele positieve stapgrootte in de sensoreenheid. Leeg kiest automatisch ronde 1/2/5-stappen. Maximaal 200 maatstreepjes; vergroot de stap of verklein het bereik bij overschrijding.'],
@@ -4262,6 +4316,7 @@ class HistoryGraphCard extends HTMLElement {
     {name:'show_legend',default:true,selector:{boolean:{}}},
     {name:'show_navigation',default:true,selector:{boolean:{}}},
     {name:'show_grid',default:true,selector:{boolean:{}}},
+    ...(this===HistoryGraphCard?[{name:'connect_nulls',default:false,selector:{boolean:{}}}]:[]),
     {name:'show_hover_line',default:true,selector:{boolean:{}}},
     {name:'sync_hover',default:true,selector:{boolean:{}}},
     {name:'hover_sync_group',selector:{text:{}}},{name:'sync_timeframe',default:false,selector:{boolean:{}}}
@@ -4270,7 +4325,8 @@ class HistoryGraphCard extends HTMLElement {
     {name:'y_min',selector:{number:{step:'any',mode:'box'}}},
     {name:'y_max',selector:{number:{step:'any',mode:'box'}}},
     {name:'y_step',selector:{number:{step:'any',mode:'box'}}},
-    {name:'align_zero',default:true,selector:{boolean:{}}}
+    {name:'align_zero',default:true,selector:{boolean:{}}},
+    {name:'show_y_grid',default:false,selector:{boolean:{}}}
    ]},
    {type:'expandable',name:'data_processing',get title(){return label('data_processing');},flatten:true,schema:[
     {name:'data_source',default:'auto',selector:select(['auto','history','statistics'])},
@@ -4342,7 +4398,14 @@ class HistoryGraphCard extends HTMLElement {
   }).join('');
   return `<defs>${gradients}${c.entities.some((_,i)=>{const a=this._seriesAppearance(i);return a.show_fill&&a.fill_fade;})?'<linearGradient id="history-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="history-fill-fade" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="300"><rect width="1000" height="300" fill="url(#history-fade)"/></mask>':''}</defs>`;
  }
- _line(points,end,x,y,index=0){return SharedGraph.path(points.map(p=>[x(p.t),p.v===null?null:y(p.v)]),this._seriesAppearance(index).line_interpolation,end===undefined?undefined:x(end));}
+ _line(points,end,x,y,index=0){
+  // Bridge only interior gaps in display geometry; retain unavailable boundaries.
+  if(this._config.connect_nulls){
+   const first=points.findIndex(p=>p.v!==null),last=points.findLastIndex(p=>p.v!==null);
+   points=points.filter((p,i)=>p.v!==null||i<first||i>last);
+  }
+  return SharedGraph.path(points.map(p=>[x(p.t),p.v===null?null:y(p.v)]),this._seriesAppearance(index).line_interpolation,end===undefined?undefined:x(end));
+ }
  _area(points,x,y,index=0){
   const interpolation=this._seriesAppearance(index).line_interpolation;
   let path='',segment=[];
@@ -4461,7 +4524,7 @@ class HistoryGraphCard extends HTMLElement {
    this._graph??=new SharedGraph();
    const graph=this._graph.render(this,{
     viewBox:'0 0 1000 300',defs:this._gradient(min,max,y),
-    before:this._config.show_grid!==false?`<g class="y-grid">${this._axes[0].ticks.map((value,index)=>`<line class="grid-line${this._axes.some(a=>a.ticks[index]===0)?' grid-zero':''}" x1="0" x2="1000" y1="${y(value)}" y2="${y(value)}"/>`).join('')}</g><g class="grid-edges"><line class="grid-line grid-edge" x1="0" x2="0" y1="0" y2="300"/><line class="grid-line grid-edge" x1="1000" x2="1000" y1="0" y2="300"/></g>`:'',
+    before:(this._config.show_y_grid&&anyVisible?SharedGraph.yGrid(this._axes):(this._config.show_grid!==false?`<g class="y-grid">${this._axes[0].ticks.map((value,index)=>`<line class="grid-line${this._axes.some(a=>a.ticks[index]===0)?' grid-zero':''}" x1="0" x2="1000" y1="${y(value)}" y2="${y(value)}"/>`).join('')}</g>`:''))+(this._config.show_grid!==false?`<g class="grid-edges"><line class="grid-line grid-edge" x1="0" x2="0" y1="0" y2="300"/><line class="grid-line grid-edge" x1="1000" x2="1000" y1="0" y2="300"/></g>`:''),
     fills:display.flatMap((s,i)=>{const a=this._seriesAppearance(i);if(!visible[i]||!a.show_fill)return [];const fillColor=Array.isArray(a.fill_color)?`rgb(${a.fill_color.join(',')})`:a.fill_color;return [{d:this._area(s.points,x,seriesY(i),i),className:'series-fill',fill:a.fill_mode==='own'?fillColor:this._appearance(i).stroke,opacity:a.fill_opacity,mask:a.fill_fade?'url(#history-fill-fade)':null}];}),
     lines:display.flatMap((s,i)=>visible[i]?[{d:this._line(s.points,Math.max(this._viewEnd,s.points.at(-1)?.t??this._viewEnd),x,seriesY(i),i),className:'series-line',entity:s.id,appearance:this._appearance(i)}]:[]),
    });
@@ -4475,7 +4538,7 @@ class HistoryGraphCard extends HTMLElement {
   this.shadowRoot.querySelectorAll?.('[data-zoom]').forEach(button=>button.onclick=()=>this._zoom({in:0.5,out:2,reset:0}[button.dataset.zoom]));
   this._graph?.restore(this);
   const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();this._pinned=false;this._bindInteractions();
-  this._syncElf();SharedGraph.restoreHover(this);
+  this._syncElf();const renderedChart=this.shadowRoot.querySelector('.chart'),restoreTooltip=()=>{if(this.shadowRoot.querySelector('.chart')===renderedChart)SharedGraph.restoreHover(this);};const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(restoreTooltip);else restoreTooltip();
  }
  _updateGraphTheme(){
   const card=this.shadowRoot.querySelector('ha-card');
@@ -4505,11 +4568,11 @@ class HistoryGraphCard extends HTMLElement {
  _bindInteractions(){
   const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;
   const fromPointer=e=>{const box=chart.querySelector('.plot').getBoundingClientRect();return this._timeAtPlotPosition(Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)));};
-  let drag=null;const selection=chart.querySelector('.zoom-selection');
-  chart.onpointermove=e=>{if(drag&&Math.abs(e.clientX-drag.x)>=6){const plot=chart.querySelector('.plot').getBoundingClientRect();if(selection){selection.hidden=false;selection.style.left=`${Math.max(0,Math.min(drag.x,e.clientX)-plot.left)/plot.width*100}%`;selection.style.width=`${Math.min(plot.width,Math.abs(e.clientX-drag.x))/plot.width*100}%`;}}else if(!this._pinned&&!e.target?.closest?.('.tooltip'))this._showTooltip(this._pointerTime(fromPointer(e)));};
-  chart.onpointerdown=e=>{if(e.target?.closest?.('.tooltip'))return;this._pinned=true;this._showTooltip(this._pointerTime(fromPointer(e)));if(e.pointerType==='mouse'&&(e.button??0)===0){drag={x:e.clientX,t:fromPointer(e)};chart.setPointerCapture?.(e.pointerId);}};
-  chart.onpointerup=e=>{if(selection)selection.hidden=true;if(drag){const first=drag;drag=null;if(Math.abs(e.clientX-first.x)>=6){const last=fromPointer(e),a=Math.min(first.t,last),b=Math.max(first.t,last);if(b-a>=60000){this._hideTooltip();this._viewport=[a,b];this._render();}}}};
-  chart.onpointercancel=()=>{drag=null;if(selection)selection.hidden=true;};
+  let drag=null,touch=null;const selection=chart.querySelector('.zoom-selection');
+  chart.onpointermove=e=>{if(touch!==null&&e.pointerId===touch){this._showTooltip(this._pointerTime(fromPointer(e)));return;}if(drag&&Math.abs(e.clientX-drag.x)>=6){const plot=chart.querySelector('.plot').getBoundingClientRect();if(selection){selection.hidden=false;selection.style.left=`${Math.max(0,Math.min(drag.x,e.clientX)-plot.left)/plot.width*100}%`;selection.style.width=`${Math.min(plot.width,Math.abs(e.clientX-drag.x))/plot.width*100}%`;}}else if(!this._pinned&&!e.target?.closest?.('.tooltip'))this._showTooltip(this._pointerTime(fromPointer(e)));};
+  chart.onpointerdown=e=>{if(e.target?.closest?.('.tooltip'))return;if(e.pointerType==='touch')touch=e.pointerId;this._pinned=true;this._showTooltip(this._pointerTime(fromPointer(e)));if(e.pointerType==='mouse'&&(e.button??0)===0){drag={x:e.clientX,t:fromPointer(e)};chart.setPointerCapture?.(e.pointerId);}};
+  chart.onpointerup=e=>{if(e.pointerId===touch)touch=null;if(selection)selection.hidden=true;if(drag){const first=drag;drag=null;if(Math.abs(e.clientX-first.x)>=6){const last=fromPointer(e),a=Math.min(first.t,last),b=Math.max(first.t,last);if(b-a>=60000){this._hideTooltip();this._viewport=[a,b];this._render();}}}};
+  chart.onpointercancel=()=>{touch=null;drag=null;if(selection)selection.hidden=true;};
   chart.onpointerleave=()=>{if(!this._pinned)this._hideTooltip();};chart.onblur=()=>this._hideTooltip();
   chart.onkeydown=e=>{
    if(e.key==='Escape'){this._hideTooltip();return;}
@@ -4555,7 +4618,7 @@ class HistoryGraphCard extends HTMLElement {
  ${periodControlsStyles()}
  ${chartInsightStyles()}
  .legend{display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px;margin:0 0 2px;color:var(--secondary-text-color);font-size:var(--font-size-label)}
- .legend-item{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;border:0;padding:4px 0;background:transparent;color:inherit;font:inherit;text-align:start;cursor:pointer;border-radius:4px}.legend-item[aria-pressed="false"]{opacity:.45}.legend-item[aria-pressed="false"]>span{text-decoration:line-through}.legend-item:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}.legend-item>span{overflow-wrap:anywhere}.legend-item strong{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}.empty-visibility{position:absolute;inset:22px 12px 30px 44px;display:flex;align-items:center;justify-content:center;color:var(--secondary-text-color);font-size:12px;text-align:center;pointer-events:none}
+ .legend-item{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;border:0;padding:4px 0;background:transparent;color:inherit;font:inherit;text-align:start;cursor:pointer;border-radius:4px}.legend-item[aria-pressed="false"]{opacity:.45}.legend-item[aria-pressed="false"]>span{text-decoration:line-through}.legend-item:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}.legend-item>span{overflow-wrap:anywhere}.legend-item strong{color:var(--primary-text-color,#20252b);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}.empty-visibility{position:absolute;inset:22px 12px 30px 44px;display:flex;align-items:center;justify-content:center;color:var(--secondary-text-color);font-size:12px;text-align:center;pointer-events:none}
  .legend i{width:15px;flex-shrink:0;border-top:3px solid var(--series-color)}.unit{margin-left:auto;font-weight:600}
  .data-status{font-size:11px;color:var(--secondary-text-color);margin-top:3px}
  .chart{position:relative;flex:1;min-height:120px;height:260px;margin-top:4px;outline:none;touch-action:pan-y}
@@ -4853,7 +4916,15 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -5506,19 +5577,24 @@ const TimelineView={
   const measured=tooltip.getBoundingClientRect();let left=px+14;if(left+measured.width>box.width-4)left=px-measured.width-14;tooltip.style.left=`${Math.max(4,Math.min(box.width-measured.width-4,left))}px`;tooltip.style.top=`${Math.max(8-box.top,Math.min(0,(window.innerHeight??480)-box.top-measured.height-8))}px`;
   if(publish)SharedGraph.publishHover(this,t);
  },
+ _endTouch(pointerId){
+  if(this._touchPointer!==pointerId)return;
+  this._touchPointer=null;
+  if(this._touchRenderPending){this._touchRenderPending=false;this._render();}
+ },
  _bindInteractions(){
   const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;
   const timestamp=e=>{const r=chart.getBoundingClientRect();return this._viewStart+Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*(this._viewEnd-this._viewStart);};
   let drag=null;const selection=chart.querySelector('.zoom-selection');
-  chart.onpointermove=e=>{if(drag&&Math.abs(e.clientX-drag.x)>=6){this._hideTooltip();const r=chart.getBoundingClientRect(),x=Math.max(r.left,Math.min(r.right,e.clientX));selection.hidden=false;selection.style.left=`${(Math.min(drag.x,x)-r.left)/r.width*100}%`;selection.style.width=`${Math.abs(x-drag.x)/r.width*100}%`;}else if(!this._pinned&&e.pointerType!=='touch'){this._hoverTime=timestamp(e);if(this._hoverFrame==null){if(typeof requestAnimationFrame==='function')this._hoverFrame=requestAnimationFrame(()=>{this._hoverFrame=null;if(this.shadowRoot.querySelector('.chart')===chart&&!this._pinned&&this._hoverTime!=null)this._showTooltip(this._hoverTime);});else this._showTooltip(this._hoverTime);}}};
-  chart.onpointerdown=e=>{if(e.target?.closest?.('[data-series],.tooltip')||(e.button??0)!==0)return;this._pointerFocusPending=e.target?.closest?.('.segment')??null;this._pinned=true;this._showTooltip(timestamp(e));if(e.pointerType==='mouse'){drag={x:e.clientX,t:timestamp(e)};chart.setPointerCapture?.(e.pointerId);}};
-  chart.onpointerup=e=>{selection.hidden=true;if(drag){const d=drag;drag=null;if(Math.abs(e.clientX-d.x)>=6){const t=timestamp(e),a=Math.min(d.t,t),b=Math.max(d.t,t);if(b-a>=60000){this._hideTooltip();this._viewport=[a,b];this._render();}}}};
-  chart.onpointercancel=()=>{drag=null;selection.hidden=true;this._hideTooltip();};chart.onlostpointercapture=()=>{drag=null;selection.hidden=true;};chart.onpointerleave=()=>{if(!this._pinned&&!drag)this._hideTooltip();};
+  chart.onpointermove=e=>{if(this._touchPointer!=null&&e.pointerId===this._touchPointer){this._showTooltip(timestamp(e));return;}if(drag&&Math.abs(e.clientX-drag.x)>=6){this._hideTooltip();const r=chart.getBoundingClientRect(),x=Math.max(r.left,Math.min(r.right,e.clientX));selection.hidden=false;selection.style.left=`${(Math.min(drag.x,x)-r.left)/r.width*100}%`;selection.style.width=`${Math.abs(x-drag.x)/r.width*100}%`;}else if(!this._pinned&&e.pointerType!=='touch'){this._hoverTime=timestamp(e);if(this._hoverFrame==null){if(typeof requestAnimationFrame==='function')this._hoverFrame=requestAnimationFrame(()=>{this._hoverFrame=null;if(this.shadowRoot.querySelector('.chart')===chart&&!this._pinned&&this._hoverTime!=null)this._showTooltip(this._hoverTime);});else this._showTooltip(this._hoverTime);}}};
+  chart.onpointerdown=e=>{if(e.target?.closest?.('[data-series],.tooltip')||(e.button??0)!==0)return;if(e.pointerType==='touch')this._touchPointer=e.pointerId;this._pointerFocusPending=e.target?.closest?.('.segment')??null;this._pinned=true;this._showTooltip(timestamp(e));if(e.pointerType==='mouse'){drag={x:e.clientX,t:timestamp(e)};chart.setPointerCapture?.(e.pointerId);}};
+  chart.onpointerup=e=>{selection.hidden=true;if(drag){const d=drag;drag=null;if(Math.abs(e.clientX-d.x)>=6){const t=timestamp(e),a=Math.min(d.t,t),b=Math.max(d.t,t);if(b-a>=60000){this._hideTooltip();this._viewport=[a,b];this._render();}}}this._endTouch(e.pointerId);};
+  chart.onpointercancel=e=>{drag=null;selection.hidden=true;this._hideTooltip();this._endTouch(e.pointerId);};chart.onlostpointercapture=e=>{drag=null;selection.hidden=true;this._endTouch(e.pointerId);};chart.onpointerleave=()=>{if(!this._pinned&&!drag)this._hideTooltip();};
   chart.onkeydown=e=>{this._pointerFocusPending=null;if(e.key==='Escape'){drag=null;selection.hidden=true;this._hideTooltip();return;}if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const times=[...new Set([this._viewStart,...this._series.flatMap((s,i)=>this._isSeriesVisible(i)?s.map(v=>v.start):[]).filter(t=>t>this._viewStart&&t<this._viewEnd),this._viewEnd])].sort((a,b)=>a-b);let i=times.findIndex(t=>t>=(this._cursor??this._viewStart));if(i<0)i=times.length-1;i=e.key==='Home'?0:e.key==='End'?times.length-1:Math.max(0,Math.min(times.length-1,i+(e.key==='ArrowRight'?1:-1)));this._pinned=true;this._showTooltip(times[i]);};
   chart.onfocusout=e=>{if(!chart.contains(e.relatedTarget))this._hideTooltip();};this.shadowRoot.querySelectorAll('.segment').forEach(button=>{button.onfocus=()=>{const fromPointer=this._pointerFocusPending===button;this._pointerFocusPending=null;if(fromPointer&&this._cursor!=null)return;this._pinned=true;this._showTooltip(Number(button.dataset.time));};});
  },
  _render(){
-  if(!this._config)return;if(this._hoverFrame!=null){cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;}captureChartInsights(this);const c=this._config,nl=this._nl(),esc=escapeTimeline;this._viewStart=this._viewport?.[0]??this._start;this._viewEnd=this._viewport?.[1]??this._end;const a=this._viewStart,b=this._viewEnd;let body='';const controls=cardHeader({title:c.title??(nl?'Statustijdlijn':'Status timeline'),showTitle:c.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:nl?'nl':'en',periods:periodControls(this,nl?'nl':'en'),zoomState:chartZoomState(this),information:chartDataInformation(this,nl?'nl':'en')});
+  if(!this._config)return;if(this._touchPointer!=null){this._touchRenderPending=true;return;}this._touchRenderPending=false;if(this._hoverFrame!=null){cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;}captureChartInsights(this);const c=this._config,nl=this._nl(),esc=escapeTimeline;this._viewStart=this._viewport?.[0]??this._start;this._viewEnd=this._viewport?.[1]??this._end;const a=this._viewStart,b=this._viewEnd;let body='';const controls=cardHeader({title:c.title??(nl?'Statustijdlijn':'Status timeline'),showTitle:c.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:nl?'nl':'en',periods:periodControls(this,nl?'nl':'en'),zoomState:chartZoomState(this),information:chartDataInformation(this,nl?'nl':'en')});
   if(this._status!=='ready')body=`<div class="message" role="status">${this._status==='error'?(nl?'Geschiedenis kon niet worden geladen.':'Unable to load history.'):(nl?'Geschiedenis laden…':'Loading history…')}${this._status==='error'?`<button class="retry">${nl?'Opnieuw proberen':'Retry'}</button>`:''}</div>`;
   else{
 
@@ -5685,7 +5761,7 @@ class TimelineCard extends HTMLElement{
   if(!customElements.get('eleven-timeline-editor'))customElements.define('eleven-timeline-editor',TimelineSettingsEditor);
   return document.createElement('eleven-timeline-editor');
  }
- setConfig(c){timeframeSyncConfig(c);validateTimeline(c,this._hass);if(!Array.isArray(c.entities)||!c.entities.length||c.entities.length>16||c.entities.some(id=>typeof id!=='string'||!/^\w+\.\w+$/.test(id)))throw Error('Kies 1–16 entiteiten.');const config={hours_to_show:24,bar_height:18,border_radius:5,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',state_colors:[],series_options:[],...c};for(const [k,min,max] of [['hours_to_show',1,8760],['bar_height',4,80],['border_radius',0,40],['row_gap',0,64]])if(!Number.isFinite(config[k])||config[k]<min||config[k]>max)throw Error(`Ongeldige ${k}`);for(const k of ['state_colors','series_options'])if(!Array.isArray(config[k])||config[k].some(x=>!x||typeof x!=='object'))throw Error(`Ongeldige ${k}`);SharedGraph.clearHover(this);this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._visibility=new Map();this._config={...config,...timeframeSyncConfig(c)};this._viewport=null;resetGraphPeriod(this);this._hideTooltip();this._generation++;this._inFlight=false;this._series=[];this._stateLimits=[];this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
+ setConfig(c){timeframeSyncConfig(c);validateTimeline(c,this._hass);if(!Array.isArray(c.entities)||!c.entities.length||c.entities.length>16||c.entities.some(id=>typeof id!=='string'||!/^\w+\.\w+$/.test(id)))throw Error('Kies 1–16 entiteiten.');const config={hours_to_show:24,bar_height:18,border_radius:5,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',state_colors:[],series_options:[],...c};for(const [k,min,max] of [['hours_to_show',1,8760],['bar_height',4,80],['border_radius',0,40],['row_gap',0,64]])if(!Number.isFinite(config[k])||config[k]<min||config[k]>max)throw Error(`Ongeldige ${k}`);for(const k of ['state_colors','series_options'])if(!Array.isArray(config[k])||config[k].some(x=>!x||typeof x!=='object'))throw Error(`Ongeldige ${k}`);SharedGraph.clearHover(this);this._touchPointer=null;this._touchRenderPending=false;this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._visibility=new Map();this._config={...config,...timeframeSyncConfig(c)};this._viewport=null;resetGraphPeriod(this);this._hideTooltip();this._generation++;this._inFlight=false;this._series=[];this._stateLimits=[];this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
  set hass(h){
   this._hass=h;
   const signature=JSON.stringify([h?.locale?.language??h?.language,h?.config?.time_zone,this._config?.entities.map(id=>{const state=h?.states?.[id];return [state?.state,state?.attributes?.friendly_name,state?.attributes?.device_class];})]);
@@ -5694,7 +5770,7 @@ class TimelineCard extends HTMLElement{
  }
  get hass(){return this._hass;}
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._outside??=e=>{if(!e.composedPath().includes(this)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip();};globalThis.document?.addEventListener('pointerdown',this._outside);if(typeof ResizeObserver!=='undefined'){this._resizeObserver??=new ResizeObserver(entries=>{const narrow=(entries[0]?.contentRect?.width??this.clientWidth)<400;if(this._axisNarrow!==undefined&&this._axisNarrow!==narrow&&this._config)this._render();this._axisNarrow=narrow;});this._resizeObserver.observe(this);}if(this._config&&this._hass)this._refresh();}
- disconnectedCallback(){disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);globalThis.document?.removeEventListener('pointerdown',this._outside);this._resizeObserver?.disconnect();if(this._hoverFrame!=null)cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;this._hideTooltip();this._connected=false;this._started=false;this._inFlight=false;this._generation++;clearTimeout(this._timer);}
+ disconnectedCallback(){this._touchPointer=null;this._touchRenderPending=false;disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);globalThis.document?.removeEventListener('pointerdown',this._outside);this._resizeObserver?.disconnect();if(this._hoverFrame!=null)cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;this._hideTooltip();this._connected=false;this._started=false;this._inFlight=false;this._generation++;clearTimeout(this._timer);}
  getCardSize(){return Math.ceil((90+(this._config?.entities.length??1)*((this._config?.bar_height??18)+(this._config?.row_gap??16)+24))/50);}
  getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(3,Math.ceil(this.getCardSize()*50/64)),min_rows:3};}
  _isSeriesVisible(index){return chartSeriesVisible(this,index);}
@@ -6107,7 +6183,15 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -6955,7 +7039,7 @@ function seriesAppearance(config,index,seen=new Set()) {
  return structuredClone(row);
 }
 function editorConfig(config) {
- const data={hours_to_show:24,data_source:'auto',graph_mode:'lines',aggregation_period:'none',aggregation_method:'avg',show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,align_zero:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,...config,...timeframeSyncConfig(config,{draft:true}),entities:(config.entities??[]).map((entity,index)=>{
+ const data={hours_to_show:24,data_source:'auto',graph_mode:'lines',aggregation_period:'none',aggregation_method:'avg',show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,show_y_grid:false,connect_nulls:false,align_zero:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,...config,...timeframeSyncConfig(config,{draft:true}),entities:(config.entities??[]).map((entity,index)=>{
   const row=seriesAppearance(config,index);
   for(const key of ['color','fill_color'])if(validColor(row[key]))row[key]=[...rgb(row[key])];
   row.gradient_stops=row.gradient_stops.map(s=>({...s,color:validColor(s.color)?[...rgb(s.color)]:s.color}));
@@ -7021,7 +7105,7 @@ function validateConfig(config) {
  const hours=config.hours_to_show??24;
  if(typeof hours!=='number'||!Number.isFinite(hours)||hours<1||hours>8760) throw new Error('hours');
  if(config.title!==undefined&&typeof config.title!=='string') throw new Error('title');
- const result={line_interpolation:'step',line_width:3.5,show_fill:false,fill_fade:true,fill_opacity:0.18,show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,align_zero:true,sync_hover:true,hover_sync_group:'',...config,entities:[...entities],hours_to_show:hours};
+ const result={line_interpolation:'step',line_width:3.5,show_fill:false,fill_fade:true,fill_opacity:0.18,show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,show_y_grid:false,connect_nulls:false,align_zero:true,sync_hover:true,hover_sync_group:'',...config,entities:[...entities],hours_to_show:hours};
  Object.assign(result,timeframeSyncConfig(config));
  if(typeof result.sync_hover!=='boolean')throw new Error('sync_hover');
  if(result.hover_sync_group==null)result.hover_sync_group='';
@@ -7039,7 +7123,7 @@ function validateConfig(config) {
  if(!Number.isFinite(result.line_width)||result.line_width<1||result.line_width>8) throw new Error('line_width');
  if(result.line_style!=null&&!['solid','dashed','dotted'].includes(result.line_style)) throw new Error('line_style');
  for(const key of ['line_color','fill_color']) if(result[key]!=null&&result[key]!==''&&!validColor(result[key])) throw new Error(key);
- for(const key of ['show_fill','fill_fade','show_hover_line','show_legend','show_navigation','show_grid','align_zero']) if(typeof result[key]!=='boolean') throw new Error(key);
+ for(const key of ['show_fill','fill_fade','show_hover_line','show_legend','show_navigation','show_grid','show_y_grid','connect_nulls','align_zero']) if(typeof result[key]!=='boolean') throw new Error(key);
  if(!Number.isFinite(result.fill_opacity)||result.fill_opacity<0||result.fill_opacity>1) throw new Error('fill_opacity');
  const stops=result.gradient_stops??[];
  if(!Array.isArray(stops)||(stops.length!==0&&stops.length<2)||stops.length>32||stops.some(s=>!s||!Number.isFinite(s.value)||!validColor(s.color))||new Set(stops.map(s=>s.value)).size!==stops.length) throw new Error('gradient_stops');
@@ -7393,6 +7477,8 @@ Object.assign(translations,{
  show_grid:['Show grid','Grid tonen'],
  show_gridHelper:['Show horizontal Y-axis grid lines and the left and right plot boundaries. Axis labels and data remain visible.','Toon horizontale Y-aslijnen en de linker- en rechterrand van de grafiek. Aslabels en gegevens blijven zichtbaar.'],
  show_navigationHelper:['Show the timeframe menu, previous/next, Now and the selected date range. The configured hours remain the default; aggregation is unchanged.','Toon het tijdvakmenu, vorige/volgende, Nu en het gekozen datumbereik. De ingestelde uren blijven de standaard; aggregatie verandert niet.'],
+ connect_nulls:['Connect gaps','Lijn over gaten doortrekken'],
+ connect_nullsHelper:['Display only: connects existing readings across interior gaps using the selected line shape. No readings are added; tooltips and fills retain unavailable values.','Alleen weergave: trekt de lijn tussen bestaande meetpunten over gaten door met het gekozen lijnverloop. Geen extra meetpunten; tooltips en vulling behouden ontbrekende waarden.'],
  data_source:['Data source','Gegevensbron'],auto:['Automatic','Automatisch'],history:['Raw history','Ruwe historie'],statistics:['Statistics','Statistics'],
  data_sourceHelper:['Automatic: statistics for ranges longer than 48 hours or ending more than 48 hours ago; raw history otherwise. Unsupported sensors fall back to history. Statistics use hour/day/week/month summaries (None uses hour). Delta uses counter change statistics, including counter resets. Minute and quarter-hour require history.','Automatisch: statistics bij periodes langer dan 48 uur of die meer dan 48 uur geleden eindigen; anders ruwe historie. Sensoren zonder ondersteuning vallen terug op historie. Statistics gebruikt uur/dag/week/maand (Geen gebruikt uur). Delta gebruikt tellerstatistieken, inclusief tellerresets. Minuut en kwartier vereisen historie.'],
  statistics_config:['Statistics requires hour, day, week or month. None uses hour for minimum, maximum or average; Delta requires an explicit period. Choose History for minute or quarter-hour.','Statistics vereist uur, dag, week of maand. Geen gebruikt uur bij minimum, maximum of gemiddelde; Delta vereist een expliciet tijdvak. Kies Historie voor minuut of kwartier.'],
@@ -7414,6 +7500,7 @@ Object.assign(translations,{
  y_step_error:['Invalid Y-axis step: enter a finite positive number or leave it empty for automatic steps.','Ongeldige stapgrootte Y-as: voer een eindig positief getal in of laat leeg voor automatische stappen.'],
  y_step_count:['Y-axis step cannot be drawn (maximum 200 ticks or numeric precision exceeded). Increase the step or narrow the Y-axis bounds.','Stapgrootte Y-as kan niet worden getekend (maximaal 200 maatstreepjes of numerieke precisie overschreden). Vergroot de stap of verklein het Y-asbereik.'],
  align_zero:['Align zero points','Nulpunten uitlijnen'],
+ show_y_grid:['Show horizontal grid','Horizontaal raster tonen'],
  align_zeroHelper:['Align zero on negative Y-axes. Explicit first-axis bounds take priority.','Zet de nulpunten van negatieve Y-assen op dezelfde hoogte. Handmatige grenzen van de eerste as gaan voor.'],
  y_axis:['Y-axis','Y-as'],y_step:['Y-axis step','Stapgrootte Y-as'],
  y_stepHelper:['Optional positive tick interval in the sensor unit. Empty uses round 1/2/5 steps automatically. Maximum 200 ticks; increase the step or narrow the bounds if exceeded.','Optionele positieve stapgrootte in de sensoreenheid. Leeg kiest automatisch ronde 1/2/5-stappen. Maximaal 200 maatstreepjes; vergroot de stap of verklein het bereik bij overschrijding.'],
@@ -7579,6 +7666,7 @@ class HistoryGraphCard extends HTMLElement {
     {name:'show_legend',default:true,selector:{boolean:{}}},
     {name:'show_navigation',default:true,selector:{boolean:{}}},
     {name:'show_grid',default:true,selector:{boolean:{}}},
+    ...(this===HistoryGraphCard?[{name:'connect_nulls',default:false,selector:{boolean:{}}}]:[]),
     {name:'show_hover_line',default:true,selector:{boolean:{}}},
     {name:'sync_hover',default:true,selector:{boolean:{}}},
     {name:'hover_sync_group',selector:{text:{}}},{name:'sync_timeframe',default:false,selector:{boolean:{}}}
@@ -7587,7 +7675,8 @@ class HistoryGraphCard extends HTMLElement {
     {name:'y_min',selector:{number:{step:'any',mode:'box'}}},
     {name:'y_max',selector:{number:{step:'any',mode:'box'}}},
     {name:'y_step',selector:{number:{step:'any',mode:'box'}}},
-    {name:'align_zero',default:true,selector:{boolean:{}}}
+    {name:'align_zero',default:true,selector:{boolean:{}}},
+    {name:'show_y_grid',default:false,selector:{boolean:{}}}
    ]},
    {type:'expandable',name:'data_processing',get title(){return label('data_processing');},flatten:true,schema:[
     {name:'data_source',default:'auto',selector:select(['auto','history','statistics'])},
@@ -7659,7 +7748,14 @@ class HistoryGraphCard extends HTMLElement {
   }).join('');
   return `<defs>${gradients}${c.entities.some((_,i)=>{const a=this._seriesAppearance(i);return a.show_fill&&a.fill_fade;})?'<linearGradient id="history-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient><mask id="history-fill-fade" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="300"><rect width="1000" height="300" fill="url(#history-fade)"/></mask>':''}</defs>`;
  }
- _line(points,end,x,y,index=0){return SharedGraph.path(points.map(p=>[x(p.t),p.v===null?null:y(p.v)]),this._seriesAppearance(index).line_interpolation,end===undefined?undefined:x(end));}
+ _line(points,end,x,y,index=0){
+  // Bridge only interior gaps in display geometry; retain unavailable boundaries.
+  if(this._config.connect_nulls){
+   const first=points.findIndex(p=>p.v!==null),last=points.findLastIndex(p=>p.v!==null);
+   points=points.filter((p,i)=>p.v!==null||i<first||i>last);
+  }
+  return SharedGraph.path(points.map(p=>[x(p.t),p.v===null?null:y(p.v)]),this._seriesAppearance(index).line_interpolation,end===undefined?undefined:x(end));
+ }
  _area(points,x,y,index=0){
   const interpolation=this._seriesAppearance(index).line_interpolation;
   let path='',segment=[];
@@ -7778,7 +7874,7 @@ class HistoryGraphCard extends HTMLElement {
    this._graph??=new SharedGraph();
    const graph=this._graph.render(this,{
     viewBox:'0 0 1000 300',defs:this._gradient(min,max,y),
-    before:this._config.show_grid!==false?`<g class="y-grid">${this._axes[0].ticks.map((value,index)=>`<line class="grid-line${this._axes.some(a=>a.ticks[index]===0)?' grid-zero':''}" x1="0" x2="1000" y1="${y(value)}" y2="${y(value)}"/>`).join('')}</g><g class="grid-edges"><line class="grid-line grid-edge" x1="0" x2="0" y1="0" y2="300"/><line class="grid-line grid-edge" x1="1000" x2="1000" y1="0" y2="300"/></g>`:'',
+    before:(this._config.show_y_grid&&anyVisible?SharedGraph.yGrid(this._axes):(this._config.show_grid!==false?`<g class="y-grid">${this._axes[0].ticks.map((value,index)=>`<line class="grid-line${this._axes.some(a=>a.ticks[index]===0)?' grid-zero':''}" x1="0" x2="1000" y1="${y(value)}" y2="${y(value)}"/>`).join('')}</g>`:''))+(this._config.show_grid!==false?`<g class="grid-edges"><line class="grid-line grid-edge" x1="0" x2="0" y1="0" y2="300"/><line class="grid-line grid-edge" x1="1000" x2="1000" y1="0" y2="300"/></g>`:''),
     fills:display.flatMap((s,i)=>{const a=this._seriesAppearance(i);if(!visible[i]||!a.show_fill)return [];const fillColor=Array.isArray(a.fill_color)?`rgb(${a.fill_color.join(',')})`:a.fill_color;return [{d:this._area(s.points,x,seriesY(i),i),className:'series-fill',fill:a.fill_mode==='own'?fillColor:this._appearance(i).stroke,opacity:a.fill_opacity,mask:a.fill_fade?'url(#history-fill-fade)':null}];}),
     lines:display.flatMap((s,i)=>visible[i]?[{d:this._line(s.points,Math.max(this._viewEnd,s.points.at(-1)?.t??this._viewEnd),x,seriesY(i),i),className:'series-line',entity:s.id,appearance:this._appearance(i)}]:[]),
    });
@@ -7792,7 +7888,7 @@ class HistoryGraphCard extends HTMLElement {
   this.shadowRoot.querySelectorAll?.('[data-zoom]').forEach(button=>button.onclick=()=>this._zoom({in:0.5,out:2,reset:0}[button.dataset.zoom]));
   this._graph?.restore(this);
   const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();this._pinned=false;this._bindInteractions();
-  this._syncElf();SharedGraph.restoreHover(this);
+  this._syncElf();const renderedChart=this.shadowRoot.querySelector('.chart'),restoreTooltip=()=>{if(this.shadowRoot.querySelector('.chart')===renderedChart)SharedGraph.restoreHover(this);};const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(restoreTooltip);else restoreTooltip();
  }
  _updateGraphTheme(){
   const card=this.shadowRoot.querySelector('ha-card');
@@ -7822,11 +7918,11 @@ class HistoryGraphCard extends HTMLElement {
  _bindInteractions(){
   const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;
   const fromPointer=e=>{const box=chart.querySelector('.plot').getBoundingClientRect();return this._timeAtPlotPosition(Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)));};
-  let drag=null;const selection=chart.querySelector('.zoom-selection');
-  chart.onpointermove=e=>{if(drag&&Math.abs(e.clientX-drag.x)>=6){const plot=chart.querySelector('.plot').getBoundingClientRect();if(selection){selection.hidden=false;selection.style.left=`${Math.max(0,Math.min(drag.x,e.clientX)-plot.left)/plot.width*100}%`;selection.style.width=`${Math.min(plot.width,Math.abs(e.clientX-drag.x))/plot.width*100}%`;}}else if(!this._pinned&&!e.target?.closest?.('.tooltip'))this._showTooltip(this._pointerTime(fromPointer(e)));};
-  chart.onpointerdown=e=>{if(e.target?.closest?.('.tooltip'))return;this._pinned=true;this._showTooltip(this._pointerTime(fromPointer(e)));if(e.pointerType==='mouse'&&(e.button??0)===0){drag={x:e.clientX,t:fromPointer(e)};chart.setPointerCapture?.(e.pointerId);}};
-  chart.onpointerup=e=>{if(selection)selection.hidden=true;if(drag){const first=drag;drag=null;if(Math.abs(e.clientX-first.x)>=6){const last=fromPointer(e),a=Math.min(first.t,last),b=Math.max(first.t,last);if(b-a>=60000){this._hideTooltip();this._viewport=[a,b];this._render();}}}};
-  chart.onpointercancel=()=>{drag=null;if(selection)selection.hidden=true;};
+  let drag=null,touch=null;const selection=chart.querySelector('.zoom-selection');
+  chart.onpointermove=e=>{if(touch!==null&&e.pointerId===touch){this._showTooltip(this._pointerTime(fromPointer(e)));return;}if(drag&&Math.abs(e.clientX-drag.x)>=6){const plot=chart.querySelector('.plot').getBoundingClientRect();if(selection){selection.hidden=false;selection.style.left=`${Math.max(0,Math.min(drag.x,e.clientX)-plot.left)/plot.width*100}%`;selection.style.width=`${Math.min(plot.width,Math.abs(e.clientX-drag.x))/plot.width*100}%`;}}else if(!this._pinned&&!e.target?.closest?.('.tooltip'))this._showTooltip(this._pointerTime(fromPointer(e)));};
+  chart.onpointerdown=e=>{if(e.target?.closest?.('.tooltip'))return;if(e.pointerType==='touch')touch=e.pointerId;this._pinned=true;this._showTooltip(this._pointerTime(fromPointer(e)));if(e.pointerType==='mouse'&&(e.button??0)===0){drag={x:e.clientX,t:fromPointer(e)};chart.setPointerCapture?.(e.pointerId);}};
+  chart.onpointerup=e=>{if(e.pointerId===touch)touch=null;if(selection)selection.hidden=true;if(drag){const first=drag;drag=null;if(Math.abs(e.clientX-first.x)>=6){const last=fromPointer(e),a=Math.min(first.t,last),b=Math.max(first.t,last);if(b-a>=60000){this._hideTooltip();this._viewport=[a,b];this._render();}}}};
+  chart.onpointercancel=()=>{touch=null;drag=null;if(selection)selection.hidden=true;};
   chart.onpointerleave=()=>{if(!this._pinned)this._hideTooltip();};chart.onblur=()=>this._hideTooltip();
   chart.onkeydown=e=>{
    if(e.key==='Escape'){this._hideTooltip();return;}
@@ -7872,7 +7968,7 @@ class HistoryGraphCard extends HTMLElement {
  ${periodControlsStyles()}
  ${chartInsightStyles()}
  .legend{display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px;margin:0 0 2px;color:var(--secondary-text-color);font-size:var(--font-size-label)}
- .legend-item{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;border:0;padding:4px 0;background:transparent;color:inherit;font:inherit;text-align:start;cursor:pointer;border-radius:4px}.legend-item[aria-pressed="false"]{opacity:.45}.legend-item[aria-pressed="false"]>span{text-decoration:line-through}.legend-item:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}.legend-item>span{overflow-wrap:anywhere}.legend-item strong{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}.empty-visibility{position:absolute;inset:22px 12px 30px 44px;display:flex;align-items:center;justify-content:center;color:var(--secondary-text-color);font-size:12px;text-align:center;pointer-events:none}
+ .legend-item{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;border:0;padding:4px 0;background:transparent;color:inherit;font:inherit;text-align:start;cursor:pointer;border-radius:4px}.legend-item[aria-pressed="false"]{opacity:.45}.legend-item[aria-pressed="false"]>span{text-decoration:line-through}.legend-item:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}.legend-item>span{overflow-wrap:anywhere}.legend-item strong{color:var(--primary-text-color,#20252b);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}.empty-visibility{position:absolute;inset:22px 12px 30px 44px;display:flex;align-items:center;justify-content:center;color:var(--secondary-text-color);font-size:12px;text-align:center;pointer-events:none}
  .legend i{width:15px;flex-shrink:0;border-top:3px solid var(--series-color)}.unit{margin-left:auto;font-weight:600}
  .data-status{font-size:11px;color:var(--secondary-text-color);margin-top:3px}
  .chart{position:relative;flex:1;min-height:120px;height:260px;margin-top:4px;outline:none;touch-action:pan-y}
@@ -8905,7 +9001,15 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -11743,7 +11847,15 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);

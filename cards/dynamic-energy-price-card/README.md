@@ -22,7 +22,7 @@ A compact Home Assistant dashboard card for dynamic electricity tariffs. View th
 
 The graph reveals its lines and fills from left to right when price data first loads into the attached card (650 ms). Initial rendering before dashboard insertion does not consume the animation; updates during the reveal preserve its progress. Routine updates and series toggles do not replay the animation. The device's reduced-motion preference disables it automatically.
 
-Works with hourly or quarter-hour price intervals from a price/template sensor, the Tibber Prices `get_price` action, or Zonneplan One's `forecast` sensor attribute. Import-only is the default; export is optional. The card reads your existing Home Assistant integrations; it does not contact an energy provider directly or control appliances.
+Works with hourly or quarter-hour price intervals from a price/template sensor, built-in Tibber `get_prices`, custom Tibber Prices `get_price`, or Zonneplan One's `forecast` sensor attribute. Import-only is the default; export is optional. The card reads your existing Home Assistant integrations; it does not contact an energy provider directly or control appliances.
 
 ## Quick start
 
@@ -49,7 +49,7 @@ show_cheapest_table: true
 
 Replace `entity` with your price sensor. This example highlights the cheapest continuous four-hour block per day and lists it below the chart. Omit the last three settings if you only want the price graph.
 
-New cards do not preselect an entity. Under **Import → Price source**, choose **Price/template sensor**, **Tibber Prices (get_price)**, or **Zonneplan One (forecast)**. Existing cards keep their configured sensor.
+New cards do not preselect an entity. Under **Import → Price source**, choose **Price/template sensor**, **Tibber (get_prices)**, **Tibber Prices (get_price)**, or **Zonneplan One (forecast)**. Existing cards keep their configured sensor.
 
 **Default sensor requirement:** a price/template sensor must provide a `data` attribute with timestamped prices in EUR/kWh. A sensor with only a current-price state is not enough. Tibber Prices can be read directly without a template sensor; see **Price sources** below.
 
@@ -108,6 +108,19 @@ export price = export entity price + export_price_offset
 
 Offsets may be negative. The import entity is never used as the base for an export offset.
 
+### Built-in Tibber get_prices
+
+Select **Tibber (get_prices)** for Home Assistant's standard Tibber integration. No entity, template sensor or additional custom integration is needed:
+
+```yaml
+type: custom:eleven-dynamic-energy-price-card
+import_source: tibber
+# Leave blank with one home. With multiple homes, enter the exact response key:
+# import_tibber_home: My home
+```
+
+The card calls `tibber.get_prices` with `start` and `end` covering today and tomorrow in Home Assistant's timezone. It reads `prices[home][].start_time` and `price` without scaling. A single returned home is selected automatically; multiple homes require an explicit exact name in **Tibber home**, rather than silently mixing homes or choosing the first. Unknown home names show an error. This is a text field, not an entity or config-entry dropdown. Dormant sensor/custom-entry values are retained when switching sources but never sent to the built-in action. `export_source: tibber` and `export_tibber_home` are independently configurable; purchase prices do not become genuine export tariffs. Only EUR homes are supported; HA currency is a guard, not proof of provider currency. Caching, refresh, connection invalidation, and local DST-safe range behavior are shared with the custom adapter below.
+
 ### Tibber Prices get_price
 
 Install and configure the separate **Tibber Prices** integration (`jpawlowski/hass.tibber_prices`); Home Assistant's built-in Tibber integration alone does not expose this action. Select **Tibber Prices (get_price)** under Import. No `entity` or template sensor is required:
@@ -152,6 +165,7 @@ title: Dynamic energy prices
 show_title: true
 show_hover_line: true
 show_average_line: false
+show_y_grid: false
 show_price_levels: true
 import_line_style: solid
 import_line_width: 3.5
@@ -249,10 +263,12 @@ The default title is translated automatically. A title explicitly entered in YAM
 
 | Option | Required | Default | Description |
 |---|---:|---:|---|
-| `import_source` | No | `sensor` | `sensor`, `tibber_prices`, or `zonneplan`. |
+| `import_source` | No | `sensor` | `sensor`, `tibber`, `tibber_prices`, or `zonneplan`. |
+| `import_tibber_home` | No | — | Exact built-in Tibber response home name; blank automatically selects a sole home. |
 | `entity` | For sensor sources | — | Import price/template sensor with `attributes.data`, or Zonneplan tariff sensor with `attributes.forecast`. No preselected entity. |
 | `import_tibber_entry` | No | — | Tibber Prices config entry; omit only when the integration can resolve a single connection. |
-| `export_source` | No | `sensor` | Independent export source: `sensor`, `tibber_prices`, or `zonneplan`. |
+| `export_source` | No | `sensor` | Independent export source: `sensor`, `tibber`, `tibber_prices`, or `zonneplan`. |
+| `export_tibber_home` | No | — | Exact built-in Tibber response home name for export. |
 | `export_entity` | For export sensor sources | — | Dedicated export sensor; required when export information is shown using a sensor source. |
 | `export_tibber_entry` | No | — | Config entry for an explicitly selected Tibber Prices export source. |
 | `export_price_offset` | No | — | Signed EUR/kWh correction applied to the export entity prices. |
@@ -264,6 +280,7 @@ The default title is translated automatically. A title explicitly entered in YAM
 | `sync_hover` | No | `true` | Shares hover, touch and keyboard selection with other Eleven energy/history graphs on the same page. Disable for independent interaction. |
 | `hover_sync_group` | No | Empty | Only cards with the same group synchronize; empty uses the default group. Guides follow the exact timestamp even when chart widths or ranges differ. Tariff tooltips show the actual containing interval, without interpolating prices. Outside the chart's range or in a missing interval the shared cursor is hidden. |
 | `show_average_line` | No | `false` | Shows a separately labelled average for each visible graph series. |
+| `show_y_grid` | No | `false` | Draws a horizontal grid line at every displayed price Y-axis tick, behind the series. Uses the theme's divider color with a fixed 0.8px stroke; independent of price-level guides. Also available in the localized General editor settings. |
 | `show_period_average` | No | `false` | Adds the average price of each favorable period to the table in ct/kWh, for both tariffs. |
 | `show_period_day` | No | `true` | Show the compact day column in the period table. |
 | `show_period_type` | No | `true` | Show the compact import/export tariff column. |

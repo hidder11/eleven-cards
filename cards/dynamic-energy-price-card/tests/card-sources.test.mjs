@@ -131,6 +131,29 @@ test('get_price isolates two entries and does not keep stale data after a failed
  assert.equal(c._tibberCache.get(c._tibberKey('import')).status,'error');
 });
 
+test('built-in Tibber fetches prices with start/end and no custom entry or sensor',async()=>{
+ const c=base();assert.doesNotThrow(()=>c.setConfig({import_source:'tibber',export_source:'tibber',graph_mode:'both'}));
+ const calls=[];c._hass={config:{currency:'EUR',time_zone:'Europe/Amsterdam'},states:{},callWS:async m=>{calls.push(m);return {response:{prices:{Home:[{start_time:'2026-10-15T00:00:00Z',price:-.01}]}}};}};
+ c._ensureTibber('import');c._ensureTibber('export');await tick();
+ assert.equal(calls.length,1);assert.equal(calls[0].domain,'tibber');assert.equal(calls[0].service,'get_prices');
+ assert.equal(calls[0].return_response,true);assert.deepEqual(Object.keys(calls[0].service_data).sort(),['end','start']);
+ assert.equal(c._sourceState('import').attributes.data[0].price_per_kwh,-.01);assert.equal(c._hasExportSource(),true);
+ const flat=s=>s.flatMap(f=>f.schema?flat(f.schema):[f]);
+ const fields=new Map(flat(Card.getConfigForm({import_source:'tibber'}).schema).map(f=>[f.name,f]));
+ assert.ok(fields.has('import_tibber_home'));assert.ok(!fields.has('import_tibber_entry'));assert.ok(!fields.has('entity'));
+});
+
+test('built-in home selection stays independent from custom entries, including cache keys and failures',async()=>{
+ const c=base();c.setConfig({import_source:'tibber',export_source:'tibber',graph_mode:'both',import_tibber_home:'A',export_tibber_home:'B',import_tibber_entry:'dormant',entity:'sensor.dormant'});
+ const calls=[];c._hass={config:{currency:'EUR',time_zone:'UTC'},states:{},callWS:async m=>{calls.push(m);return {response:{prices:{A:[{start_time:'2026-10-15T00:00:00Z',price:0}],B:[{start_time:'2026-10-15T00:00:00Z',price:.3}]}}};}};
+ c._ensureTibber('import');c._ensureTibber('export');await tick();assert.equal(calls.length,2);
+ assert.equal(c._sourceState('import').attributes.data[0].price_per_kwh,0);assert.equal(c._sourceState('export').attributes.data[0].price_per_kwh,.3);
+ for(const m of calls)assert.deepEqual(Object.keys(m.service_data).sort(),['end','start']);
+ const builtInKey=c._tibberKey('import');c._config.import_source='tibber_prices';c._config.import_tibber_entry='A';assert.notEqual(c._tibberKey('import'),builtInKey);
+ c._config.import_source='tibber';c._config.import_tibber_home='missing';c._ensureTibber('import');await tick();assert.equal(c._tibberCache.get(c._tibberKey('import')).status,'home');assert.equal(c._sourceState('import'),null);
+ c.disconnectedCallback();
+});
+
 test('data resolved before attachment still schedules a refresh on the attached cached render',async()=>{
  const c=base();c.setConfig({import_source:'tibber_prices'});c._hass={states:{},callWS:async()=>reply};c._ensureTibber('import');await tick();assert.equal(c._tibberTimer,undefined);
  c.isConnected=true;c._ensureTibber('import');assert.ok(c._tibberTimer);c.disconnectedCallback();

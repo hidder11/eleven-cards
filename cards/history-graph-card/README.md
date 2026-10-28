@@ -100,8 +100,10 @@ Omit either bound to let that side scale automatically. Set `title: ""` to hide 
 | `y_min` | No | Automatic | Exact Y-axis minimum for the first sensor's unit; blank/null restores automatic scaling. Additional units scale automatically. |
 | `y_max` | No | Automatic | Exact Y-axis maximum for the first sensor's unit; must exceed `y_min` when both are set. |
 | `y_step` | No | Automatic | Positive finite tick interval for the first sensor's unit. Blank/null restores round automatic steps. At most 200 ticks; excessive density is rejected, never silently changed. |
+| `show_y_grid` | No | `false` | Draw subtle 0.8px horizontal lines behind the data at each Y-axis tick; coincident lines from multiple axes are deduplicated. Enable Show horizontal grid in Y-axis settings. This replaces the horizontal portion of the existing default-on `show_grid` while preserving its plot edges; set both switches to `false` to hide all grid lines. |
 | `show_legend` | No | `true` | Show sensor names, line keys and latest values. Hiding it preserves the unit, tooltip and all series. |
 | `show_hover_line` | No | `true` | Vertical hover guide; disabling keeps tooltip and markers. |
+| `connect_nulls` | No | `false` | History only: connect existing readings across interior gaps using each sensor’s line shape. Display-only: no extra points, no invented tooltip values. Fills retain gaps; missing leading/trailing periods are not extrapolated. Enable **Connect gaps / Lijn over gaten doortrekken** under Graph. |
 | `sync_hover` | No | `true` | Shares hover, touch and keyboard selection with other Eleven energy/history graphs on the same page. Disable for independent interaction. |
 | `hover_sync_group` | No | Empty | Only cards with the same group synchronize; empty uses the default group. Guides follow the exact timestamp, not the same pixel position. Outside a receiving chart's time range, its tooltip and guide are hidden. |
 ### Settings ownership

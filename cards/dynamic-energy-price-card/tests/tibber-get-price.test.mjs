@@ -2,6 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as utils from '../src/price-utils.js';
 
+test('built-in prices choose an exact home, preserve finite zero/negative values and reject ambiguous or malformed homes',()=>{
+ const start_time='2026-10-15T00:00:00Z';
+ const response={prices:{A:[{start_time,price:0},{start_time,price:-.01},{start_time,price:null},{start_time,price:'0.25'},{start_time:'bad',price:.25}],B:[{start_time,price:.3}]}};
+ assert.throws(()=>utils.tibberPriceData(response,'tibber'),/home/);
+ assert.deepEqual(utils.tibberPriceData(response,'tibber','A'),[{start_time,price_per_kwh:0},{start_time,price_per_kwh:-.01}]);
+ assert.deepEqual(utils.tibberPriceData(response,'tibber','B'),[{start_time,price_per_kwh:.3}]);
+ assert.throws(()=>utils.tibberPriceData(response,'tibber','missing'),/home/);
+ assert.throws(()=>utils.tibberPriceData({prices:[]},'tibber'),/format/);
+ assert.throws(()=>utils.tibberPriceData({prices:{}},'tibber'),/home/);
+ assert.throws(()=>utils.tibberPriceData({prices:{A:null}},'tibber'),/home/);
+});
+
 test('get_price range covers two local calendar days, including DST changes',()=>{
  for(const [now,start,end] of [
   ['2026-10-15T18:00:00Z','2026-10-14T22:00:00.000Z','2026-10-16T22:00:00.000Z'],
