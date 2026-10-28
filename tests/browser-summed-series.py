@@ -54,12 +54,16 @@ with sync_playwright() as p:
                   return {type:c.localName,status:c._status,width:box.width};
                 })''')
                 for index, name in enumerate(selected):
+                    page.evaluate('(i)=>sumCards[i].scrollIntoView({block:"center"})', index)
+                    page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
                     if name == 'eleven-heatmap-card':
-                        page.evaluate('(i)=>{const c=sumCards[i];const cell=c._rows.flatMap(r=>r.cells).find(x=>x.value!=null);c._showTooltip(cell.key)}', index)
+                        page.evaluate('''(i)=>{const c=sumCards[i];const cell=c._rows.flatMap(r=>r.cells).find(x=>x.value!=null);window.sumTooltipKey=cell.key;c.shadowRoot.querySelector(`[data-cell="${cell.key}"]`).scrollIntoView({block:'nearest',inline:'center'});}''', index)
+                        page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+                        page.evaluate('(i)=>sumCards[i]._showTooltip(sumTooltipKey)', index)
                     else:
                         page.evaluate('(i)=>{const c=sumCards[i];c._showTooltip(sumStart+3600000)}', index)
                     tooltip = page.evaluate('(i)=>{const t=sumCards[i].shadowRoot.querySelector(".tooltip");return {hidden:t.hidden,text:t.textContent}}', index)
-                    assert not tooltip['hidden'], tooltip
+                    assert not tooltip['hidden'], {'card':name,'width':width,'dark':dark,**tooltip}
                     if name != 'eleven-heatmap-card':
                         assert '125' in tooltip['text'] and 'Total power' in tooltip['text'], tooltip
                     page.evaluate('(i)=>sumCards[i]._hideTooltip()', index)
@@ -81,8 +85,24 @@ with sync_playwright() as p:
                     out.push({type:card.localName,saved:true});editor.remove();
                   }return out;
                 }''')
+                # Both units change together: discard old-unit values, not just mismatched contributors.
+                page.evaluate('''()=>{
+                  const old=fixtureHass;
+                  const states=Object.fromEntries(Object.entries(old.states).map(([id,s])=>[id,{...s,attributes:{...s.attributes,unit_of_measurement:'kW'}}]));
+                  window.unitHass={...old,states,callApi:async()=>{
+                    const data=await old.callApi();return data.map(rows=>rows.map(row=>({...row,state:Number.isFinite(Number(row.state))?String(Number(row.state)/1000):row.state,attributes:{...row.attributes,unit_of_measurement:'kW'}})));
+                  }};
+                  sumCards.forEach(c=>{c.hass=unitHass;});
+                }''')
+                page.wait_for_function("sumCards.every(c=>c._status==='ready')")
+                unit_checks=page.evaluate('''()=>sumCards.map(c=>{
+                  const values=c._series?c._series[0].points.map(p=>p.v):c._rows.flatMap(r=>r.cells).map(cell=>cell.value);
+                  const finite=values.filter(Number.isFinite);
+                  if(!finite.some(v=>Math.abs(v-0.185)<1e-8)||finite.some(v=>v>1))throw Error('Stale old-unit sum: '+finite);
+                  return {type:c.localName,unit:'kW',staleValues:false};
+                })''')
                 assert errors == [], errors
-                results.append({'width':width,'dark':dark,'cards':summary,'editors':edits,'screenshot':str(image)})
+                results.append({'width':width,'dark':dark,'cards':summary,'editors':edits,'unitChanges':unit_checks,'screenshot':str(image)})
                 page.close()
         (output / 'report.json').write_text(json.dumps({'provenance':'synthetic offline; ha-form stub; not native HA integration','cases':results},indent=2))
         print(json.dumps({'passed':True,'cases':len(results),'cards':selected,'report':str(output/'report.json')}))

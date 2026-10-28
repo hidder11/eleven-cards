@@ -3477,7 +3477,7 @@ function chartZoomState(host){
  const zoomed=ready&&(a>host._start+1||b<host._end-1);
  return {zoomed,in:ready&&width>Math.min(60000,total)+1,out:ready&&width<total-1,reset:zoomed};
 }
-function chartEntityItems(host){return host._config.entities.map(id=>({id,name:host._config.series_options?.find(row=>row.entity===id)?.name||host._hass?.states?.[id]?.attributes?.friendly_name||id}));}
+function chartEntityItems(host){return host._config.entities.map(id=>{const option=host._config.series_options?.find(row=>row.entity===id);return {id,name:option?.name||[id,...(option?.sum_entities??[])].map(source=>host._hass?.states?.[source]?.attributes?.friendly_name||source).join(' + ')};});}
 function chartSeriesVisible(host,index){return host._visibility?.get(host._config.entities[index])??true;}
 function isolateChartSeries(host,id){
  if(!host._config.entities.includes(id))return;
@@ -3619,7 +3619,7 @@ function seriesAppearance(config,index,seen=new Set()) {
  const option=config.series_options?.find(s=>s.entity===config.entities[index])??{};
  const inherited=option.gradient_stops??(option.color?[]:config.gradient_stops??[]);
  const color_mode=option.color_mode??(inherited.length?'gradient':'fixed');
- const row={entity:config.entities[index],visible:option.visible??true,...(option.name?{name:option.name}:{}),
+ const row={entity:config.entities[index],visible:option.visible??true,...(option.name?{name:option.name}:{}),...(option.sum_entities?{sum_entities:structuredClone(option.sum_entities)}:{}),
   line_width:option.line_width??config.line_width??3.5,line_style:option.line_style??config.line_style??(index%2?'dashed':'solid'),
   line_interpolation:option.line_interpolation??config.line_interpolation??'step',connect_gaps:option.connect_gaps??false,
   color_mode,color:option.color||config.line_color||SERIES_COLORS[index%SERIES_COLORS.length],
@@ -3739,6 +3739,7 @@ function validateConfig(config) {
  const options=result.series_options??[];
  if(!Array.isArray(options)||options.some(s=>!s||!entities.includes(s.entity)||(s.name!=null&&typeof s.name!=='string')||(s.color!=null&&s.color!==''&&!validColor(s.color)))||new Set(options.map(s=>s.entity)).size!==options.length)throw new Error('series_options');
  result.series_options=options.map(s=>{
+  if(s.sum_entities!==undefined&&(!Array.isArray(s.sum_entities)||s.sum_entities.length>7||s.sum_entities.some(id=>typeof id!=='string'||!/^sensor\.[a-z0-9_]+$/.test(id)||id===s.entity)||new Set(s.sum_entities).size!==s.sum_entities.length))throw new Error('sum_entities');
   if(s.line_style_source!=null&&s.line_style_source!==''&&(typeof s.line_style_source!=='string'||!entities.includes(s.line_style_source)||s.line_style_source===s.entity))throw new Error('line_style_source');
   if(s.line_width!=null&&(!Number.isFinite(s.line_width)||s.line_width<1||s.line_width>8))throw new Error('series_line_width');
   for(const [key,allowed] of Object.entries({line_style:['solid','dashed','dotted'],line_interpolation:['smooth','linear','step'],color_mode:['fixed','gradient'],fill_mode:['line','own']}))if(s[key]!=null&&!allowed.includes(s[key]))throw new Error('series_'+key);
@@ -3747,7 +3748,7 @@ function validateConfig(config) {
   if(s.fill_color!=null&&s.fill_color!==''&&!validColor(s.fill_color))throw new Error('series_fill_color');
   if(s.color_mode==='gradient'&&(!Array.isArray(s.gradient_stops)||s.gradient_stops.length<2))throw new Error('series_gradient_stops');
   if(s.gradient_mode!=null&&!['smooth','steps'].includes(s.gradient_mode))throw new Error('series_gradient_mode');
-  const row={...s,color:Array.isArray(s.color)?[...s.color]:s.color,fill_color:Array.isArray(s.fill_color)?[...s.fill_color]:s.fill_color};
+  const row={...s,...(s.sum_entities?{sum_entities:[...s.sum_entities]}:{}),color:Array.isArray(s.color)?[...s.color]:s.color,fill_color:Array.isArray(s.fill_color)?[...s.fill_color]:s.fill_color};
   if(s.gradient_stops!=null){const stops=s.gradient_stops;if(!Array.isArray(stops)||(stops.length!==0&&stops.length<2)||stops.length>32||stops.some(s=>!s||!Number.isFinite(s.value)||!validColor(s.color))||new Set(stops.map(s=>s.value)).size!==stops.length)throw new Error('series_gradient_stops');row.gradient_stops=stops.map(s=>({value:s.value,color:Array.isArray(s.color)?[...s.color]:s.color})).sort((a,b)=>a.value-b.value);}
   return row;
  });
@@ -3775,7 +3776,38 @@ function statisticsPeriod(config,end=Date.now()){
 }
 // HA has used epoch seconds and milliseconds across Recorder versions.
 function statisticTime(value){return typeof value==='number'?(value<1e12?value*1000:value):Date.parse(value);}
+// The displayed identity stays the primary sensor; contributors are fetched once.
+function seriesSourceIds(config,id){return [id,...(config.series_options?.find(s=>s.entity===id)?.sum_entities??[])];}
+function historyEntityIds(config){return [...new Set(config.entities.flatMap(id=>seriesSourceIds(config,id)))];}
+function sumHistorySeries(series,config,start,end){
+ const byId=new Map(series.map(s=>[s.id,s]));
+ return config.entities.map(id=>{
+  const ids=seriesSourceIds(config,id),sources=ids.map(source=>byId.get(source)??{id:source,points:[]});
+  if(ids.length===1)return sources[0];
+  const times=[...new Set([start,...sources.flatMap(s=>s.points.map(p=>p.t).filter(t=>t>=start&&t<=end))])].sort((a,b)=>a-b);
+  const points=times.map(t=>{const values=sources.map(s=>valueAt(s.points,t)),sum=values.reduce((a,b)=>a+b,0);return {t,v:values.every(Number.isFinite)&&Number.isFinite(sum)?sum:null};});
+  return {id,...(sources.every(s=>s.source==='statistics')?{source:'statistics'}:{}),points};
+ });
+}
 async function loadHistorySeries(hass,config,start,end){
+ const entities=historyEntityIds(config);
+ const summed=config.entities.some(id=>seriesSourceIds(config,id).length>1);
+ if(!summed)return loadIndividualHistorySeries(hass,config,start,end);
+ const before=seriesMetadata(hass,config.entities,config.series_options);
+ const units=Object.fromEntries(entities.map(id=>[id,hass.states?.[id]?.attributes?.unit_of_measurement??'']));
+ const extrema=['min','max'].includes(config.aggregation_method);
+ if(extrema&&config.data_source==='statistics')throw new Error('sum_statistics');
+ const fetchConfig={...config,entities,_history_units:units,...(extrema?{data_source:'history'}:{})};
+ let series=await loadIndividualHistorySeries(hass,fetchConfig,start,end);
+ // A statistic increment is not a raw counter, nor a summary an observation.
+ // If a sum would mix sources, refetch its contributors as one raw batch.
+ const mixed=config.entities.some(id=>{const sources=seriesSourceIds(config,id).map(source=>series.find(s=>s.id===source)?.source==='statistics');return sources.some(Boolean)&&sources.some(v=>!v);});
+ if(mixed)series=await loadIndividualHistorySeries(hass,{...fetchConfig,data_source:'history'},start,end);
+ const after=seriesMetadata(hass,config.entities,config.series_options);
+ if(before.items.some((item,i)=>item.unit!==after.items[i].unit))throw new Error('sum_unit');
+ return sumHistorySeries(series,config,start,end);
+}
+async function loadIndividualHistorySeries(hass,config,start,end){
  const period=statisticsPeriod(config,end),strict=config.data_source==='statistics',selected=new Map();
  if(period){
   try{
@@ -3804,7 +3836,7 @@ async function loadHistorySeries(hass,config,start,end){
  const missing=config.entities.filter(id=>!selected.has(id));
  if(missing.length){
   const response=await hass.callApi('GET',historyUrl({...config,entities:missing},end));
-  for(const s of decodeHistory(response,missing,start,end))selected.set(s.id,s);
+  for(const s of decodeHistory(response,missing,start,end,config._history_units))selected.set(s.id,s);
  }
  return config.entities.map(id=>selected.get(id));
 }
@@ -3812,14 +3844,14 @@ function numericState(state) {
  if(typeof state!=='string'||state.trim()==='') return null;
  const number=Number(state); return Number.isFinite(number)?number:null;
 }
-function decodeHistory(response,entities,start,end) {
+function decodeHistory(response,entities,start,end,units) {
  if(!Array.isArray(response)||response.some(rows=>!Array.isArray(rows))) throw new Error('response');
  const byId=new Map();
  for(const rows of response) {
   if(!rows.length) continue;
   const id=rows[0]?.entity_id;
   if(!entities.includes(id)) continue;
-  const points=rows.map(row=>({t:Date.parse(row.last_updated??row.last_changed),v:numericState(row.state)})).filter(p=>Number.isFinite(p.t)&&p.t<=end).sort((a,b)=>a.t-b.t);
+  const points=rows.map(row=>({t:Date.parse(row.last_updated??row.last_changed),v:units&&(row.attributes?.unit_of_measurement??'')!==units[id]?null:numericState(row.state)})).filter(p=>Number.isFinite(p.t)&&p.t<=end).sort((a,b)=>a.t-b.t);
   const previous=points.filter(p=>p.t<start).at(-1);
   const clipped=points.filter(p=>p.t>=start);
   if(previous) clipped.unshift({...previous,t:start});
@@ -3847,7 +3879,9 @@ function seriesMetadata(hass,entities,options=[]) {
  const items=entities.map(id=>{
   const state=hass.states?.[id]; if(!state) throw new Error('missing');
   const option=options.find(s=>s.entity===id);
-  return {id,name:option?.name||state.attributes?.friendly_name||id,unit:state.attributes?.unit_of_measurement??''};
+  const unit=state.attributes?.unit_of_measurement??'',ids=[id,...(option?.sum_entities??[])];
+  const names=ids.map(source=>{const value=hass.states?.[source];if(!value)throw new Error('missing');if((value.attributes?.unit_of_measurement??'')!==unit)throw new Error('sum_unit');return value.attributes?.friendly_name||source;});
+  return {id,name:option?.name||names.join(' + '),unit};
  });
  return {items,unit:items[0]?.unit??''};
 }
@@ -4022,6 +4056,7 @@ function stackSeries(series,start,end){
 function historyUrl(config,end) {
  const start=new Date(end-config.hours_to_show*3600000).toISOString();
  const query=new URLSearchParams({filter_entity_id:config.entities.join(','),end_time:new Date(end).toISOString(),minimal_response:'',no_attributes:'',significant_changes_only:'0'});
+ if(config._history_units){query.delete('minimal_response');query.delete('no_attributes');}
  return `history/period/${encodeURIComponent(start)}?${query}`;
 }
 
@@ -4029,6 +4064,11 @@ function historyUrl(config,end) {
 const translations={
  title:['History','Historie'],loading:['Loading history…','Historie laden…'],empty:['No numeric history in this range.','Geen numerieke historie in deze periode.'],error:['History unavailable. Check recorder and connection.','Historie niet beschikbaar. Controleer recorder en verbinding.'],unit:['All sensors must have the same unit.','Alle sensoren moeten dezelfde eenheid hebben.'],missing:['Configured sensor not found.','Ingestelde sensor niet gevonden.'],unavailable:['Unavailable','Niet beschikbaar'],retry:['Retry','Opnieuw proberen'],chart:['History graph. Arrow keys, Home and End select a time; Escape closes details.','Historiegrafiek. Pijltjes, Home en End selecteren een tijd; Escape sluit details.'],entities:['Sensors','Sensoren'],hours_to_show:['Hours to show','Aantal uren'],hoursHelper:['Historical range: 1–8760 hours. Each different unit gets its own Y-axis.','Historische periode: 1–8760 uur. Iedere verschillende eenheid krijgt een eigen Y-as.'],titleField:['Title','Titel'],partial:['Some sensors have no numeric history:','Sommige sensoren hebben geen numerieke historie:'],config:['Invalid configuration: use 1–8 distinct sensors and 1–8760 hours.','Ongeldige configuratie: gebruik 1–8 unieke sensoren en 1–8760 uur.']};
 Object.assign(translations,{
+ sum_entities:['Add sensors','Sensoren optellen'],
+ sum_entitiesHelper:['Added to the primary sensor to form one total (maximum 8 sensors). All units must match. Missing readings stay gaps, not zero. Set a custom name for the total.','Worden bij de hoofdsensor opgeteld tot één totaal (maximaal 8 sensoren). Alle eenheden moeten gelijk zijn. Ontbrekende metingen blijven gaten, geen nul. Geef het totaal eventueel een eigen naam.'],
+ sum_entities_error:['Choose up to 7 distinct additional sensors, excluding the primary sensor.','Kies maximaal 7 unieke extra sensoren, zonder de hoofdsensor opnieuw te kiezen.'],
+ sum_unit:['All sensors within a sum must have the same unit.','Alle sensoren binnen een som moeten dezelfde eenheid hebben.'],
+ sum_statistics:['Minimum and maximum of a sum require raw history. Choose Automatic or History.','Minimum en maximum van een som vereisen ruwe historie. Kies Automatisch of Historie.'],
  sync_timeframe:['Synchronize timeframe','Tijdvak synchroniseren'],
  sync_timeframeHelper:['Shares timeframe selection and previous/next/Now with enabled cards in the same group.','Deelt tijdvakkeuze en vorige/volgende/Nu met ingeschakelde kaarten in dezelfde groep.'],
  show_title:['Show title','Titel tonen'],
@@ -4186,7 +4226,7 @@ class HistoryGraphEditor extends HTMLElement {
     };
    }
    entry.dataset.index=index;
-   const name=row.name||this._hass.states?.[row.entity]?.attributes?.friendly_name||row.entity||label('new_sensor');
+   const name=row.name||[row.entity,...(row.sum_entities??[])].filter(Boolean).map(id=>this._hass.states?.[id]?.attributes?.friendly_name||id).join(' + ')||label('new_sensor');
    entry.querySelector('.sensor-name').textContent=name;
    const cssColor=c=>Array.isArray(c)?`rgb(${c.join(',')})`:c;
    entry.querySelector('.swatch').style.background=row.color_mode==='gradient'&&row.gradient_stops.length?`linear-gradient(to right,${row.gradient_stops.map(s=>cssColor(s.color)).join(',')})`:cssColor(row.color);
@@ -4247,6 +4287,7 @@ class HistoryGraphCard extends HTMLElement {
   const gradients={object:{multiple:true,label_field:'value',fields:{value:{get label(){return label('stop_value');},required:true,selector:{number:{step:'any',mode:'box'}}},color:{get label(){return label('stop_color');},required:true,selector:{color_rgb:{}}}}}};
   return this._formContract([
    {name:'entity',required:true,selector:{entity:{domain:'sensor'}}},
+   {name:'sum_entities',selector:{entity:{domain:'sensor',multiple:true}}},
    {name:'name',selector:{text:{}}},
    {name:'visible',default:true,selector:{boolean:{}}},
    {type:'expandable',name:'series_line',get title(){return label('series_line');},flatten:true,expanded:true,schema:[
@@ -4325,11 +4366,16 @@ class HistoryGraphCard extends HTMLElement {
   this._visibility??=new Map();this._visibility.set(id,!this._isSeriesVisible(index));this._hideTooltip();this._render();
   queueMicrotask(()=>this.shadowRoot.querySelector?.(`button[data-series="${id}"]`)?.focus({preventScroll:true}));
  }
- setConfig(config){let validated;try{validated=validateConfig(config);}catch(error){throw new Error(text(error.message==='y_step'?'y_step_error':error.message==='y_step_count'?'y_step_count':error.message?.startsWith('line_style_source')?'line_style_source_error':'config',language(this._hass??frontendHass())));}
+ setConfig(config){let validated;try{validated=validateConfig(config);}catch(error){throw new Error(text(error.message==='sum_entities'?'sum_entities_error':error.message==='y_step'?'y_step_error':error.message==='y_step_count'?'y_step_count':error.message?.startsWith('line_style_source')?'line_style_source_error':'config',language(this._hass??frontendHass())));}
   const previous=this._config,visibility=this._visibility;
   this._visibility=new Map(validated.entities.map(id=>{const initial=validated.series_options.find(s=>s.entity===id)?.visible??true,old=previous?.series_options.find(s=>s.entity===id)?.visible??true;return [id,initial===old&&visibility?.has(id)?visibility.get(id):initial];}));
   SharedGraph.clearHover(this);this._config={...validated,...timeframeSyncConfig(validated)};this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._generation++;this._inFlight=false;this._series=[];this._rawSeries=null;this._viewport=null;resetGraphPeriod(this);this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);this._timer=null;connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
- set hass(hass){this._hass=hass;if(!this._config)return;let signature;try{const meta=seriesMetadata(hass,this._config.entities);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?hass.states?.[s.id]?.state:null)]);}catch(e){signature=e.message;}
+ set hass(hass){this._hass=hass;if(!this._config)return;
+  const summed=this._config.series_options.some(s=>s.sum_entities?.length);
+  const context=this._sumDataContext(hass);
+  if(summed&&this._sumContext!==undefined&&context!==this._sumContext){this._generation++;this._inFlight=false;this._started=false;this._rawSeries=null;this._series=[];this._lastLoad=null;this._status='loading';clearTimeout(this._timer);}
+  this._sumContext=context;
+  let signature;try{const meta=seriesMetadata(hass,this._config.entities,this._config.series_options);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?seriesSourceIds(this._config,s.id).map(id=>hass.states?.[id]?.state):null)]);}catch(e){signature=e.message;}
   if(signature!==this._signature){this._signature=signature;this._render();}
   this._updateGraphTheme();
   if(this._connected&&!this._started)this._refresh();
@@ -4347,20 +4393,23 @@ class HistoryGraphCard extends HTMLElement {
  }
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._elfPreview??=()=>{this._elfPreviewUntil=Date.now()+ELF_FLIGHT_MS;this.shadowRoot.querySelector('.eleven-elf')?.remove();this._syncElf();};registerElfPreview(this._elfPreview);document.addEventListener('pointerdown',this._outside);this._syncElf();if(this._config&&this._hass)this._refresh();}
  disconnectedCallback(){disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);this._connected=false;unregisterElfPreview(this._elfPreview);this._elfPreviewUntil=0;this._generation++;this._inFlight=false;this._started=false;clearTimeout(this._timer);this._timer=null;clearTimeout(this._elfTimer);this._elfTimer=null;document.removeEventListener('pointerdown',this._outside);}
+ _sumDataContext(hass){return this._config.series_options.some(s=>s.sum_entities?.length)?JSON.stringify([hass.config?.time_zone,historyEntityIds(this._config).map(id=>{const s=hass.states?.[id];return [id,!!s,s?.attributes?.unit_of_measurement??''];})]):null;}
  async _refresh(){
   if(!this._connected||!this._config||!this._hass||this._inFlight)return;
+  // hass may arrive before setConfig: snapshot the units before the first await.
+  this._sumContext=this._sumDataContext(this._hass);
   clearTimeout(this._timer);this._timer=null;const generation=++this._generation;this._inFlight=true;this._started=true;
   const {start,end}=graphPeriodRange(this);const config={...this._config,hours_to_show:(end-start)/3600000},hass=this._hass;
   this._status='loading';this._render();let timeout;
   try{
-   seriesMetadata(hass,config.entities);
+   seriesMetadata(hass,config.entities,config.series_options);
    const response=await Promise.race([loadHistorySeries(hass,config,start,end),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(new Error('timeout')),15000);timeout.unref?.();})]);
    if(generation!==this._generation||!this._connected)return;
-   seriesMetadata(this._hass,config.entities);
+   seriesMetadata(this._hass,config.entities,config.series_options);
    this._series=response;this._rawSeries=this._series;this._start=start;this._end=end;
    this._loadFailed=false;this._lastLoad={at:Date.now(),start,end,sources:response.map(s=>({id:s.id,source:s.source??'history',empty:!s.points.some(p=>p.v!==null)}))};
    this._status=this._series.some(s=>s.points.some(p=>p.v!==null))?'ready':'empty';this._refreshFailures=0;
-  }catch(e){if(generation!==this._generation||!this._connected)return;this._refreshFailures=(this._refreshFailures??0)+1;this._loadFailed=true;this._status=['missing','unit','statistics_config','statistics_unavailable'].includes(e.message)?e.message:'error';this._series=[];}
+  }catch(e){if(generation!==this._generation||!this._connected)return;this._refreshFailures=(this._refreshFailures??0)+1;this._loadFailed=true;this._status=['missing','unit','sum_unit','sum_statistics','statistics_config','statistics_unavailable'].includes(e.message)?e.message:'error';this._series=[];}
   finally{clearTimeout(timeout);if(generation===this._generation&&this._connected){this._inFlight=false;this._render();this._timer=setTimeout(()=>this._refresh(),retryDelay(this._refreshFailures??0,REFRESH_MS));this._timer.unref?.();}}
  }
  _getGraphAxes(series,meta,visible){return graphAxes(series,meta,this._config,this._start,this._end,visible);}
@@ -4375,14 +4424,18 @@ class HistoryGraphCard extends HTMLElement {
   // Recorder summaries lag behind live sensors. Keep that lag in the plot,
   // but use the real current state in a live measurement legend.
   // Historical statistics bins end exclusively: avoid the closing null sentinel.
-  return this._usesLiveLegend(series)?numericState(this._hass?.states?.[series.id]?.state):valueAt(series.points,this._end-(series.source==='statistics'?1:0));
+  if(this._usesLiveLegend(series)){
+   const values=seriesSourceIds(this._config,series.id).map(id=>numericState(this._hass?.states?.[id]?.state)),sum=values.reduce((a,b)=>a+b,0);
+   return values.every(Number.isFinite)&&Number.isFinite(sum)?sum:null;
+  }
+  return valueAt(series.points,this._end-(series.source==='statistics'?1:0));
  }
  _defaultTitle(lang){return text('title',lang);}
  _render(){
   if(!this._config)return;captureChartInsights(this);const lang=language(this._hass);this._lang=lang;this._zone=this._hass?.config?.time_zone;
   let meta;try{meta=seriesMetadata(this._hass??{},this._config.entities,this._config.series_options);}catch(e){if(this._hass)this._status=e.message;}
   const title=this._config.title??this._defaultTitle(lang);let content='';
-  if(this._status!=='ready'||!meta){content=`<div class="state" role="status">${escapeHtml(text(this._status,lang))}${['error','unit','missing','statistics_config','statistics_unavailable'].includes(this._status)?`<button class="retry">${text('retry',lang)}</button>`:''}</div>`;}
+  if(this._status!=='ready'||!meta){content=`<div class="state" role="status">${escapeHtml(text(this._status,lang))}${['error','unit','sum_unit','sum_statistics','missing','statistics_config','statistics_unavailable'].includes(this._status)?`<button class="retry">${text('retry',lang)}</button>`:''}</div>`;}
   else{
    this._rawSeries??=this._series;
    const key=JSON.stringify([this._start,this._end,this._zone,this._config.aggregation_period,this._config.aggregation_method]);
@@ -4439,7 +4492,7 @@ class HistoryGraphCard extends HTMLElement {
   card.style.setProperty('--history-grid-color',dark?'#3a3b45':'#e1e3e8');
   card.style.setProperty('--history-grid-zero-color',dark?'#626571':'#b8bbc4');
  }
- _historyUrl(){const range=graphPeriodRange(this),ready=this._status==='ready';const end=this._viewport?.[1]??(ready?this._end:range.end)??range.end,start=this._viewport?.[0]??(ready?this._start:range.start)??range.start;return `/history?entity_id=${encodeURIComponent(this._config.entities.join(','))}&start_date=${encodeURIComponent(new Date(start).toISOString())}&end_date=${encodeURIComponent(new Date(end).toISOString())}`;}
+ _historyUrl(){const range=graphPeriodRange(this),ready=this._status==='ready';const end=this._viewport?.[1]??(ready?this._end:range.end)??range.end,start=this._viewport?.[0]??(ready?this._start:range.start)??range.start;return `/history?entity_id=${encodeURIComponent(historyEntityIds(this._config).join(','))}&start_date=${encodeURIComponent(new Date(start).toISOString())}&end_date=${encodeURIComponent(new Date(end).toISOString())}`;}
  _setPeriod(hours){return chooseGraphPeriod(this,String(hours));}
  _navigate(direction){return moveGraphPeriod(this,direction);}
  _reloadPeriod(){this._generation++;this._inFlight=false;this._viewport=null;this._hideTooltip();clearTimeout(this._timer);this._status='loading';this._refreshFailures=0;this._render();return this._refresh();}
@@ -5259,7 +5312,7 @@ function chartZoomState(host){
  const zoomed=ready&&(a>host._start+1||b<host._end-1);
  return {zoomed,in:ready&&width>Math.min(60000,total)+1,out:ready&&width<total-1,reset:zoomed};
 }
-function chartEntityItems(host){return host._config.entities.map(id=>({id,name:host._config.series_options?.find(row=>row.entity===id)?.name||host._hass?.states?.[id]?.attributes?.friendly_name||id}));}
+function chartEntityItems(host){return host._config.entities.map(id=>{const option=host._config.series_options?.find(row=>row.entity===id);return {id,name:option?.name||[id,...(option?.sum_entities??[])].map(source=>host._hass?.states?.[source]?.attributes?.friendly_name||source).join(' + ')};});}
 function chartSeriesVisible(host,index){return host._visibility?.get(host._config.entities[index])??true;}
 function isolateChartSeries(host,id){
  if(!host._config.entities.includes(id))return;
@@ -6741,7 +6794,7 @@ function chartZoomState(host){
  const zoomed=ready&&(a>host._start+1||b<host._end-1);
  return {zoomed,in:ready&&width>Math.min(60000,total)+1,out:ready&&width<total-1,reset:zoomed};
 }
-function chartEntityItems(host){return host._config.entities.map(id=>({id,name:host._config.series_options?.find(row=>row.entity===id)?.name||host._hass?.states?.[id]?.attributes?.friendly_name||id}));}
+function chartEntityItems(host){return host._config.entities.map(id=>{const option=host._config.series_options?.find(row=>row.entity===id);return {id,name:option?.name||[id,...(option?.sum_entities??[])].map(source=>host._hass?.states?.[source]?.attributes?.friendly_name||source).join(' + ')};});}
 function chartSeriesVisible(host,index){return host._visibility?.get(host._config.entities[index])??true;}
 function isolateChartSeries(host,id){
  if(!host._config.entities.includes(id))return;
@@ -6883,7 +6936,7 @@ function seriesAppearance(config,index,seen=new Set()) {
  const option=config.series_options?.find(s=>s.entity===config.entities[index])??{};
  const inherited=option.gradient_stops??(option.color?[]:config.gradient_stops??[]);
  const color_mode=option.color_mode??(inherited.length?'gradient':'fixed');
- const row={entity:config.entities[index],visible:option.visible??true,...(option.name?{name:option.name}:{}),
+ const row={entity:config.entities[index],visible:option.visible??true,...(option.name?{name:option.name}:{}),...(option.sum_entities?{sum_entities:structuredClone(option.sum_entities)}:{}),
   line_width:option.line_width??config.line_width??3.5,line_style:option.line_style??config.line_style??(index%2?'dashed':'solid'),
   line_interpolation:option.line_interpolation??config.line_interpolation??'step',connect_gaps:option.connect_gaps??false,
   color_mode,color:option.color||config.line_color||SERIES_COLORS[index%SERIES_COLORS.length],
@@ -7003,6 +7056,7 @@ function validateConfig(config) {
  const options=result.series_options??[];
  if(!Array.isArray(options)||options.some(s=>!s||!entities.includes(s.entity)||(s.name!=null&&typeof s.name!=='string')||(s.color!=null&&s.color!==''&&!validColor(s.color)))||new Set(options.map(s=>s.entity)).size!==options.length)throw new Error('series_options');
  result.series_options=options.map(s=>{
+  if(s.sum_entities!==undefined&&(!Array.isArray(s.sum_entities)||s.sum_entities.length>7||s.sum_entities.some(id=>typeof id!=='string'||!/^sensor\.[a-z0-9_]+$/.test(id)||id===s.entity)||new Set(s.sum_entities).size!==s.sum_entities.length))throw new Error('sum_entities');
   if(s.line_style_source!=null&&s.line_style_source!==''&&(typeof s.line_style_source!=='string'||!entities.includes(s.line_style_source)||s.line_style_source===s.entity))throw new Error('line_style_source');
   if(s.line_width!=null&&(!Number.isFinite(s.line_width)||s.line_width<1||s.line_width>8))throw new Error('series_line_width');
   for(const [key,allowed] of Object.entries({line_style:['solid','dashed','dotted'],line_interpolation:['smooth','linear','step'],color_mode:['fixed','gradient'],fill_mode:['line','own']}))if(s[key]!=null&&!allowed.includes(s[key]))throw new Error('series_'+key);
@@ -7011,7 +7065,7 @@ function validateConfig(config) {
   if(s.fill_color!=null&&s.fill_color!==''&&!validColor(s.fill_color))throw new Error('series_fill_color');
   if(s.color_mode==='gradient'&&(!Array.isArray(s.gradient_stops)||s.gradient_stops.length<2))throw new Error('series_gradient_stops');
   if(s.gradient_mode!=null&&!['smooth','steps'].includes(s.gradient_mode))throw new Error('series_gradient_mode');
-  const row={...s,color:Array.isArray(s.color)?[...s.color]:s.color,fill_color:Array.isArray(s.fill_color)?[...s.fill_color]:s.fill_color};
+  const row={...s,...(s.sum_entities?{sum_entities:[...s.sum_entities]}:{}),color:Array.isArray(s.color)?[...s.color]:s.color,fill_color:Array.isArray(s.fill_color)?[...s.fill_color]:s.fill_color};
   if(s.gradient_stops!=null){const stops=s.gradient_stops;if(!Array.isArray(stops)||(stops.length!==0&&stops.length<2)||stops.length>32||stops.some(s=>!s||!Number.isFinite(s.value)||!validColor(s.color))||new Set(stops.map(s=>s.value)).size!==stops.length)throw new Error('series_gradient_stops');row.gradient_stops=stops.map(s=>({value:s.value,color:Array.isArray(s.color)?[...s.color]:s.color})).sort((a,b)=>a.value-b.value);}
   return row;
  });
@@ -7039,7 +7093,38 @@ function statisticsPeriod(config,end=Date.now()){
 }
 // HA has used epoch seconds and milliseconds across Recorder versions.
 function statisticTime(value){return typeof value==='number'?(value<1e12?value*1000:value):Date.parse(value);}
+// The displayed identity stays the primary sensor; contributors are fetched once.
+function seriesSourceIds(config,id){return [id,...(config.series_options?.find(s=>s.entity===id)?.sum_entities??[])];}
+function historyEntityIds(config){return [...new Set(config.entities.flatMap(id=>seriesSourceIds(config,id)))];}
+function sumHistorySeries(series,config,start,end){
+ const byId=new Map(series.map(s=>[s.id,s]));
+ return config.entities.map(id=>{
+  const ids=seriesSourceIds(config,id),sources=ids.map(source=>byId.get(source)??{id:source,points:[]});
+  if(ids.length===1)return sources[0];
+  const times=[...new Set([start,...sources.flatMap(s=>s.points.map(p=>p.t).filter(t=>t>=start&&t<=end))])].sort((a,b)=>a-b);
+  const points=times.map(t=>{const values=sources.map(s=>valueAt(s.points,t)),sum=values.reduce((a,b)=>a+b,0);return {t,v:values.every(Number.isFinite)&&Number.isFinite(sum)?sum:null};});
+  return {id,...(sources.every(s=>s.source==='statistics')?{source:'statistics'}:{}),points};
+ });
+}
 async function loadHistorySeries(hass,config,start,end){
+ const entities=historyEntityIds(config);
+ const summed=config.entities.some(id=>seriesSourceIds(config,id).length>1);
+ if(!summed)return loadIndividualHistorySeries(hass,config,start,end);
+ const before=seriesMetadata(hass,config.entities,config.series_options);
+ const units=Object.fromEntries(entities.map(id=>[id,hass.states?.[id]?.attributes?.unit_of_measurement??'']));
+ const extrema=['min','max'].includes(config.aggregation_method);
+ if(extrema&&config.data_source==='statistics')throw new Error('sum_statistics');
+ const fetchConfig={...config,entities,_history_units:units,...(extrema?{data_source:'history'}:{})};
+ let series=await loadIndividualHistorySeries(hass,fetchConfig,start,end);
+ // A statistic increment is not a raw counter, nor a summary an observation.
+ // If a sum would mix sources, refetch its contributors as one raw batch.
+ const mixed=config.entities.some(id=>{const sources=seriesSourceIds(config,id).map(source=>series.find(s=>s.id===source)?.source==='statistics');return sources.some(Boolean)&&sources.some(v=>!v);});
+ if(mixed)series=await loadIndividualHistorySeries(hass,{...fetchConfig,data_source:'history'},start,end);
+ const after=seriesMetadata(hass,config.entities,config.series_options);
+ if(before.items.some((item,i)=>item.unit!==after.items[i].unit))throw new Error('sum_unit');
+ return sumHistorySeries(series,config,start,end);
+}
+async function loadIndividualHistorySeries(hass,config,start,end){
  const period=statisticsPeriod(config,end),strict=config.data_source==='statistics',selected=new Map();
  if(period){
   try{
@@ -7068,7 +7153,7 @@ async function loadHistorySeries(hass,config,start,end){
  const missing=config.entities.filter(id=>!selected.has(id));
  if(missing.length){
   const response=await hass.callApi('GET',historyUrl({...config,entities:missing},end));
-  for(const s of decodeHistory(response,missing,start,end))selected.set(s.id,s);
+  for(const s of decodeHistory(response,missing,start,end,config._history_units))selected.set(s.id,s);
  }
  return config.entities.map(id=>selected.get(id));
 }
@@ -7076,14 +7161,14 @@ function numericState(state) {
  if(typeof state!=='string'||state.trim()==='') return null;
  const number=Number(state); return Number.isFinite(number)?number:null;
 }
-function decodeHistory(response,entities,start,end) {
+function decodeHistory(response,entities,start,end,units) {
  if(!Array.isArray(response)||response.some(rows=>!Array.isArray(rows))) throw new Error('response');
  const byId=new Map();
  for(const rows of response) {
   if(!rows.length) continue;
   const id=rows[0]?.entity_id;
   if(!entities.includes(id)) continue;
-  const points=rows.map(row=>({t:Date.parse(row.last_updated??row.last_changed),v:numericState(row.state)})).filter(p=>Number.isFinite(p.t)&&p.t<=end).sort((a,b)=>a.t-b.t);
+  const points=rows.map(row=>({t:Date.parse(row.last_updated??row.last_changed),v:units&&(row.attributes?.unit_of_measurement??'')!==units[id]?null:numericState(row.state)})).filter(p=>Number.isFinite(p.t)&&p.t<=end).sort((a,b)=>a.t-b.t);
   const previous=points.filter(p=>p.t<start).at(-1);
   const clipped=points.filter(p=>p.t>=start);
   if(previous) clipped.unshift({...previous,t:start});
@@ -7111,7 +7196,9 @@ function seriesMetadata(hass,entities,options=[]) {
  const items=entities.map(id=>{
   const state=hass.states?.[id]; if(!state) throw new Error('missing');
   const option=options.find(s=>s.entity===id);
-  return {id,name:option?.name||state.attributes?.friendly_name||id,unit:state.attributes?.unit_of_measurement??''};
+  const unit=state.attributes?.unit_of_measurement??'',ids=[id,...(option?.sum_entities??[])];
+  const names=ids.map(source=>{const value=hass.states?.[source];if(!value)throw new Error('missing');if((value.attributes?.unit_of_measurement??'')!==unit)throw new Error('sum_unit');return value.attributes?.friendly_name||source;});
+  return {id,name:option?.name||names.join(' + '),unit};
  });
  return {items,unit:items[0]?.unit??''};
 }
@@ -7286,6 +7373,7 @@ function stackSeries(series,start,end){
 function historyUrl(config,end) {
  const start=new Date(end-config.hours_to_show*3600000).toISOString();
  const query=new URLSearchParams({filter_entity_id:config.entities.join(','),end_time:new Date(end).toISOString(),minimal_response:'',no_attributes:'',significant_changes_only:'0'});
+ if(config._history_units){query.delete('minimal_response');query.delete('no_attributes');}
  return `history/period/${encodeURIComponent(start)}?${query}`;
 }
 
@@ -7293,6 +7381,11 @@ function historyUrl(config,end) {
 const translations={
  title:['History','Historie'],loading:['Loading history…','Historie laden…'],empty:['No numeric history in this range.','Geen numerieke historie in deze periode.'],error:['History unavailable. Check recorder and connection.','Historie niet beschikbaar. Controleer recorder en verbinding.'],unit:['All sensors must have the same unit.','Alle sensoren moeten dezelfde eenheid hebben.'],missing:['Configured sensor not found.','Ingestelde sensor niet gevonden.'],unavailable:['Unavailable','Niet beschikbaar'],retry:['Retry','Opnieuw proberen'],chart:['History graph. Arrow keys, Home and End select a time; Escape closes details.','Historiegrafiek. Pijltjes, Home en End selecteren een tijd; Escape sluit details.'],entities:['Sensors','Sensoren'],hours_to_show:['Hours to show','Aantal uren'],hoursHelper:['Historical range: 1–8760 hours. Each different unit gets its own Y-axis.','Historische periode: 1–8760 uur. Iedere verschillende eenheid krijgt een eigen Y-as.'],titleField:['Title','Titel'],partial:['Some sensors have no numeric history:','Sommige sensoren hebben geen numerieke historie:'],config:['Invalid configuration: use 1–8 distinct sensors and 1–8760 hours.','Ongeldige configuratie: gebruik 1–8 unieke sensoren en 1–8760 uur.']};
 Object.assign(translations,{
+ sum_entities:['Add sensors','Sensoren optellen'],
+ sum_entitiesHelper:['Added to the primary sensor to form one total (maximum 8 sensors). All units must match. Missing readings stay gaps, not zero. Set a custom name for the total.','Worden bij de hoofdsensor opgeteld tot één totaal (maximaal 8 sensoren). Alle eenheden moeten gelijk zijn. Ontbrekende metingen blijven gaten, geen nul. Geef het totaal eventueel een eigen naam.'],
+ sum_entities_error:['Choose up to 7 distinct additional sensors, excluding the primary sensor.','Kies maximaal 7 unieke extra sensoren, zonder de hoofdsensor opnieuw te kiezen.'],
+ sum_unit:['All sensors within a sum must have the same unit.','Alle sensoren binnen een som moeten dezelfde eenheid hebben.'],
+ sum_statistics:['Minimum and maximum of a sum require raw history. Choose Automatic or History.','Minimum en maximum van een som vereisen ruwe historie. Kies Automatisch of Historie.'],
  sync_timeframe:['Synchronize timeframe','Tijdvak synchroniseren'],
  sync_timeframeHelper:['Shares timeframe selection and previous/next/Now with enabled cards in the same group.','Deelt tijdvakkeuze en vorige/volgende/Nu met ingeschakelde kaarten in dezelfde groep.'],
  show_title:['Show title','Titel tonen'],
@@ -7450,7 +7543,7 @@ class HistoryGraphEditor extends HTMLElement {
     };
    }
    entry.dataset.index=index;
-   const name=row.name||this._hass.states?.[row.entity]?.attributes?.friendly_name||row.entity||label('new_sensor');
+   const name=row.name||[row.entity,...(row.sum_entities??[])].filter(Boolean).map(id=>this._hass.states?.[id]?.attributes?.friendly_name||id).join(' + ')||label('new_sensor');
    entry.querySelector('.sensor-name').textContent=name;
    const cssColor=c=>Array.isArray(c)?`rgb(${c.join(',')})`:c;
    entry.querySelector('.swatch').style.background=row.color_mode==='gradient'&&row.gradient_stops.length?`linear-gradient(to right,${row.gradient_stops.map(s=>cssColor(s.color)).join(',')})`:cssColor(row.color);
@@ -7511,6 +7604,7 @@ class HistoryGraphCard extends HTMLElement {
   const gradients={object:{multiple:true,label_field:'value',fields:{value:{get label(){return label('stop_value');},required:true,selector:{number:{step:'any',mode:'box'}}},color:{get label(){return label('stop_color');},required:true,selector:{color_rgb:{}}}}}};
   return this._formContract([
    {name:'entity',required:true,selector:{entity:{domain:'sensor'}}},
+   {name:'sum_entities',selector:{entity:{domain:'sensor',multiple:true}}},
    {name:'name',selector:{text:{}}},
    {name:'visible',default:true,selector:{boolean:{}}},
    {type:'expandable',name:'series_line',get title(){return label('series_line');},flatten:true,expanded:true,schema:[
@@ -7589,11 +7683,16 @@ class HistoryGraphCard extends HTMLElement {
   this._visibility??=new Map();this._visibility.set(id,!this._isSeriesVisible(index));this._hideTooltip();this._render();
   queueMicrotask(()=>this.shadowRoot.querySelector?.(`button[data-series="${id}"]`)?.focus({preventScroll:true}));
  }
- setConfig(config){let validated;try{validated=validateConfig(config);}catch(error){throw new Error(text(error.message==='y_step'?'y_step_error':error.message==='y_step_count'?'y_step_count':error.message?.startsWith('line_style_source')?'line_style_source_error':'config',language(this._hass??frontendHass())));}
+ setConfig(config){let validated;try{validated=validateConfig(config);}catch(error){throw new Error(text(error.message==='sum_entities'?'sum_entities_error':error.message==='y_step'?'y_step_error':error.message==='y_step_count'?'y_step_count':error.message?.startsWith('line_style_source')?'line_style_source_error':'config',language(this._hass??frontendHass())));}
   const previous=this._config,visibility=this._visibility;
   this._visibility=new Map(validated.entities.map(id=>{const initial=validated.series_options.find(s=>s.entity===id)?.visible??true,old=previous?.series_options.find(s=>s.entity===id)?.visible??true;return [id,initial===old&&visibility?.has(id)?visibility.get(id):initial];}));
   SharedGraph.clearHover(this);this._config={...validated,...timeframeSyncConfig(validated)};this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._generation++;this._inFlight=false;this._series=[];this._rawSeries=null;this._viewport=null;resetGraphPeriod(this);this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);this._timer=null;connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
- set hass(hass){this._hass=hass;if(!this._config)return;let signature;try{const meta=seriesMetadata(hass,this._config.entities);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?hass.states?.[s.id]?.state:null)]);}catch(e){signature=e.message;}
+ set hass(hass){this._hass=hass;if(!this._config)return;
+  const summed=this._config.series_options.some(s=>s.sum_entities?.length);
+  const context=this._sumDataContext(hass);
+  if(summed&&this._sumContext!==undefined&&context!==this._sumContext){this._generation++;this._inFlight=false;this._started=false;this._rawSeries=null;this._series=[];this._lastLoad=null;this._status='loading';clearTimeout(this._timer);}
+  this._sumContext=context;
+  let signature;try{const meta=seriesMetadata(hass,this._config.entities,this._config.series_options);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?seriesSourceIds(this._config,s.id).map(id=>hass.states?.[id]?.state):null)]);}catch(e){signature=e.message;}
   if(signature!==this._signature){this._signature=signature;this._render();}
   this._updateGraphTheme();
   if(this._connected&&!this._started)this._refresh();
@@ -7611,20 +7710,23 @@ class HistoryGraphCard extends HTMLElement {
  }
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._elfPreview??=()=>{this._elfPreviewUntil=Date.now()+ELF_FLIGHT_MS;this.shadowRoot.querySelector('.eleven-elf')?.remove();this._syncElf();};registerElfPreview(this._elfPreview);document.addEventListener('pointerdown',this._outside);this._syncElf();if(this._config&&this._hass)this._refresh();}
  disconnectedCallback(){disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);this._connected=false;unregisterElfPreview(this._elfPreview);this._elfPreviewUntil=0;this._generation++;this._inFlight=false;this._started=false;clearTimeout(this._timer);this._timer=null;clearTimeout(this._elfTimer);this._elfTimer=null;document.removeEventListener('pointerdown',this._outside);}
+ _sumDataContext(hass){return this._config.series_options.some(s=>s.sum_entities?.length)?JSON.stringify([hass.config?.time_zone,historyEntityIds(this._config).map(id=>{const s=hass.states?.[id];return [id,!!s,s?.attributes?.unit_of_measurement??''];})]):null;}
  async _refresh(){
   if(!this._connected||!this._config||!this._hass||this._inFlight)return;
+  // hass may arrive before setConfig: snapshot the units before the first await.
+  this._sumContext=this._sumDataContext(this._hass);
   clearTimeout(this._timer);this._timer=null;const generation=++this._generation;this._inFlight=true;this._started=true;
   const {start,end}=graphPeriodRange(this);const config={...this._config,hours_to_show:(end-start)/3600000},hass=this._hass;
   this._status='loading';this._render();let timeout;
   try{
-   seriesMetadata(hass,config.entities);
+   seriesMetadata(hass,config.entities,config.series_options);
    const response=await Promise.race([loadHistorySeries(hass,config,start,end),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(new Error('timeout')),15000);timeout.unref?.();})]);
    if(generation!==this._generation||!this._connected)return;
-   seriesMetadata(this._hass,config.entities);
+   seriesMetadata(this._hass,config.entities,config.series_options);
    this._series=response;this._rawSeries=this._series;this._start=start;this._end=end;
    this._loadFailed=false;this._lastLoad={at:Date.now(),start,end,sources:response.map(s=>({id:s.id,source:s.source??'history',empty:!s.points.some(p=>p.v!==null)}))};
    this._status=this._series.some(s=>s.points.some(p=>p.v!==null))?'ready':'empty';this._refreshFailures=0;
-  }catch(e){if(generation!==this._generation||!this._connected)return;this._refreshFailures=(this._refreshFailures??0)+1;this._loadFailed=true;this._status=['missing','unit','statistics_config','statistics_unavailable'].includes(e.message)?e.message:'error';this._series=[];}
+  }catch(e){if(generation!==this._generation||!this._connected)return;this._refreshFailures=(this._refreshFailures??0)+1;this._loadFailed=true;this._status=['missing','unit','sum_unit','sum_statistics','statistics_config','statistics_unavailable'].includes(e.message)?e.message:'error';this._series=[];}
   finally{clearTimeout(timeout);if(generation===this._generation&&this._connected){this._inFlight=false;this._render();this._timer=setTimeout(()=>this._refresh(),retryDelay(this._refreshFailures??0,REFRESH_MS));this._timer.unref?.();}}
  }
  _getGraphAxes(series,meta,visible){return graphAxes(series,meta,this._config,this._start,this._end,visible);}
@@ -7639,14 +7741,18 @@ class HistoryGraphCard extends HTMLElement {
   // Recorder summaries lag behind live sensors. Keep that lag in the plot,
   // but use the real current state in a live measurement legend.
   // Historical statistics bins end exclusively: avoid the closing null sentinel.
-  return this._usesLiveLegend(series)?numericState(this._hass?.states?.[series.id]?.state):valueAt(series.points,this._end-(series.source==='statistics'?1:0));
+  if(this._usesLiveLegend(series)){
+   const values=seriesSourceIds(this._config,series.id).map(id=>numericState(this._hass?.states?.[id]?.state)),sum=values.reduce((a,b)=>a+b,0);
+   return values.every(Number.isFinite)&&Number.isFinite(sum)?sum:null;
+  }
+  return valueAt(series.points,this._end-(series.source==='statistics'?1:0));
  }
  _defaultTitle(lang){return text('title',lang);}
  _render(){
   if(!this._config)return;captureChartInsights(this);const lang=language(this._hass);this._lang=lang;this._zone=this._hass?.config?.time_zone;
   let meta;try{meta=seriesMetadata(this._hass??{},this._config.entities,this._config.series_options);}catch(e){if(this._hass)this._status=e.message;}
   const title=this._config.title??this._defaultTitle(lang);let content='';
-  if(this._status!=='ready'||!meta){content=`<div class="state" role="status">${escapeHtml(text(this._status,lang))}${['error','unit','missing','statistics_config','statistics_unavailable'].includes(this._status)?`<button class="retry">${text('retry',lang)}</button>`:''}</div>`;}
+  if(this._status!=='ready'||!meta){content=`<div class="state" role="status">${escapeHtml(text(this._status,lang))}${['error','unit','sum_unit','sum_statistics','missing','statistics_config','statistics_unavailable'].includes(this._status)?`<button class="retry">${text('retry',lang)}</button>`:''}</div>`;}
   else{
    this._rawSeries??=this._series;
    const key=JSON.stringify([this._start,this._end,this._zone,this._config.aggregation_period,this._config.aggregation_method]);
@@ -7703,7 +7809,7 @@ class HistoryGraphCard extends HTMLElement {
   card.style.setProperty('--history-grid-color',dark?'#3a3b45':'#e1e3e8');
   card.style.setProperty('--history-grid-zero-color',dark?'#626571':'#b8bbc4');
  }
- _historyUrl(){const range=graphPeriodRange(this),ready=this._status==='ready';const end=this._viewport?.[1]??(ready?this._end:range.end)??range.end,start=this._viewport?.[0]??(ready?this._start:range.start)??range.start;return `/history?entity_id=${encodeURIComponent(this._config.entities.join(','))}&start_date=${encodeURIComponent(new Date(start).toISOString())}&end_date=${encodeURIComponent(new Date(end).toISOString())}`;}
+ _historyUrl(){const range=graphPeriodRange(this),ready=this._status==='ready';const end=this._viewport?.[1]??(ready?this._end:range.end)??range.end,start=this._viewport?.[0]??(ready?this._start:range.start)??range.start;return `/history?entity_id=${encodeURIComponent(historyEntityIds(this._config).join(','))}&start_date=${encodeURIComponent(new Date(start).toISOString())}&end_date=${encodeURIComponent(new Date(end).toISOString())}`;}
  _setPeriod(hours){return chooseGraphPeriod(this,String(hours));}
  _navigate(direction){return moveGraphPeriod(this,direction);}
  _reloadPeriod(){this._generation++;this._inFlight=false;this._viewport=null;this._hideTooltip();clearTimeout(this._timer);this._status='loading';this._refreshFailures=0;this._render();return this._refresh();}
@@ -8617,7 +8723,7 @@ function chartZoomState(host){
  const zoomed=ready&&(a>host._start+1||b<host._end-1);
  return {zoomed,in:ready&&width>Math.min(60000,total)+1,out:ready&&width<total-1,reset:zoomed};
 }
-function chartEntityItems(host){return host._config.entities.map(id=>({id,name:host._config.series_options?.find(row=>row.entity===id)?.name||host._hass?.states?.[id]?.attributes?.friendly_name||id}));}
+function chartEntityItems(host){return host._config.entities.map(id=>{const option=host._config.series_options?.find(row=>row.entity===id);return {id,name:option?.name||[id,...(option?.sum_entities??[])].map(source=>host._hass?.states?.[source]?.attributes?.friendly_name||source).join(' + ')};});}
 function chartSeriesVisible(host,index){return host._visibility?.get(host._config.entities[index])??true;}
 function isolateChartSeries(host,id){
  if(!host._config.entities.includes(id))return;
@@ -8919,7 +9025,13 @@ function normalizeConfig(input = {}, {draft = false} = {}) {
   if(draft)for(const key of ['hours_to_show','cell_width','cell_height','cell_gap','border_radius','max_height']){
     if(Object.hasOwn(input,key) && input[key]===undefined)c[key]=undefined;
   }
-  if (!draft && !/^sensor\.[a-z0-9_]+$/.test(c.entity)) throw Error('Select one sensor. / Kies één sensor.');
+  if (!draft && (typeof c.entity!=='string' || !/^sensor\.[a-z0-9_]+$/.test(c.entity))) throw Error('Select one sensor. / Kies één sensor.');
+  if(Object.hasOwn(input,'sum_entities')){
+    const extra=input.sum_entities;
+    if(!draft && (!Array.isArray(extra) || extra.length>7 || [...extra].some(id=>typeof id!=='string' || !/^sensor\.[a-z0-9_]+$/.test(id) || id===c.entity) || new Set(extra).size!==extra.length))
+      throw Error('sum_entities: choose up to 7 distinct additional sensors, not the primary sensor. / sum_entities: kies maximaal 7 unieke extra sensoren, niet de hoofdsensor.');
+    c.sum_entities=Array.isArray(extra)?[...extra]:extra;
+  }
   if (!draft && (!Number.isFinite(c.hours_to_show) || c.hours_to_show < 1 || c.hours_to_show > 8760)) throw Error('Period must be 1–8760 hours. / Periode moet 1–8760 uur zijn.');
   if (!draft && !['average','consumption'].includes(c.mode)) throw Error('Mode must be average or consumption. / Kies gemiddelde of verbruik.');
   if (!draft && !['hour','day','week','month'].includes(c.aggregation_period)) throw Error('Choose hour, day, week or month. / Kies uur, dag, week of maand.');
@@ -8952,9 +9064,44 @@ function normalizeConfig(input = {}, {draft = false} = {}) {
 const time = value => typeof value === 'number' ? (value < 1e12 ? value * 1000 : value) : Date.parse(value);
 
 async function loadHeatmapData(hass, config, start, end) {
+  const ids=[config.entity,...(config.sum_entities??[])];
+  if(ids.length===1)return loadSingleHeatmapData(hass,config,start,end);
+  if(ids.some(id=>!hass.states?.[id]))throw Error('sum_entity_missing');
+  const unit=hass.states[ids[0]].attributes?.unit_of_measurement??'';
+  if(ids.some(id=>(hass.states[id].attributes?.unit_of_measurement??'')!==unit))throw Error('sum_unit_mismatch');
+  let loaded=await Promise.all(ids.map(entity=>loadSingleHeatmapData(hass,{...config,entity},start,end)));
+  if(loaded.every(data=>data.source==='statistics')){
+    // Hourly summaries are indivisible: never hold or interpolate a mean over
+    // another contributor's differently aligned bin.
+    const indexed=loaded.map(data=>new Map(data.intervals.map(row=>[`${row.start}/${row.end}`,row])));
+    const intervals=loaded[0].intervals.map(row=>{
+      const matches=indexed.map(rows=>rows.get(`${row.start}/${row.end}`));
+      const complete=config.mode!=='consumption' || row.end-row.start===3600000;
+      return {...row,value:complete && matches.every(match=>match?.value!=null)?matches.reduce((sum,match)=>sum+match.value,0):null};
+    });
+    return {source:'statistics',unit:loaded[0].unit,intervals};
+  }
+  // A mean is not a raw reading. When sources differ, reload just the
+  // statistics contributors as history, then intersect actual valid coverage.
+  loaded=await Promise.all(loaded.map((data,i)=>data.source==='statistics'?loadSingleHeatmapData(hass,{...config,entity:ids[i]},start,end,true):data));
+  const boundaries=[...new Set([start,end,...loaded.flatMap(data=>data.intervals.flatMap(row=>[Math.max(start,row.start),Math.min(end,row.end)]))])].sort((a,b)=>a-b);
+  const indices=loaded.map(()=>0),intervals=[];
+  for(let i=0;i<boundaries.length-1;i++){
+    const a=boundaries[i],b=boundaries[i+1];
+    const values=loaded.map((data,j)=>{
+      while(indices[j]<data.intervals.length && data.intervals[indices[j]].end<=a)indices[j]++;
+      const row=data.intervals[indices[j]];
+      return row && row.start<=a && row.end>=b?row.value:null;
+    });
+    intervals.push({start:a,end:b,value:values.every(value=>value!=null)?values.reduce((sum,value)=>sum+value,0):null});
+  }
+  return {source:'history',unit:loaded[0].unit,intervals};
+}
+
+async function loadSingleHeatmapData(hass, config, start, end, historyOnly=false) {
   const id = config.entity, unit = hass.states?.[id]?.attributes?.unit_of_measurement ?? '';
   let statisticsFailed = false;
-  try {
+  if(!historyOnly)try {
     const metadata = await hass.callWS({type:'recorder/get_statistics_metadata', statistic_ids:[id]});
     const meta = metadata.find(row => row.statistic_id === id);
     const supported = config.mode === 'consumption' ? meta?.has_sum === true : meta?.mean_type!=null ? meta.mean_type===1 : meta?.has_mean===true;
@@ -9141,7 +9288,12 @@ function summarizeHeatmap(rows, mode) {
 
 const esc=escapeHtml;
 const isDutch=hass=>String(hass?.locale?.language ?? hass?.language ?? 'en').startsWith('nl');
+const dataContext=(hass,config)=>JSON.stringify([hass?.config?.time_zone,isDutch(hass),[config?.entity,...(config?.sum_entities??[])].map(id=>{
+  const state=hass?.states?.[id],attributes=state?.attributes;
+  return [id,!!state,attributes?.unit_of_measurement,attributes?.friendly_name,attributes?.state_class,attributes?.device_class];
+})]);
 const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],hover_sync_group:['Synchronisatiegroep','Synchronization group'],
+  sum_entities:['Sensoren optellen','Add sensors'],
   title:['Titel','Title'],entity:['Sensor','Sensor'],name:['Sensornaam','Sensor name'],hours_to_show:['Aantal uren','Hours to show'],mode:['Waarde per tijdvak','Value per interval'],aggregation_period:['Aggregatieperiode','Aggregation period'],
   show_title:['Titel tonen','Show title'],show_legend:['Legenda tonen','Show legend'],show_labels:['Rij- en kolomlabels tonen','Show row and column labels'],show_navigation:['Tijdvakselectie tonen','Show timeframe selection'],
   graph_settings:['Grafiek','Graph'],data_processing:['Dataverwerking','Data processing'],color_settings:['Kleuren','Colors'],matrix_settings:['Rasteropmaak','Grid appearance'],
@@ -9151,6 +9303,7 @@ const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],
   cell_width:['Minimale vakbreedte','Minimum cell width'],cell_height:['Vakhoogte','Cell height'],cell_gap:['Tussenruimte','Cell gap'],border_radius:['Hoekafronding','Border radius'],max_height:['Maximale rasterhoogte','Maximum grid height']
 };
 const helpers={sync_timeframe:['Deelt tijdvakkeuze en vorige/volgende/Nu met ingeschakelde kaarten in dezelfde groep.','Shares timeframe selection and previous/next/Now with enabled cards in the same group.'],hover_sync_group:['Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.','Cards with the same group share hover and timeframe when the corresponding synchronization is enabled. Empty uses the default group.'],
+  sum_entities:['Tel maximaal 7 extra sensoren bij de hoofdsensor op (maximaal 8 totaal). Dezelfde eenheid is vereist; ontbrekende waarden zijn geen nul. Sensornaam benoemt het totaal.','Add up to 7 additional sensors to the primary sensor (8 total). The same unit is required; missing values are not zero. Sensor name labels the total.'],
   hours_to_show:['Standaardperiode: 1–8760 uur. De tijdvakselectie kan deze tijdelijk wijzigen.','Default range: 1–8760 hours. The timeframe menu can change it temporarily.'],
   mode:['Gemiddelde weegt waarden naar hun duur. Verbruik telt de uurwijzigingen uit tellerstatistieken op, inclusief tellerresets.','Average weights values by their duration. Consumption sums hourly counter changes from statistics, including counter resets.'],
   aggregation_period:['Uren per dag, dagen per week, weken per ISO-jaar of maanden per jaar. Kalendergrenzen volgen de Home Assistant-tijdzone; weken beginnen op maandag.','Hours per day, days per week, weeks per ISO year or months per year. Calendar boundaries follow the Home Assistant timezone; weeks start on Monday.'],
@@ -9215,6 +9368,7 @@ class HeatmapCard extends HTMLElement {
     }}};
     return {schema:[
       {name:'entity',required:true,selector:{entity:{domain:'sensor'}}},
+      {name:'sum_entities',selector:{entity:{domain:'sensor',multiple:true}}},
       {name:'name',selector:{text:{}}},
       {name:'title',selector:{text:{}}},
       {name:'show_title',default:true,selector:{boolean:{}}},
@@ -9261,10 +9415,10 @@ class HeatmapCard extends HTMLElement {
     const previous=this._context;
     this._hass=hass;
     const state=hass?.states?.[this._config?.entity];
-    this._context=JSON.stringify([hass?.config?.time_zone,state?.attributes?.unit_of_measurement,state?.attributes?.friendly_name,isDutch(hass),!!state]);
+    this._context=dataContext(hass,this._config);
     if(previous!==this._context){
       const unit=state?.attributes?.unit_of_measurement ?? '',zone=hass?.config?.time_zone || 'UTC';
-      if(this._data && (this._data.unit!==unit || this._zone!==zone))this._invalidate();
+      if((previous!==undefined && this._config?.sum_entities?.length) || (this._data && (this._data.unit!==unit || this._zone!==zone)))this._invalidate();
       this._render();
     }
     if(this._connected && !this._promise && this._status==='loading')this._refresh();
@@ -9284,13 +9438,13 @@ class HeatmapCard extends HTMLElement {
     if(!this._connected || !this._hass || !this._config)return Promise.resolve();
     if(this._promise)return this._promise;
     clearTimeout(this._timer);
-    const generation=this._generation,hass=this._hass,config=this._config,range=graphPeriodRange(this),zone=hass.config?.time_zone || 'UTC';
+    const generation=this._generation,hass=this._hass,config=this._config,range=graphPeriodRange(this),zone=hass.config?.time_zone || 'UTC',context=dataContext(hass,config);
     let timeout;
     const work=Promise.race([loadHeatmapData(hass,config,range.start,range.end),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),20000);})])
       .then(data=>{
         if(!this._connected || generation!==this._generation)return;
         const currentUnit=this._hass.states?.[config.entity]?.attributes?.unit_of_measurement ?? '';
-        if(data.unit!==currentUnit || zone!==(this._hass.config?.time_zone || 'UTC')){this._invalidate();return;}
+        if(data.unit!==currentUnit || zone!==(this._hass.config?.time_zone || 'UTC') || (config.sum_entities?.length && context!==dataContext(this._hass,config))){this._invalidate();return;}
         this._rows=buildHeatmap(data,range.start,range.end,zone,config.mode,config.aggregation_period);
         this._data=data;this._zone=zone;this._start=range.start;this._end=range.end;this._viewStart=range.start;this._viewEnd=range.end;
         this._status='ready';this._refreshFailures=0;
@@ -9322,13 +9476,13 @@ class HeatmapCard extends HTMLElement {
     const summary={rows:[{id:this._config.entity,unit:this._data?.unit,...summarizeHeatmap(this._rows,this._config.mode)}]};
     // Adapt the single sensor to the shared information popup without adding
     // internal collection fields to the card's saved configuration.
-    return chartDataInformation({_config:{entities:[this._config.entity],series_options:[{entity:this._config.entity,name:this._config.name?.trim()}]},_hass:this._hass,
+    return chartDataInformation({_config:{entities:[this._config.entity],series_options:[{entity:this._config.entity,name:this._sensorName()}]},_hass:this._hass,
       _insightOpen:this._insightOpen,_status:this._status,_inFlight:!!this._promise || this._status==='loading',_loadFailed:this._status==='error',
       _lastLoad:this._data?{sources:[{id:this._config.entity,source:this._data.source}],summary}:null,
       _isSeriesVisible:()=>true,_dataInformation:()=>summary,
       _insightColor:()=>{const scale=colorScale(this._rows,this._config),average=summary.rows[0].average;return scale.color(Number.isFinite(average)?average:(scale.min+scale.max)/2);}},language);
   }
-  _sensorName(){return this._config.name?.trim()||this._hass?.states?.[this._config.entity]?.attributes?.friendly_name||this._config.entity;}
+  _sensorName(){return this._config.name?.trim()||[this._config.entity,...(this._config.sum_entities??[])].map(id=>this._hass?.states?.[id]?.attributes?.friendly_name||id).join(' + ');}
   _cellBounds(cell){
     const intervals=cell.records.length?cell.records:cell.intervals;
     if(this._config.aggregation_period!=='hour'){
@@ -9423,7 +9577,7 @@ class HeatmapCard extends HTMLElement {
     const scrollLeft=scroll?.scrollLeft ?? 0,scrollTop=scroll?.scrollTop ?? 0,tooltipKey=this._tooltipKey;
     captureChartInsights(this);
     const periods=periodControls(this,language),range=this._data?{start:this._start,end:this._end}:graphPeriodRange(this);
-    const historyUrl=`/history?entity_id=${encodeURIComponent(c.entity)}&start_date=${encodeURIComponent(new Date(range.start).toISOString())}&end_date=${encodeURIComponent(new Date(range.end).toISOString())}`;
+    const historyUrl=`/history?entity_id=${encodeURIComponent([c.entity,...(c.sum_entities??[])].join(','))}&start_date=${encodeURIComponent(new Date(range.start).toISOString())}&end_date=${encodeURIComponent(new Date(range.end).toISOString())}`;
     const name=this._sensorName();
     const scale=colorScale(this._rows,c);this._scale=scale;
     this._rowByKey=new Map(this._rows.map(row=>[row.key,row]));this._monthFormatter=null;this._dayFormatter=null;
@@ -9438,7 +9592,8 @@ class HeatmapCard extends HTMLElement {
     this._windowRange=[first,last];
     this._cells=new Map(this._rows.slice(first,last).flatMap(row=>row.cells).map(cell=>[cell.key,cell]));
     const matrix=this._virtualRows?`<div class="matrix-body" role="rowgroup" style="height:${Math.max(0,this._rows.length*step-c.cell_gap)}px">${this._rows.slice(first,last).map((row,index)=>`<div class="virtual-row" style="top:${(first+index)*step}px">${this._matrixRow(row,first+index)}</div>`).join('')}</div>`:this._rows.map((row,index)=>this._matrixRow(row,index)).join('');
-    const status=this._status==='error'?(this._error==='consumption_statistics_required'?text('No counter statistics for this sensor.','Geen tellerstatistieken voor deze sensor.'):text('Could not load data.','Laden mislukt.')):text('Loading…','Laden…');
+    const sumErrors={sum_entity_missing:text('A selected sensor does not exist.','Een geselecteerde sensor bestaat niet.'),sum_unit_mismatch:text('All added sensors must have the same exact unit.','Alle opgetelde sensoren moeten exact dezelfde eenheid hebben.')};
+    const status=this._status==='error'?(sumErrors[this._error]??(this._error==='consumption_statistics_required'?text('No counter statistics for one or more selected sensors.','Geen tellerstatistieken voor één of meer geselecteerde sensoren.'):text('Could not load data.','Laden mislukt.'))):text('Loading…','Laden…');
     const hasValues=this._rows.some(row=>row.cells.some(cell=>cell.value!=null)),information=this._information(language);
     disconnectPeriodControls(this,true);disconnectChartInsights(this,true);this._disconnectTooltip();
     this.shadowRoot.innerHTML=`<style>${cardHeaderStyles()}${periodControlsStyles()}${chartInsightStyles()}${SharedGraph.tooltipStyles()}

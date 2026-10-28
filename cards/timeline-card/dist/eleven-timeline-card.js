@@ -726,7 +726,7 @@ function chartZoomState(host){
  const zoomed=ready&&(a>host._start+1||b<host._end-1);
  return {zoomed,in:ready&&width>Math.min(60000,total)+1,out:ready&&width<total-1,reset:zoomed};
 }
-function chartEntityItems(host){return host._config.entities.map(id=>({id,name:host._config.series_options?.find(row=>row.entity===id)?.name||host._hass?.states?.[id]?.attributes?.friendly_name||id}));}
+function chartEntityItems(host){return host._config.entities.map(id=>{const option=host._config.series_options?.find(row=>row.entity===id);return {id,name:option?.name||[id,...(option?.sum_entities??[])].map(source=>host._hass?.states?.[source]?.attributes?.friendly_name||source).join(' + ')};});}
 function chartSeriesVisible(host,index){return host._visibility?.get(host._config.entities[index])??true;}
 function isolateChartSeries(host,id){
  if(!host._config.entities.includes(id))return;

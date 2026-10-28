@@ -1,5 +1,5 @@
 import {timeframeSyncConfig,connectTimeframeSync,disconnectTimeframeSync} from '../../../shared/periods.js';
-import {validateConfig,loadHistorySeries,historyEntityIds,historyUrl,decodeHistory,seriesMetadata,graphAxes,valueAt,numericState,stepPath,gradientColor,aggregateSeries,displayPoints,connectGapPoints,editorConfig,cardConfig,seriesAppearance,updateSeriesRow,removeSeriesRow,lineStyleSources} from './history-utils.js';
+import {validateConfig,loadHistorySeries,historyEntityIds,seriesSourceIds,historyUrl,decodeHistory,seriesMetadata,graphAxes,valueAt,numericState,stepPath,gradientColor,aggregateSeries,displayPoints,connectGapPoints,editorConfig,cardConfig,seriesAppearance,updateSeriesRow,removeSeriesRow,lineStyleSources} from './history-utils.js';
 import {language,text,number,time,escapeHtml,frontendHass} from './localization.js';
 import {ELF_FLIGHT_MS,elevenDay,isElevenMinute,elevenMarkup,elevenStyles} from './eleven.js';
 import {registerElfPreview,unregisterElfPreview} from './library.js';
@@ -211,10 +211,10 @@ export class HistoryGraphCard extends HTMLElement {
   SharedGraph.clearHover(this);this._config={...validated,...timeframeSyncConfig(validated)};this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._generation++;this._inFlight=false;this._series=[];this._rawSeries=null;this._viewport=null;resetGraphPeriod(this);this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);this._timer=null;connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
  set hass(hass){this._hass=hass;if(!this._config)return;
   const summed=this._config.series_options.some(s=>s.sum_entities?.length);
-  const context=summed?JSON.stringify([hass.config?.time_zone,historyEntityIds(this._config).map(id=>{const s=hass.states?.[id];return [id,!!s,s?.attributes?.unit_of_measurement??''];})]):null;
+  const context=this._sumDataContext(hass);
   if(summed&&this._sumContext!==undefined&&context!==this._sumContext){this._generation++;this._inFlight=false;this._started=false;this._rawSeries=null;this._series=[];this._lastLoad=null;this._status='loading';clearTimeout(this._timer);}
   this._sumContext=context;
-  let signature;try{const meta=seriesMetadata(hass,this._config.entities,this._config.series_options);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?hass.states?.[s.id]?.state:null)]);}catch(e){signature=e.message;}
+  let signature;try{const meta=seriesMetadata(hass,this._config.entities,this._config.series_options);signature=JSON.stringify([meta,language(hass),hass.config?.time_zone,this._series.map(s=>this._usesLiveLegend(s)?seriesSourceIds(this._config,s.id).map(id=>hass.states?.[id]?.state):null)]);}catch(e){signature=e.message;}
   if(signature!==this._signature){this._signature=signature;this._render();}
   this._updateGraphTheme();
   if(this._connected&&!this._started)this._refresh();
@@ -232,8 +232,11 @@ export class HistoryGraphCard extends HTMLElement {
  }
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._elfPreview??=()=>{this._elfPreviewUntil=Date.now()+ELF_FLIGHT_MS;this.shadowRoot.querySelector('.eleven-elf')?.remove();this._syncElf();};registerElfPreview(this._elfPreview);document.addEventListener('pointerdown',this._outside);this._syncElf();if(this._config&&this._hass)this._refresh();}
  disconnectedCallback(){disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);this._connected=false;unregisterElfPreview(this._elfPreview);this._elfPreviewUntil=0;this._generation++;this._inFlight=false;this._started=false;clearTimeout(this._timer);this._timer=null;clearTimeout(this._elfTimer);this._elfTimer=null;document.removeEventListener('pointerdown',this._outside);}
+ _sumDataContext(hass){return this._config.series_options.some(s=>s.sum_entities?.length)?JSON.stringify([hass.config?.time_zone,historyEntityIds(this._config).map(id=>{const s=hass.states?.[id];return [id,!!s,s?.attributes?.unit_of_measurement??''];})]):null;}
  async _refresh(){
   if(!this._connected||!this._config||!this._hass||this._inFlight)return;
+  // hass may arrive before setConfig: snapshot the units before the first await.
+  this._sumContext=this._sumDataContext(this._hass);
   clearTimeout(this._timer);this._timer=null;const generation=++this._generation;this._inFlight=true;this._started=true;
   const {start,end}=graphPeriodRange(this);const config={...this._config,hours_to_show:(end-start)/3600000},hass=this._hass;
   this._status='loading';this._render();let timeout;
@@ -260,7 +263,11 @@ export class HistoryGraphCard extends HTMLElement {
   // Recorder summaries lag behind live sensors. Keep that lag in the plot,
   // but use the real current state in a live measurement legend.
   // Historical statistics bins end exclusively: avoid the closing null sentinel.
-  return this._usesLiveLegend(series)?numericState(this._hass?.states?.[series.id]?.state):valueAt(series.points,this._end-(series.source==='statistics'?1:0));
+  if(this._usesLiveLegend(series)){
+   const values=seriesSourceIds(this._config,series.id).map(id=>numericState(this._hass?.states?.[id]?.state)),sum=values.reduce((a,b)=>a+b,0);
+   return values.every(Number.isFinite)&&Number.isFinite(sum)?sum:null;
+  }
+  return valueAt(series.points,this._end-(series.source==='statistics'?1:0));
  }
  _defaultTitle(lang){return text('title',lang);}
  _render(){

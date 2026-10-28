@@ -600,7 +600,7 @@ function chartZoomState(host){
  const zoomed=ready&&(a>host._start+1||b<host._end-1);
  return {zoomed,in:ready&&width>Math.min(60000,total)+1,out:ready&&width<total-1,reset:zoomed};
 }
-function chartEntityItems(host){return host._config.entities.map(id=>({id,name:host._config.series_options?.find(row=>row.entity===id)?.name||host._hass?.states?.[id]?.attributes?.friendly_name||id}));}
+function chartEntityItems(host){return host._config.entities.map(id=>{const option=host._config.series_options?.find(row=>row.entity===id);return {id,name:option?.name||[id,...(option?.sum_entities??[])].map(source=>host._hass?.states?.[source]?.attributes?.friendly_name||source).join(' + ')};});}
 function chartSeriesVisible(host,index){return host._visibility?.get(host._config.entities[index])??true;}
 function isolateChartSeries(host,id){
  if(!host._config.entities.includes(id))return;
@@ -902,7 +902,13 @@ function normalizeConfig(input = {}, {draft = false} = {}) {
   if(draft)for(const key of ['hours_to_show','cell_width','cell_height','cell_gap','border_radius','max_height']){
     if(Object.hasOwn(input,key) && input[key]===undefined)c[key]=undefined;
   }
-  if (!draft && !/^sensor\.[a-z0-9_]+$/.test(c.entity)) throw Error('Select one sensor. / Kies één sensor.');
+  if (!draft && (typeof c.entity!=='string' || !/^sensor\.[a-z0-9_]+$/.test(c.entity))) throw Error('Select one sensor. / Kies één sensor.');
+  if(Object.hasOwn(input,'sum_entities')){
+    const extra=input.sum_entities;
+    if(!draft && (!Array.isArray(extra) || extra.length>7 || [...extra].some(id=>typeof id!=='string' || !/^sensor\.[a-z0-9_]+$/.test(id) || id===c.entity) || new Set(extra).size!==extra.length))
+      throw Error('sum_entities: choose up to 7 distinct additional sensors, not the primary sensor. / sum_entities: kies maximaal 7 unieke extra sensoren, niet de hoofdsensor.');
+    c.sum_entities=Array.isArray(extra)?[...extra]:extra;
+  }
   if (!draft && (!Number.isFinite(c.hours_to_show) || c.hours_to_show < 1 || c.hours_to_show > 8760)) throw Error('Period must be 1–8760 hours. / Periode moet 1–8760 uur zijn.');
   if (!draft && !['average','consumption'].includes(c.mode)) throw Error('Mode must be average or consumption. / Kies gemiddelde of verbruik.');
   if (!draft && !['hour','day','week','month'].includes(c.aggregation_period)) throw Error('Choose hour, day, week or month. / Kies uur, dag, week of maand.');
@@ -935,9 +941,44 @@ function normalizeConfig(input = {}, {draft = false} = {}) {
 const time = value => typeof value === 'number' ? (value < 1e12 ? value * 1000 : value) : Date.parse(value);
 
 async function loadHeatmapData(hass, config, start, end) {
+  const ids=[config.entity,...(config.sum_entities??[])];
+  if(ids.length===1)return loadSingleHeatmapData(hass,config,start,end);
+  if(ids.some(id=>!hass.states?.[id]))throw Error('sum_entity_missing');
+  const unit=hass.states[ids[0]].attributes?.unit_of_measurement??'';
+  if(ids.some(id=>(hass.states[id].attributes?.unit_of_measurement??'')!==unit))throw Error('sum_unit_mismatch');
+  let loaded=await Promise.all(ids.map(entity=>loadSingleHeatmapData(hass,{...config,entity},start,end)));
+  if(loaded.every(data=>data.source==='statistics')){
+    // Hourly summaries are indivisible: never hold or interpolate a mean over
+    // another contributor's differently aligned bin.
+    const indexed=loaded.map(data=>new Map(data.intervals.map(row=>[`${row.start}/${row.end}`,row])));
+    const intervals=loaded[0].intervals.map(row=>{
+      const matches=indexed.map(rows=>rows.get(`${row.start}/${row.end}`));
+      const complete=config.mode!=='consumption' || row.end-row.start===3600000;
+      return {...row,value:complete && matches.every(match=>match?.value!=null)?matches.reduce((sum,match)=>sum+match.value,0):null};
+    });
+    return {source:'statistics',unit:loaded[0].unit,intervals};
+  }
+  // A mean is not a raw reading. When sources differ, reload just the
+  // statistics contributors as history, then intersect actual valid coverage.
+  loaded=await Promise.all(loaded.map((data,i)=>data.source==='statistics'?loadSingleHeatmapData(hass,{...config,entity:ids[i]},start,end,true):data));
+  const boundaries=[...new Set([start,end,...loaded.flatMap(data=>data.intervals.flatMap(row=>[Math.max(start,row.start),Math.min(end,row.end)]))])].sort((a,b)=>a-b);
+  const indices=loaded.map(()=>0),intervals=[];
+  for(let i=0;i<boundaries.length-1;i++){
+    const a=boundaries[i],b=boundaries[i+1];
+    const values=loaded.map((data,j)=>{
+      while(indices[j]<data.intervals.length && data.intervals[indices[j]].end<=a)indices[j]++;
+      const row=data.intervals[indices[j]];
+      return row && row.start<=a && row.end>=b?row.value:null;
+    });
+    intervals.push({start:a,end:b,value:values.every(value=>value!=null)?values.reduce((sum,value)=>sum+value,0):null});
+  }
+  return {source:'history',unit:loaded[0].unit,intervals};
+}
+
+async function loadSingleHeatmapData(hass, config, start, end, historyOnly=false) {
   const id = config.entity, unit = hass.states?.[id]?.attributes?.unit_of_measurement ?? '';
   let statisticsFailed = false;
-  try {
+  if(!historyOnly)try {
     const metadata = await hass.callWS({type:'recorder/get_statistics_metadata', statistic_ids:[id]});
     const meta = metadata.find(row => row.statistic_id === id);
     const supported = config.mode === 'consumption' ? meta?.has_sum === true : meta?.mean_type!=null ? meta.mean_type===1 : meta?.has_mean===true;
@@ -1124,7 +1165,12 @@ function summarizeHeatmap(rows, mode) {
 
 const esc=escapeHtml;
 const isDutch=hass=>String(hass?.locale?.language ?? hass?.language ?? 'en').startsWith('nl');
+const dataContext=(hass,config)=>JSON.stringify([hass?.config?.time_zone,isDutch(hass),[config?.entity,...(config?.sum_entities??[])].map(id=>{
+  const state=hass?.states?.[id],attributes=state?.attributes;
+  return [id,!!state,attributes?.unit_of_measurement,attributes?.friendly_name,attributes?.state_class,attributes?.device_class];
+})]);
 const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],hover_sync_group:['Synchronisatiegroep','Synchronization group'],
+  sum_entities:['Sensoren optellen','Add sensors'],
   title:['Titel','Title'],entity:['Sensor','Sensor'],name:['Sensornaam','Sensor name'],hours_to_show:['Aantal uren','Hours to show'],mode:['Waarde per tijdvak','Value per interval'],aggregation_period:['Aggregatieperiode','Aggregation period'],
   show_title:['Titel tonen','Show title'],show_legend:['Legenda tonen','Show legend'],show_labels:['Rij- en kolomlabels tonen','Show row and column labels'],show_navigation:['Tijdvakselectie tonen','Show timeframe selection'],
   graph_settings:['Grafiek','Graph'],data_processing:['Dataverwerking','Data processing'],color_settings:['Kleuren','Colors'],matrix_settings:['Rasteropmaak','Grid appearance'],
@@ -1134,6 +1180,7 @@ const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],
   cell_width:['Minimale vakbreedte','Minimum cell width'],cell_height:['Vakhoogte','Cell height'],cell_gap:['Tussenruimte','Cell gap'],border_radius:['Hoekafronding','Border radius'],max_height:['Maximale rasterhoogte','Maximum grid height']
 };
 const helpers={sync_timeframe:['Deelt tijdvakkeuze en vorige/volgende/Nu met ingeschakelde kaarten in dezelfde groep.','Shares timeframe selection and previous/next/Now with enabled cards in the same group.'],hover_sync_group:['Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.','Cards with the same group share hover and timeframe when the corresponding synchronization is enabled. Empty uses the default group.'],
+  sum_entities:['Tel maximaal 7 extra sensoren bij de hoofdsensor op (maximaal 8 totaal). Dezelfde eenheid is vereist; ontbrekende waarden zijn geen nul. Sensornaam benoemt het totaal.','Add up to 7 additional sensors to the primary sensor (8 total). The same unit is required; missing values are not zero. Sensor name labels the total.'],
   hours_to_show:['Standaardperiode: 1–8760 uur. De tijdvakselectie kan deze tijdelijk wijzigen.','Default range: 1–8760 hours. The timeframe menu can change it temporarily.'],
   mode:['Gemiddelde weegt waarden naar hun duur. Verbruik telt de uurwijzigingen uit tellerstatistieken op, inclusief tellerresets.','Average weights values by their duration. Consumption sums hourly counter changes from statistics, including counter resets.'],
   aggregation_period:['Uren per dag, dagen per week, weken per ISO-jaar of maanden per jaar. Kalendergrenzen volgen de Home Assistant-tijdzone; weken beginnen op maandag.','Hours per day, days per week, weeks per ISO year or months per year. Calendar boundaries follow the Home Assistant timezone; weeks start on Monday.'],
@@ -1198,6 +1245,7 @@ class HeatmapCard extends HTMLElement {
     }}};
     return {schema:[
       {name:'entity',required:true,selector:{entity:{domain:'sensor'}}},
+      {name:'sum_entities',selector:{entity:{domain:'sensor',multiple:true}}},
       {name:'name',selector:{text:{}}},
       {name:'title',selector:{text:{}}},
       {name:'show_title',default:true,selector:{boolean:{}}},
@@ -1244,10 +1292,10 @@ class HeatmapCard extends HTMLElement {
     const previous=this._context;
     this._hass=hass;
     const state=hass?.states?.[this._config?.entity];
-    this._context=JSON.stringify([hass?.config?.time_zone,state?.attributes?.unit_of_measurement,state?.attributes?.friendly_name,isDutch(hass),!!state]);
+    this._context=dataContext(hass,this._config);
     if(previous!==this._context){
       const unit=state?.attributes?.unit_of_measurement ?? '',zone=hass?.config?.time_zone || 'UTC';
-      if(this._data && (this._data.unit!==unit || this._zone!==zone))this._invalidate();
+      if((previous!==undefined && this._config?.sum_entities?.length) || (this._data && (this._data.unit!==unit || this._zone!==zone)))this._invalidate();
       this._render();
     }
     if(this._connected && !this._promise && this._status==='loading')this._refresh();
@@ -1267,13 +1315,13 @@ class HeatmapCard extends HTMLElement {
     if(!this._connected || !this._hass || !this._config)return Promise.resolve();
     if(this._promise)return this._promise;
     clearTimeout(this._timer);
-    const generation=this._generation,hass=this._hass,config=this._config,range=graphPeriodRange(this),zone=hass.config?.time_zone || 'UTC';
+    const generation=this._generation,hass=this._hass,config=this._config,range=graphPeriodRange(this),zone=hass.config?.time_zone || 'UTC',context=dataContext(hass,config);
     let timeout;
     const work=Promise.race([loadHeatmapData(hass,config,range.start,range.end),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),20000);})])
       .then(data=>{
         if(!this._connected || generation!==this._generation)return;
         const currentUnit=this._hass.states?.[config.entity]?.attributes?.unit_of_measurement ?? '';
-        if(data.unit!==currentUnit || zone!==(this._hass.config?.time_zone || 'UTC')){this._invalidate();return;}
+        if(data.unit!==currentUnit || zone!==(this._hass.config?.time_zone || 'UTC') || (config.sum_entities?.length && context!==dataContext(this._hass,config))){this._invalidate();return;}
         this._rows=buildHeatmap(data,range.start,range.end,zone,config.mode,config.aggregation_period);
         this._data=data;this._zone=zone;this._start=range.start;this._end=range.end;this._viewStart=range.start;this._viewEnd=range.end;
         this._status='ready';this._refreshFailures=0;
@@ -1305,13 +1353,13 @@ class HeatmapCard extends HTMLElement {
     const summary={rows:[{id:this._config.entity,unit:this._data?.unit,...summarizeHeatmap(this._rows,this._config.mode)}]};
     // Adapt the single sensor to the shared information popup without adding
     // internal collection fields to the card's saved configuration.
-    return chartDataInformation({_config:{entities:[this._config.entity],series_options:[{entity:this._config.entity,name:this._config.name?.trim()}]},_hass:this._hass,
+    return chartDataInformation({_config:{entities:[this._config.entity],series_options:[{entity:this._config.entity,name:this._sensorName()}]},_hass:this._hass,
       _insightOpen:this._insightOpen,_status:this._status,_inFlight:!!this._promise || this._status==='loading',_loadFailed:this._status==='error',
       _lastLoad:this._data?{sources:[{id:this._config.entity,source:this._data.source}],summary}:null,
       _isSeriesVisible:()=>true,_dataInformation:()=>summary,
       _insightColor:()=>{const scale=colorScale(this._rows,this._config),average=summary.rows[0].average;return scale.color(Number.isFinite(average)?average:(scale.min+scale.max)/2);}},language);
   }
-  _sensorName(){return this._config.name?.trim()||this._hass?.states?.[this._config.entity]?.attributes?.friendly_name||this._config.entity;}
+  _sensorName(){return this._config.name?.trim()||[this._config.entity,...(this._config.sum_entities??[])].map(id=>this._hass?.states?.[id]?.attributes?.friendly_name||id).join(' + ');}
   _cellBounds(cell){
     const intervals=cell.records.length?cell.records:cell.intervals;
     if(this._config.aggregation_period!=='hour'){
@@ -1406,7 +1454,7 @@ class HeatmapCard extends HTMLElement {
     const scrollLeft=scroll?.scrollLeft ?? 0,scrollTop=scroll?.scrollTop ?? 0,tooltipKey=this._tooltipKey;
     captureChartInsights(this);
     const periods=periodControls(this,language),range=this._data?{start:this._start,end:this._end}:graphPeriodRange(this);
-    const historyUrl=`/history?entity_id=${encodeURIComponent(c.entity)}&start_date=${encodeURIComponent(new Date(range.start).toISOString())}&end_date=${encodeURIComponent(new Date(range.end).toISOString())}`;
+    const historyUrl=`/history?entity_id=${encodeURIComponent([c.entity,...(c.sum_entities??[])].join(','))}&start_date=${encodeURIComponent(new Date(range.start).toISOString())}&end_date=${encodeURIComponent(new Date(range.end).toISOString())}`;
     const name=this._sensorName();
     const scale=colorScale(this._rows,c);this._scale=scale;
     this._rowByKey=new Map(this._rows.map(row=>[row.key,row]));this._monthFormatter=null;this._dayFormatter=null;
@@ -1421,7 +1469,8 @@ class HeatmapCard extends HTMLElement {
     this._windowRange=[first,last];
     this._cells=new Map(this._rows.slice(first,last).flatMap(row=>row.cells).map(cell=>[cell.key,cell]));
     const matrix=this._virtualRows?`<div class="matrix-body" role="rowgroup" style="height:${Math.max(0,this._rows.length*step-c.cell_gap)}px">${this._rows.slice(first,last).map((row,index)=>`<div class="virtual-row" style="top:${(first+index)*step}px">${this._matrixRow(row,first+index)}</div>`).join('')}</div>`:this._rows.map((row,index)=>this._matrixRow(row,index)).join('');
-    const status=this._status==='error'?(this._error==='consumption_statistics_required'?text('No counter statistics for this sensor.','Geen tellerstatistieken voor deze sensor.'):text('Could not load data.','Laden mislukt.')):text('Loading…','Laden…');
+    const sumErrors={sum_entity_missing:text('A selected sensor does not exist.','Een geselecteerde sensor bestaat niet.'),sum_unit_mismatch:text('All added sensors must have the same exact unit.','Alle opgetelde sensoren moeten exact dezelfde eenheid hebben.')};
+    const status=this._status==='error'?(sumErrors[this._error]??(this._error==='consumption_statistics_required'?text('No counter statistics for one or more selected sensors.','Geen tellerstatistieken voor één of meer geselecteerde sensoren.'):text('Could not load data.','Laden mislukt.'))):text('Loading…','Laden…');
     const hasValues=this._rows.some(row=>row.cells.some(cell=>cell.value!=null)),information=this._information(language);
     disconnectPeriodControls(this,true);disconnectChartInsights(this,true);this._disconnectTooltip();
     this.shadowRoot.innerHTML=`<style>${cardHeaderStyles()}${periodControlsStyles()}${chartInsightStyles()}${SharedGraph.tooltipStyles()}
