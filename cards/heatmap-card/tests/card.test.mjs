@@ -6,6 +6,54 @@ const states={'sensor.a':{state:'12',attributes:{friendly_name:'Kitchen <script>
 const data=id=>[{entity_id:id,last_changed:new Date(Date.now()-86400000).toISOString(),state:'10',attributes:{unit_of_measurement:'W'}}];
 const hass={states,config:{time_zone:'Europe/Amsterdam'},language:'nl',callWS:async()=>[],callApi:async()=>[data('sensor.a')]};
 
+test('summed card renders the total name, all History contributors and summed insights',async()=>{
+ const card=new HeatmapCard();card.setConfig({entity:'sensor.a',sum_entities:['sensor.b'],hours_to_show:24,show_navigation:false});
+ card.hass={...hass,states:{...states,'sensor.b':{attributes:{unit_of_measurement:'W',friendly_name:'Office'}}},callApi:async(_method,url)=>{
+  const id=new URL('http://fixture/'+url).searchParams.get('filter_entity_id');return [data(id)];
+ }};
+ card.connectedCallback();
+ try{
+  await card._refresh();assert.equal(card._status,'ready');
+  assert.equal(card._sensorName(),'Kitchen <script> + Office');assert.match(card._information('en'),/Kitchen &lt;script&gt; \+ Office/);
+  assert.match(card.shadowRoot.innerHTML,/entity_id=sensor.a%2Csensor.b/);
+  assert.equal(card._rows.flatMap(r=>r.cells).find(c=>c.value!=null).value,20);
+  const loaded=card._data,generation=card._generation;
+  card.hass={...card.hass,states:{...card.hass.states,'sensor.b':{...card.hass.states['sensor.b'],state:'999'}}};
+  assert.equal(card._generation,generation);assert.equal(card._data,loaded);
+  card.setConfig({...card._config,name:'Combined power'});await card._refresh();assert.equal(card._sensorName(),'Combined power');
+ }finally{card.disconnectedCallback();}
+});
+
+test('additional contributor metadata and existence invalidate cached sums and pending responses',async()=>{
+ for(const patch of [{unit_of_measurement:'kW'},{friendly_name:'Renamed'},{state_class:'measurement'},{device_class:'power'},null]){
+  const card=new HeatmapCard();card.setConfig({entity:'sensor.a',sum_entities:['sensor.b'],hours_to_show:24,show_navigation:false});
+  const base={...hass,states:{...states,'sensor.b':{attributes:{unit_of_measurement:'W',friendly_name:'Office'}}},callApi:async(_method,url)=>[data(new URL('http://fixture/'+url).searchParams.get('filter_entity_id'))]};
+  card.hass=base;card.connectedCallback();
+  try{
+   await card._refresh();assert.equal(card._status,'ready');
+   const resolves=[];const pendingHass={...base,callWS:()=>new Promise(r=>{resolves.push(r);})};card.hass=pendingHass;const pending=card._refresh();
+   const generation=card._generation;
+   card.hass={...base,states:{...base.states,'sensor.b':patch?{attributes:{...base.states['sensor.b'].attributes,...patch}}:undefined}};
+   assert.ok(card._generation>generation);assert.equal(card._data,null);
+   resolves.forEach(resolve=>resolve([]));await pending;await card._refresh();
+   if(!patch || patch.unit_of_measurement){assert.equal(card._status,'error');assert.equal(card._data,null);assert.match(card.shadowRoot.innerHTML,/eenheid|bestaat/);}
+   else{assert.equal(card._status,'ready');assert.ok(card._data);if(patch.friendly_name)assert.match(card._sensorName(),/Renamed/);}
+  }finally{card.disconnectedCallback();}
+ }
+});
+
+test('initial summed load rejects a contributor unit change before any data is cached',async()=>{
+ const card=new HeatmapCard(),resolves=[];
+ card.setConfig({entity:'sensor.a',sum_entities:['sensor.b'],hours_to_show:24,show_navigation:false});
+ const base={...hass,states:{...states,'sensor.b':{attributes:{unit_of_measurement:'W'}}}};
+ card.hass={...base,callWS:()=>new Promise(resolve=>resolves.push(resolve))};card.connectedCallback();const pending=card._refresh();
+ try{
+  card.hass={...base,states:{...base.states,'sensor.b':{attributes:{unit_of_measurement:'kW'}}}};
+  resolves.forEach(resolve=>resolve([]));await pending;await card._refresh();
+  assert.equal(card._data,null);assert.equal(card._status,'error');assert.equal(card._error,'sum_unit_mismatch');
+ }finally{card.disconnectedCallback();}
+});
+
 test('long heatmap windows limit cell DOM to visible rows',()=>{
  const card=new HeatmapCard();card.setConfig({entity:'sensor.a'});card._rows=Array.from({length:366},()=>({cells:[]}));
  const top=card._matrixWindow(0,800),bottom=card._matrixWindow(9000,800);
