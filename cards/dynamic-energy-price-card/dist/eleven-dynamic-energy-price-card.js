@@ -61,7 +61,15 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -536,7 +544,19 @@ function createPriceTicks(minimum, maximum, count = 5) {
 }
 
 // get_price returns unscaled base-currency totals, not chartdata metadata.
-function tibberPriceData(response) {
+function tibberPriceData(response, source = 'tibber_prices', home) {
+  if(source==='tibber') {
+    const prices=response?.prices;
+    if(!prices || typeof prices!=='object' || Array.isArray(prices))throw Error('format');
+    const homes=Object.keys(prices);
+    if(!home && homes.length!==1)throw Error('home');
+    const selected=home || homes[0];
+    if(!Object.hasOwn(prices,selected) || !Array.isArray(prices[selected]))throw Error('home');
+    return prices[selected].flatMap(row=>{
+      if(typeof row?.price!=='number' || !Number.isFinite(row.price) || typeof row.start_time!=='string' || !Number.isFinite(Date.parse(row.start_time)))return [];
+      return [{start_time:row.start_time,price_per_kwh:row.price}];
+    });
+  }
   if(response?.success===false)throw Error('unavailable');
   if(!Array.isArray(response?.price_info))throw Error('format');
   return response.price_info.flatMap(row=>{
@@ -726,7 +746,15 @@ const ENGLISH = Object.freeze({
  "Volgt het gekozen tijdvak van ingeschakelde kaarten in dezelfde groep. Alleen beschikbare bronprijzen worden getoond.":"Follows the selected timeframe of enabled cards in the same group. Only available source prices are shown.",
  "Dezelfde sleutel koppelt kaarten op deze pagina. Leeg gebruikt de standaardgroep.":"The same key links cards on this page. Empty uses the default group.",
  "De prijsbron bevat geen prijsintervallen voor het gekozen tijdvak.":"The price source has no price intervals for the selected timeframe.",
+  "Horizontaal Y-raster": "Horizontal Y grid",
+  "Toont een horizontale rasterlijn bij elk zichtbaar Y-aslabel.": "Shows a horizontal grid line at each displayed Y-axis tick.",
   "Prijsbron":"Price source",
+  "Tibber (get_prices)":"Tibber (get_prices)",
+  "Tibber-woning":"Tibber home",
+  "Kies een prijs-/templatesensor, standaard Tibber get_prices, Tibber Prices get_price of Zonneplan One forecast.":"Choose a price/template sensor, built-in Tibber get_prices, Tibber Prices get_price or Zonneplan One forecast.",
+  "Leeg kiest automatisch de enige woning. Bij meerdere woningen: vul de exacte Tibber-woningnaam in. Geen entiteit nodig. Alleen EUR/kWh.":"Leave blank to select the only home automatically. For multiple homes, enter the exact Tibber home name. No entity required. EUR/kWh only.",
+  "Vul de exacte Tibber-woningnaam in bij meerdere woningen.":"Enter the exact Tibber home name when multiple homes exist.",
+  "Controleer de standaard Tibber-integratie, get_prices en de woningnaam.":"Check the built-in Tibber integration, get_prices and the home name.",
   "Tibber-aansluiting":"Tibber connection",
   "Prijs-/templatesensor":"Price/template sensor",
   "Tibber Prices (get_price)":"Tibber Prices (get_price)",
@@ -964,6 +992,7 @@ const DEFAULT_CONFIG = Object.freeze({
   sync_hover: true,
   hover_sync_group: '',
   show_average_line: false,
+  show_y_grid: false,
   show_period_average: false,
   show_period_day: true,
   show_period_type: true,
@@ -1170,13 +1199,15 @@ class DynamicEnergyPriceCard extends HTMLElement {
       field(p+'_favorable_color'),field(p==='import'?'show_cheapest_table':'show_export_table')
     ]);
     const source=p=>[
-      select(p+'_source',[['sensor','Prijs-/templatesensor'],['tibber_prices','Tibber Prices (get_price)'],['zonneplan','Zonneplan One (forecast)']]),
+      select(p+'_source',[['sensor','Prijs-/templatesensor'],['tibber','Tibber (get_prices)'],['tibber_prices','Tibber Prices (get_price)'],['zonneplan','Zonneplan One (forecast)']]),
       ...(data[p+'_source']==='tibber_prices'
         ? [{name:p+'_tibber_entry',selector:{config_entry:{integration:'tibber_prices'}}}]
-        : [field(p==='import'?'entity':'export_entity')])
+        : data[p+'_source']==='tibber'
+          ? [{name:p+'_tibber_home',selector:{text:{}}}]
+          : [field(p==='import'?'entity':'export_entity')])
     ];
     const schema=[
-      group('graph_settings','Algemeen',['title','show_title','graph_mode','current_price_mode','tomorrow_after','show_average_line','show_price_levels','show_hover_line','sync_hover','sync_timeframe',...(data.sync_hover||data.sync_timeframe?['hover_sync_group']:[])].map(field)),
+      group('graph_settings','Algemeen',['title','show_title','graph_mode','current_price_mode','tomorrow_after','show_average_line','show_y_grid','show_price_levels','show_hover_line','sync_hover','sync_timeframe',...(data.sync_hover||data.sync_timeframe?['hover_sync_group']:[])].map(field)),
       group('price_settings','Prijsgrenzen en prijskleuren',[
         ...['cheap_price','normal_price','expensive_price'].map(field),
         group('price_color_settings','Prijskleuren',['cheap_color','normal_color','expensive_color','zero_color','negative_color'].map(field))
@@ -1187,10 +1218,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
       group('table_settings','Tabelkolommen',['day','type','start','end','duration','average'].map(c=>field('show_period_'+c)))
     ];
     const newLabels={graph_settings:'Algemeen',price_settings:'Prijsgrenzen en prijskleuren',table_settings:'Tabelkolommen'};
-    const suffix={source:'Prijsbron',tibber_entry:'Tibber-aansluiting',line_interpolation:'Lijnverloop',color_mode:'Lijnkleur',fill_mode:'Vulkleurmodus',fill_opacity:'Dekking',line_settings:'Lijn',fill_settings:'Vulling'};
+    const suffix={source:'Prijsbron',tibber_home:'Tibber-woning',tibber_entry:'Tibber-aansluiting',line_interpolation:'Lijnverloop',color_mode:'Lijnkleur',fill_mode:'Vulkleurmodus',fill_opacity:'Dekking',line_settings:'Lijn',fill_settings:'Vulling'};
     return {schema,computeLabel:function(s){const key=s?.name??'',label=newLabels[key]??suffix[key.replace(/^(import|export|consumption)_/,'')];return label?translate(label,resolveLanguage(this?.hass??frontendHass())):base.computeLabel.call(this,s);},computeHelper:function(s){
       const key=s?.name??'',lang=resolveLanguage(this?.hass??frontendHass());
-      if(key.endsWith('_source'))return translate('Kies een prijs-/templatesensor, Tibber Prices get_price of Zonneplan One forecast.',lang);
+      if(key.endsWith('_source'))return translate('Kies een prijs-/templatesensor, standaard Tibber get_prices, Tibber Prices get_price of Zonneplan One forecast.',lang);
+      if(key.endsWith('_tibber_home'))return translate('Leeg kiest automatisch de enige woning. Bij meerdere woningen: vul de exacte Tibber-woningnaam in. Geen entiteit nodig. Alleen EUR/kWh.',lang);
       if((key==='entity' && data.import_source==='zonneplan') || (key==='export_entity' && data.export_source==='zonneplan'))
         return translate('Selecteer de Zonneplan One-tariefsensor met forecast. Uur- en kwartierprijzen worden omgerekend naar EUR/kWh.',lang);
       if(key.endsWith('_tibber_entry'))return translate('Optioneel bij één aansluiting. Kies de aansluiting bij meerdere Tibber Prices-configuraties. Alleen EUR/kWh.',lang);
@@ -1232,6 +1264,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       sync_hover: "Hover synchroniseren",
       hover_sync_group: "Synchronisatiegroep",
       show_average_line: "Gemiddelde prijslijn",
+      show_y_grid: "Horizontaal Y-raster",
       show_period_average: "Gemiddelde prijs in tabel",
       show_period_day: "Dag in tabel",
       show_period_type: "Tarief in tabel",
@@ -1316,6 +1349,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
             { name: 'sync_hover', default: true, selector: { boolean: {} } },
             { name: 'hover_sync_group', selector: { text: {} } },
             { name: 'show_average_line', default: DEFAULT_CONFIG.show_average_line, selector: { boolean: {} } },
+            { name: 'show_y_grid', default: DEFAULT_CONFIG.show_y_grid, selector: { boolean: {} } },
             { name: 'show_period_average', default: DEFAULT_CONFIG.show_period_average, selector: { boolean: {} } },
             ...['day', 'type', 'start', 'end', 'duration'].map(column => ({ name: `show_period_${column}`, default: DEFAULT_CONFIG[`show_period_${column}`], selector: { boolean: {} } })),
             { name: 'show_price_levels', default: DEFAULT_CONFIG.show_price_levels, selector: { boolean: {} } },
@@ -1439,6 +1473,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         sync_hover: "Deelt het gekozen tijdstip met andere Eleven-grafieken op deze pagina.",
         hover_sync_group: "Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.",
         show_average_line: "Toont per zichtbare tariefreeks een gelabeld gemiddelde.",
+        show_y_grid: "Toont een horizontale rasterlijn bij elk zichtbaar Y-aslabel.",
         show_period_average: "Toont de gemiddelde prijs per periode in de afname- en teruglevertabel, in ct/kWh.",
         show_price_levels: "Toont de lijnen en prijslabels voor goedkoop, normaal en duur.",
         import_line_style: "Kies doorgetrokken, gestreept of gestippeld.",
@@ -1490,6 +1525,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   setConfig(config) {
     config ??= {};
     timeframeSyncConfig(config);
+    if (config.show_y_grid !== undefined && typeof config.show_y_grid !== 'boolean') throw new Error('show_y_grid');
     if (config.sync_hover !== undefined && typeof config.sync_hover !== 'boolean') throw new Error('sync_hover');
     if (config.hover_sync_group != null && typeof config.hover_sync_group !== 'string') throw new Error('hover_sync_group');
     SharedGraph.clearHover(this);
@@ -1497,9 +1533,10 @@ class DynamicEnergyPriceCard extends HTMLElement {
       ...DEFAULT_CONFIG,
       ...config,
       ...timeframeSyncConfig(config),
+      show_y_grid: config.show_y_grid ?? DEFAULT_CONFIG.show_y_grid,
     };
     for(const prefix of ['import','export']) {
-      if(!['sensor','tibber_prices','zonneplan'].includes(this._config[`${prefix}_source`]))throw Error(`${prefix}_source`);
+      if(!['sensor','tibber','tibber_prices','zonneplan'].includes(this._config[`${prefix}_source`]))throw Error(`${prefix}_source`);
     }
     this._resetTibber();
     this._watchTibberConnection();
@@ -1537,12 +1574,12 @@ class DynamicEnergyPriceCard extends HTMLElement {
   _formatDay(timestamp, timeZone) { return formatDay(timestamp, timeZone, this._language); }
 
   _hasExportSource() {
-    return this._config?.export_source === 'tibber_prices' || Boolean(this._config?.export_entity);
+    return ['tibber','tibber_prices'].includes(this._config?.export_source) || Boolean(this._config?.export_entity);
   }
 
   _tibberKey(prefix) {
     const zone=this._hass?.config?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return `${this._config[`${prefix}_tibber_entry`] || ''}|${localDayKey(new Date(),zone)}`;
+    return JSON.stringify([this._config[`${prefix}_source`],this._config[`${prefix}_source`]==='tibber' ? this._config[`${prefix}_tibber_home`] || '' : this._config[`${prefix}_tibber_entry`] || '',zone,localDayKey(new Date(),zone)]);
   }
 
   _sourceState(prefix) {
@@ -1550,7 +1587,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       const state=this._hass?.states?.[this._config[prefix==='import'?'entity':'export_entity']];
       return state ? {...state,attributes:{...state.attributes,data:zonneplanPriceData(state.attributes?.forecast)}} : null;
     }
-    if(this._config[`${prefix}_source`] !== 'tibber_prices')
+    if(!['tibber','tibber_prices'].includes(this._config[`${prefix}_source`]))
       return this._hass?.states?.[this._config[prefix==='import'?'entity':'export_entity']];
     const cached=this._tibberCache?.get(this._tibberKey(prefix));
     return cached?.status==='ready' ? {attributes:{data:cached.data}} : null;
@@ -1582,7 +1619,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _watchTibberConnection() {
-    const needed=this._config?.import_source==='tibber_prices' || (this._exportRequired() && this._config?.export_source==='tibber_prices');
+    const needed=['tibber','tibber_prices'].includes(this._config?.import_source) || (this._exportRequired() && ['tibber','tibber_prices'].includes(this._config?.export_source));
     const connection=needed?this._hass?.connection:undefined;
     if(connection===this._tibberConnection)return;
     this._unwatchTibberConnection();this._resetTibber();this._tibberConnection=connection;
@@ -1598,12 +1635,12 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const label=this._t(prefix==='import'?'Afname':'Teruglevering');
     return this._stateCard(
       this._t(status==='loading'?'Tibber-prijzen laden…':'Tibber-prijzen niet beschikbaar'),
-      `${label}: ${this._t(status==='currency'?'Alleen EUR/kWh wordt ondersteund.':status==='loading'?'Prijsgegevens worden opgehaald.':'Controleer de Tibber Prices-integratie, get_price en de gekozen aansluiting.')}`,
+      `${label}: ${this._t(status==='currency'?'Alleen EUR/kWh wordt ondersteund.':status==='home'?'Vul de exacte Tibber-woningnaam in bij meerdere woningen.':status==='loading'?'Prijsgegevens worden opgehaald.':this._config[`${prefix}_source`]==='tibber'?'Controleer de standaard Tibber-integratie, get_prices en de woningnaam.':'Controleer de Tibber Prices-integratie, get_price en de gekozen aansluiting.')}`,
     );
   }
 
   _ensureTibber(prefix) {
-    if(this._config[`${prefix}_source`] !== 'tibber_prices' || !this._hass || this._hass.connection?.connected===false) return;
+    if(!['tibber','tibber_prices'].includes(this._config[`${prefix}_source`]) || !this._hass || this._hass.connection?.connected===false) return;
     const key=this._tibberKey(prefix);
     this._tibberCache ??= new Map();
     const previous=this._tibberCache.get(key);
@@ -1619,15 +1656,18 @@ class DynamicEnergyPriceCard extends HTMLElement {
         // HA's configured currency is a guard, not proof of the Tibber home's currency.
         if(this._hass.config?.currency && this._hass.config.currency!=='EUR')throw Error('currency');
         const zone=this._hass.config?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const service_data=tibberPriceRange(new Date(),zone);
+        const source=this._config[`${prefix}_source`];
+        const home=this._config[`${prefix}_tibber_home`];
+        const range=tibberPriceRange(new Date(),zone);
+        const service_data=source==='tibber'?{start:range.start_time,end:range.end_time}:range;
         const entry=this._config[`${prefix}_tibber_entry`];
-        if(entry)service_data.entry_id=entry;
-        const {response}=await priceRequestWithTimeout(this._hass.callWS({type:'call_service',domain:'tibber_prices',service:'get_price',service_data,return_response:true}),15000);
+        if(source==='tibber_prices' && entry)service_data.entry_id=entry;
+        const {response}=await priceRequestWithTimeout(this._hass.callWS({type:'call_service',domain:source,service:source==='tibber'?'get_prices':'get_price',service_data,return_response:true}),15000);
         if(this._tibberCache?.get(key)!==request)return;
-        Object.assign(request,{status:'ready',data:tibberPriceData(response),fetchedAt:Date.now()});
+        Object.assign(request,{status:'ready',data:tibberPriceData(response,source,home),fetchedAt:Date.now()});
       } catch(error) {
         if(this._tibberCache?.get(key)!==request)return;
-        Object.assign(request,{status:error?.message==='currency'?'currency':'error',fetchedAt:Date.now()});
+        Object.assign(request,{status:['currency','home'].includes(error?.message)?error.message:'error',fetchedAt:Date.now()});
       }
       this._scheduleTibberRefresh();
       this._render();
@@ -1844,7 +1884,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     if(this._config.price_provider===true){
       this._ensureTibber('import');this._ensureTibber('export');return;
     }
-    const tibberImport=this._config.import_source==='tibber_prices';
+    const tibberImport=['tibber','tibber_prices'].includes(this._config.import_source);
     if (!tibberImport && !this._config.entity) {
       this.shadowRoot.innerHTML = this._stateCard(this._t("Kies een prijsbron"), this._t("Selecteer een prijsbron bij Afname in de kaartinstellingen."));
       return;
@@ -1871,7 +1911,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       return;
     }
     const exportState = this._sourceState('export');
-    if(this._exportRequired() && this._config.export_source==='tibber_prices' && !exportState) {
+    if(this._exportRequired() && ['tibber','tibber_prices'].includes(this._config.export_source) && !exportState) {
       this.shadowRoot.innerHTML=this._tibberStatusCard('export');
       return;
     }
@@ -2066,6 +2106,10 @@ class DynamicEnergyPriceCard extends HTMLElement {
       : '';
 
     const yTicks = createPriceTicks(minimum, maximum, 5);
+    const yGrid = this._config.show_y_grid === true ? yTicks.map((price) => {
+      const y = yFor(price);
+      return `<line class="y-grid-line" x1="${PLOT.left}" y1="${y}" x2="${svgWidth - plotRight}" y2="${y}" />`;
+    }).join('') : '';
     const yLabels = yTicks.map((price) => {
       const y = yFor(price);
       return `<span class="chart-label y-label" style="top:${(y / svgHeight) * 100}%">${this._formatPrice(price, 0)}</span>`;
@@ -2207,7 +2251,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
                 </linearGradient>
                 ${['import','export','consumption'].map(p=>`<linearGradient id="${p}-follow-fade"><stop offset="0" stop-color="white"/><stop offset="1" stop-color="white" stop-opacity="${.01/(p==='consumption'?.18:.22)}"/></linearGradient><mask id="${p}-follow-mask" maskUnits="userSpaceOnUse" x="0" y="${PLOT.top}" width="${svgWidth}" height="${plotHeight}"><rect x="0" y="${PLOT.top}" width="${svgWidth}" height="${plotHeight}" fill="url(#${p}-follow-fade)"/></mask>`).join('')}
               </defs>`,
-              before: selectionBandRects + levelLines + averageLine,
+              before: selectionBandRects + yGrid + levelLines + averageLine,
               fills: [
                 {d: importAreaPath, className: importAreaClass},
                 {d: exportAreaPath, className: exportAreaClass},
@@ -2266,7 +2310,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const hidden = this._hiddenSeries.has(type);
     return `<button type="button" class="compact-current legend-series" data-series="${type}" aria-pressed="${!hidden}" title="${hidden ? this._t("Toon") : this._t("Verberg")} ${label.toLowerCase()}">
       <i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i>
-      ${label} <span>${this._t("nu")}</span> <strong class="${priceClass}">${priceText}</strong><small>ct/kWh</small>${favorable ? `<em>${this._t("Goedkoopst")}</em>` : ''}
+      <span class="legend-label">${label}</span> <span>${this._t("nu")}</span> <strong class="legend-value ${priceClass}">${priceText}</strong><small>ct/kWh</small>${favorable ? `<em>${this._t("Goedkoopst")}</em>` : ''}
     </button>`;
   }
 
@@ -2323,7 +2367,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   _seriesLegendItem(type, label) {
     const appearance = this._seriesAppearance(type);
     const hidden = this._hiddenSeries.has(type);
-    return `<button type="button" class="legend-series" data-series="${type}" aria-pressed="${!hidden}" title="${hidden ? this._t("Toon") : this._t("Verberg")} ${label.toLowerCase()}"><i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i>${label}</button>`;
+    return `<button type="button" class="legend-series" data-series="${type}" aria-pressed="${!hidden}" title="${hidden ? this._t("Toon") : this._t("Verberg")} ${label.toLowerCase()}"><i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i><span class="legend-label">${label}</span></button>`;
   }
 
   _toggleSeries(type) {
@@ -2404,7 +2448,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       : '—';
     const appearance = this._chart.consumptionAppearance;
     const range = point ? `${this._formatTime(point.timestamp, this._chart.timeZone)}–${this._formatTime(point.endTimestamp, this._chart.timeZone)}` : '';
-    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b>${this._t('Netafname')} <em class="tooltip-value">${value}</em></b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
+    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b><em class="tooltip-label">${this._t('Netafname')}: </em><em class="tooltip-value">${value}</em></b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
       live: `${this._t('Netafname')} ${value}, ${range}` };
   }
 
@@ -2455,7 +2499,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       else dot.style.removeProperty('border-color');
       dot.setAttribute('class', `hover-dot${type === 'export' ? ' export-dot' : ''} ${priceClass}`);
       const favorable = selected.has(point.timestamp);
-      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b>${type === 'import' ? this._t("Afname") : this._t("Teruglevering")} <em class="tooltip-value">${this._formatPrice(price)} ct/kWh</em></b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
+      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b><em class="tooltip-label">${type === 'import' ? this._t("Afname") : this._t("Teruglevering")}: </em><em class="tooltip-value">${this._formatPrice(price)} ct/kWh</em></b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
       liveEntries.push(`${type === 'import' ? this._t("afname") : this._t("teruglevering")} ${this._formatPrice(price)} ${this._t("cent per kilowattuur")}${favorable ? `, ${favorableLabel} ${hours} ${this._t("uur")}` : ''}`);
     };
     if (this._chart.graphShowsImport) showDot('import', point.importPrice, this._chart.importSelected, this._config.cheapest_hours, this._t("goedkoopste"));
@@ -2573,12 +2617,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .compact-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 30px; margin-bottom: 2px; }
       .compact-current { min-width: 0; white-space: nowrap; color: var(--primary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
       .compact-current span, .compact-current small { color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); }
+      .compact-current .legend-label { font-size: inherit; font-weight: inherit; }
       .compact-current strong { font-size: 16px; font-variant-numeric: tabular-nums; }
-      .compact-current strong.negative { color: var(--negative-color); }
-      .compact-current strong.cheap { color: var(--cheap); }
-      .compact-current strong.normal { color: var(--normal); }
-      .compact-current strong.expensive { color: var(--expensive); }
-      .compact-current strong.unavailable { color: var(--secondary-text-color); }
       .compact-current em { padding: 2px 5px; border-radius: 999px; color: var(--import-best); background: var(--cheapest-fill); font-size: var(--font-size-meta); font-style: normal; }
       .compact-context { overflow: hidden; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); text-overflow: ellipsis; white-space: nowrap; }
       .current-block { display: flex; justify-content: flex-end; align-items: flex-start; gap: 8px; flex: none; margin-left: auto; }
@@ -2595,8 +2635,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .current-window { color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
       .current-window.active { color: var(--import-best); }
       .current-metric.export .current-window.active { color: var(--export-best); }
+      .y-grid-line { stroke: var(--divider-color,#ddd); stroke-width: 0.8; vector-effect: non-scaling-stroke; }
       .legend { display: flex; flex-wrap: wrap; gap: 7px 16px; margin: 12px 0 2px; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
       .legend span { display: inline-flex; align-items: center; gap: 6px; }
+      .legend-label { color: var(--secondary-text-color); }
+      .legend-value { color: var(--primary-text-color,#20252b); }
       .legend-series { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 1px 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
       .legend-series[aria-pressed="false"] { opacity: 0.45; text-decoration: line-through; }
       .legend-series:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; border-radius: 3px; }

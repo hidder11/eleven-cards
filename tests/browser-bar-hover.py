@@ -20,7 +20,9 @@ async def main():
    title=result['first']['title'];assert (':' in title)==(period not in ['day','week','month']),(period,title)
    # Actual pointer movement must remain on the same guide within a bar.
    box=await page.locator('eleven-bar-chart .plot').bounding_box()
-   ratios=await page.evaluate('[(hoverProbe.start-card._viewStart)/(card._viewEnd-card._viewStart),(hoverProbe.end-card._viewStart)/(card._viewEnd-card._viewStart)]')
+   # Bar's painted layout can inset partial periods; test the actual bar,
+   # not a timestamp projected onto the old linear plot layout.
+   ratios=await page.evaluate('''()=>{const middle=(hoverProbe.start+hoverProbe.end)/2,{interval,index}=card._barLayout().intervals.find(({interval})=>interval.start<=middle&&interval.end>middle),bounds=card._barGeometry(interval,t=>(t-card._viewStart)/(card._viewEnd-card._viewStart),index);return [bounds.left,bounds.right]}''')
    await page.mouse.move(0,0)
    for f in [.2,.8]:
     await page.mouse.move(box['x']+box['width']*(ratios[0]+(ratios[1]-ratios[0])*f),box['y']+box['height']*.9)
@@ -44,7 +46,21 @@ async def main():
   box=await page.locator('eleven-bar-chart .plot').bounding_box();cdp=await page.context.new_cdp_session(page)
   await cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':box['x']+box['width']*.4,'y':box['y']+box['height']*.8}]});await cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
   assert await page.locator('eleven-bar-chart .tooltip').is_visible()
+  # Inherited History lifecycle must also retain Bar's snapped pointer adapter.
+  await page.evaluate("card._hideTooltip();window.activeChart=card.shadowRoot.querySelector('.chart')")
+  y=box['y']+box['height']*.8
+  await cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':box['x']+box['width']*.15,'y':y,'id':1}]})
+  for ratio in [.3,.6,.8,.45]:
+   await page.evaluate("()=>{const h=card.hass,s=h.states['sensor.solar'];card.hass={...h,states:{...h.states,'sensor.solar':{...s,attributes:{...s.attributes,friendly_name:s.attributes.friendly_name+' updated'}}}}}")
+   await cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':box['x']+box['width']*ratio,'y':y,'id':1}]});await page.wait_for_timeout(25)
+   state=await page.evaluate("ratio=>({same:activeChart===card.shadowRoot.querySelector('.chart'),pending:card._touchRenderPending,pinned:card._pinned,visible:!card.shadowRoot.querySelector('.tooltip').hidden,cursor:card._cursor,expected:card._hoverInterval(card._pointerTime(card._timeAtPlotPosition(ratio))).start})",ratio)
+   assert state['same'] and state['pending'] and state['pinned'] and state['visible'] and abs(state['cursor']-state['expected'])<2,state
+  await cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]});await page.wait_for_timeout(50)
+  released=await page.evaluate("({replaced:activeChart!==card.shadowRoot.querySelector('.chart'),pointer:card._touchPointer,pending:card._touchRenderPending,pinned:card._pinned,visible:!card.shadowRoot.querySelector('.tooltip').hidden,cursor:card._cursor})")
+  assert released['replaced'] and released['pointer'] is None and not released['pending'] and released['pinned'] and released['visible'],released
+  await page.locator('eleven-bar-chart .chart').focus();await page.locator('eleven-bar-chart .chart').evaluate('e=>e.blur()')
+  assert not await page.locator('eleven-bar-chart .tooltip').is_visible(),'real focus loss still dismisses'
   assert not errors,errors
-  report={'bundle':str(BUNDLE),'synthetic':True,'periods':results,'keyboard':True,'native_touch':True,'responsive_tooltip_bounds':True,'incoming_sync':True,'errors':errors}
+  report={'bundle':str(BUNDLE),'synthetic':True,'periods':results,'keyboard':True,'native_touch':True,'touch_metadata_updates':True,'responsive_tooltip_bounds':True,'incoming_sync':True,'errors':errors}
   (OUT/'results.json').write_text(json.dumps(report,indent=2));print(json.dumps(report));await browser.close()
 asyncio.run(main())

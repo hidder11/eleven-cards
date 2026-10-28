@@ -9,7 +9,12 @@ import {retryDelay} from '../../../shared/request.js';
 
 const esc=escapeHtml;
 const isDutch=hass=>String(hass?.locale?.language ?? hass?.language ?? 'en').startsWith('nl');
+const dataContext=(hass,config)=>JSON.stringify([hass?.config?.time_zone,isDutch(hass),[config?.entity,...(config?.sum_entities??[])].map(id=>{
+  const state=hass?.states?.[id],attributes=state?.attributes;
+  return [id,!!state,attributes?.unit_of_measurement,attributes?.friendly_name,attributes?.state_class,attributes?.device_class];
+})]);
 const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],hover_sync_group:['Synchronisatiegroep','Synchronization group'],
+  sum_entities:['Sensoren optellen','Add sensors'],
   title:['Titel','Title'],entity:['Sensor','Sensor'],name:['Sensornaam','Sensor name'],hours_to_show:['Aantal uren','Hours to show'],mode:['Waarde per tijdvak','Value per interval'],aggregation_period:['Aggregatieperiode','Aggregation period'],
   show_title:['Titel tonen','Show title'],show_legend:['Legenda tonen','Show legend'],show_labels:['Rij- en kolomlabels tonen','Show row and column labels'],show_navigation:['Tijdvakselectie tonen','Show timeframe selection'],
   graph_settings:['Grafiek','Graph'],data_processing:['Dataverwerking','Data processing'],color_settings:['Kleuren','Colors'],matrix_settings:['Rasteropmaak','Grid appearance'],
@@ -19,6 +24,7 @@ const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],
   cell_width:['Minimale vakbreedte','Minimum cell width'],cell_height:['Vakhoogte','Cell height'],cell_gap:['Tussenruimte','Cell gap'],border_radius:['Hoekafronding','Border radius'],max_height:['Maximale rasterhoogte','Maximum grid height']
 };
 const helpers={sync_timeframe:['Deelt tijdvakkeuze en vorige/volgende/Nu met ingeschakelde kaarten in dezelfde groep.','Shares timeframe selection and previous/next/Now with enabled cards in the same group.'],hover_sync_group:['Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.','Cards with the same group share hover and timeframe when the corresponding synchronization is enabled. Empty uses the default group.'],
+  sum_entities:['Tel maximaal 7 extra sensoren bij de hoofdsensor op (maximaal 8 totaal). Dezelfde eenheid is vereist; ontbrekende waarden zijn geen nul. Sensornaam benoemt het totaal.','Add up to 7 additional sensors to the primary sensor (8 total). The same unit is required; missing values are not zero. Sensor name labels the total.'],
   hours_to_show:['Standaardperiode: 1–8760 uur. De tijdvakselectie kan deze tijdelijk wijzigen.','Default range: 1–8760 hours. The timeframe menu can change it temporarily.'],
   mode:['Gemiddelde weegt waarden naar hun duur. Verbruik telt de uurwijzigingen uit tellerstatistieken op, inclusief tellerresets.','Average weights values by their duration. Consumption sums hourly counter changes from statistics, including counter resets.'],
   aggregation_period:['Uren per dag, dagen per week, weken per ISO-jaar of maanden per jaar. Kalendergrenzen volgen de Home Assistant-tijdzone; weken beginnen op maandag.','Hours per day, days per week, weeks per ISO year or months per year. Calendar boundaries follow the Home Assistant timezone; weeks start on Monday.'],
@@ -83,6 +89,7 @@ export class HeatmapCard extends HTMLElement {
     }}};
     return {schema:[
       {name:'entity',required:true,selector:{entity:{domain:'sensor'}}},
+      {name:'sum_entities',selector:{entity:{domain:'sensor',multiple:true}}},
       {name:'name',selector:{text:{}}},
       {name:'title',selector:{text:{}}},
       {name:'show_title',default:true,selector:{boolean:{}}},
@@ -129,10 +136,10 @@ export class HeatmapCard extends HTMLElement {
     const previous=this._context;
     this._hass=hass;
     const state=hass?.states?.[this._config?.entity];
-    this._context=JSON.stringify([hass?.config?.time_zone,state?.attributes?.unit_of_measurement,state?.attributes?.friendly_name,isDutch(hass),!!state]);
+    this._context=dataContext(hass,this._config);
     if(previous!==this._context){
       const unit=state?.attributes?.unit_of_measurement ?? '',zone=hass?.config?.time_zone || 'UTC';
-      if(this._data && (this._data.unit!==unit || this._zone!==zone))this._invalidate();
+      if((previous!==undefined && this._config?.sum_entities?.length) || (this._data && (this._data.unit!==unit || this._zone!==zone)))this._invalidate();
       this._render();
     }
     if(this._connected && !this._promise && this._status==='loading')this._refresh();
@@ -152,13 +159,13 @@ export class HeatmapCard extends HTMLElement {
     if(!this._connected || !this._hass || !this._config)return Promise.resolve();
     if(this._promise)return this._promise;
     clearTimeout(this._timer);
-    const generation=this._generation,hass=this._hass,config=this._config,range=graphPeriodRange(this),zone=hass.config?.time_zone || 'UTC';
+    const generation=this._generation,hass=this._hass,config=this._config,range=graphPeriodRange(this),zone=hass.config?.time_zone || 'UTC',context=dataContext(hass,config);
     let timeout;
     const work=Promise.race([loadHeatmapData(hass,config,range.start,range.end),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),20000);})])
       .then(data=>{
         if(!this._connected || generation!==this._generation)return;
         const currentUnit=this._hass.states?.[config.entity]?.attributes?.unit_of_measurement ?? '';
-        if(data.unit!==currentUnit || zone!==(this._hass.config?.time_zone || 'UTC')){this._invalidate();return;}
+        if(data.unit!==currentUnit || zone!==(this._hass.config?.time_zone || 'UTC') || (config.sum_entities?.length && context!==dataContext(this._hass,config))){this._invalidate();return;}
         this._rows=buildHeatmap(data,range.start,range.end,zone,config.mode,config.aggregation_period);
         this._data=data;this._zone=zone;this._start=range.start;this._end=range.end;this._viewStart=range.start;this._viewEnd=range.end;
         this._status='ready';this._refreshFailures=0;
@@ -190,13 +197,13 @@ export class HeatmapCard extends HTMLElement {
     const summary={rows:[{id:this._config.entity,unit:this._data?.unit,...summarizeHeatmap(this._rows,this._config.mode)}]};
     // Adapt the single sensor to the shared information popup without adding
     // internal collection fields to the card's saved configuration.
-    return chartDataInformation({_config:{entities:[this._config.entity],series_options:[{entity:this._config.entity,name:this._config.name?.trim()}]},_hass:this._hass,
+    return chartDataInformation({_config:{entities:[this._config.entity],series_options:[{entity:this._config.entity,name:this._sensorName()}]},_hass:this._hass,
       _insightOpen:this._insightOpen,_status:this._status,_inFlight:!!this._promise || this._status==='loading',_loadFailed:this._status==='error',
       _lastLoad:this._data?{sources:[{id:this._config.entity,source:this._data.source}],summary}:null,
       _isSeriesVisible:()=>true,_dataInformation:()=>summary,
       _insightColor:()=>{const scale=colorScale(this._rows,this._config),average=summary.rows[0].average;return scale.color(Number.isFinite(average)?average:(scale.min+scale.max)/2);}},language);
   }
-  _sensorName(){return this._config.name?.trim()||this._hass?.states?.[this._config.entity]?.attributes?.friendly_name||this._config.entity;}
+  _sensorName(){return this._config.name?.trim()||[this._config.entity,...(this._config.sum_entities??[])].map(id=>this._hass?.states?.[id]?.attributes?.friendly_name||id).join(' + ');}
   _cellBounds(cell){
     const intervals=cell.records.length?cell.records:cell.intervals;
     if(this._config.aggregation_period!=='hour'){
@@ -291,7 +298,7 @@ export class HeatmapCard extends HTMLElement {
     const scrollLeft=scroll?.scrollLeft ?? 0,scrollTop=scroll?.scrollTop ?? 0,tooltipKey=this._tooltipKey;
     captureChartInsights(this);
     const periods=periodControls(this,language),range=this._data?{start:this._start,end:this._end}:graphPeriodRange(this);
-    const historyUrl=`/history?entity_id=${encodeURIComponent(c.entity)}&start_date=${encodeURIComponent(new Date(range.start).toISOString())}&end_date=${encodeURIComponent(new Date(range.end).toISOString())}`;
+    const historyUrl=`/history?entity_id=${encodeURIComponent([c.entity,...(c.sum_entities??[])].join(','))}&start_date=${encodeURIComponent(new Date(range.start).toISOString())}&end_date=${encodeURIComponent(new Date(range.end).toISOString())}`;
     const name=this._sensorName();
     const scale=colorScale(this._rows,c);this._scale=scale;
     this._rowByKey=new Map(this._rows.map(row=>[row.key,row]));this._monthFormatter=null;this._dayFormatter=null;
@@ -306,7 +313,8 @@ export class HeatmapCard extends HTMLElement {
     this._windowRange=[first,last];
     this._cells=new Map(this._rows.slice(first,last).flatMap(row=>row.cells).map(cell=>[cell.key,cell]));
     const matrix=this._virtualRows?`<div class="matrix-body" role="rowgroup" style="height:${Math.max(0,this._rows.length*step-c.cell_gap)}px">${this._rows.slice(first,last).map((row,index)=>`<div class="virtual-row" style="top:${(first+index)*step}px">${this._matrixRow(row,first+index)}</div>`).join('')}</div>`:this._rows.map((row,index)=>this._matrixRow(row,index)).join('');
-    const status=this._status==='error'?(this._error==='consumption_statistics_required'?text('No counter statistics for this sensor.','Geen tellerstatistieken voor deze sensor.'):text('Could not load data.','Laden mislukt.')):text('Loading…','Laden…');
+    const sumErrors={sum_entity_missing:text('A selected sensor does not exist.','Een geselecteerde sensor bestaat niet.'),sum_unit_mismatch:text('All added sensors must have the same exact unit.','Alle opgetelde sensoren moeten exact dezelfde eenheid hebben.')};
+    const status=this._status==='error'?(sumErrors[this._error]??(this._error==='consumption_statistics_required'?text('No counter statistics for one or more selected sensors.','Geen tellerstatistieken voor één of meer geselecteerde sensoren.'):text('Could not load data.','Laden mislukt.'))):text('Loading…','Laden…');
     const hasValues=this._rows.some(row=>row.cells.some(cell=>cell.value!=null)),information=this._information(language);
     disconnectPeriodControls(this,true);disconnectChartInsights(this,true);this._disconnectTooltip();
     this.shadowRoot.innerHTML=`<style>${cardHeaderStyles()}${periodControlsStyles()}${chartInsightStyles()}${SharedGraph.tooltipStyles()}

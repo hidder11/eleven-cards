@@ -1,6 +1,6 @@
 # Eleven Heatmap (local beta)
 
-Sensor values grouped by hour, day, week or month. Color reveals repeating patterns in temperature, power or consumption. One sensor per card, a visual editor, HA theme colors and Dutch/English labels. The default is hourly cells over the past 672 hours (four weeks). Rolling ranges can include partial first and last intervals.
+Sensor values grouped by hour, day, week or month. Color reveals repeating patterns in temperature, power or consumption. One sensor or a sum of up to eight same-unit sensors per card, a visual editor, HA theme colors and Dutch/English labels. The default is hourly cells over the past 672 hours (four weeks). Rolling ranges can include partial first and last intervals.
 
 [Back to Eleven Cards](../../README.md)
 
@@ -24,6 +24,29 @@ show_navigation: true
 ```
 
 Entity IDs are examples. Bounds are optional; without them the color scale follows the loaded values. Fix both bounds to compare different periods or cards. Values outside the scale retain their real readings but use the endpoint color. The editor uses Home Assistant's native RGB color selector, like the other Eleven cards. Colors are saved as `[red, green, blue]` arrays (integers 0–255); existing six-digit hex values remain supported. Period supports 1–8760 hours. The shared picker also offers rolling and calendar periods, previous/Now/next navigation and the native History link. Period changes do not save dashboard configuration. There are no zoom controls in this beta.
+
+## Add sensors to one total
+
+`entity` remains the primary sensor. Optional `sum_entities` lists **additional** sensor IDs; do not repeat the primary sensor. Choose **Sensoren optellen / Add sensors** in the native editor. All selected sensors must exist and have exactly the same current unit (including unitless sensors); the card does not convert units. Configure at most seven distinct additional sensors, eight contributors in total. Malformed IDs, duplicates, non-sensors and invalid types are rejected. An omitted or empty list preserves existing single-sensor behavior.
+
+```yaml
+type: custom:eleven-heatmap-card
+entity: sensor.office_power
+sum_entities:
+  - sensor.kitchen_power
+  - sensor.garage_power
+name: Total power
+mode: average
+aggregation_period: hour
+```
+
+`name` labels the total in the grid, hover and information popup. Without it, the contributors' friendly names are joined with ` + `. The History link opens all selected contributors; summation only affects this card and does not create a Home Assistant sensor.
+
+- **Average, all statistics:** sum only matching start/end bins with numeric means for every contributor, then aggregate the resulting sums. Missing or differently aligned bins remain gaps. Recorder means do not establish underlying raw-sample completeness.
+- **Average, mixed sources:** if any contributor needs raw history, reload statistics contributors as raw history too. Sum held readings on a shared timeline **before** duration-weighted averaging, using only simultaneous valid coverage. Missing boundaries, unavailable states and historical unit changes remain gaps; missing values are never zero. Short raw-history retention can therefore leave older totals empty even when one contributor has long-term statistics.
+- **Consumption:** each contributor must support counter statistics. Add Recorder's reset-aware hourly `change` values only where every contributor has the exact same complete hourly bin. Never sum raw counter readings or prorate changes. Clipped viewing edges retain the complete shared bin and are marked incomplete. Missing shared bins stay empty; larger cells total only known shared bins and are marked incomplete when coverage is missing.
+
+Contributor existence, unit, friendly name, state/device class and timezone/language changes invalidate summed data and pending responses, so a late load cannot restore an obsolete total. An individual load failure fails the total rather than silently displaying only the successful sensors.
 
 ## Visual configuration
 

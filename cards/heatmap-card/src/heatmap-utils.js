@@ -26,7 +26,13 @@ export function normalizeConfig(input = {}, {draft = false} = {}) {
   if(draft)for(const key of ['hours_to_show','cell_width','cell_height','cell_gap','border_radius','max_height']){
     if(Object.hasOwn(input,key) && input[key]===undefined)c[key]=undefined;
   }
-  if (!draft && !/^sensor\.[a-z0-9_]+$/.test(c.entity)) throw Error('Select one sensor. / Kies één sensor.');
+  if (!draft && (typeof c.entity!=='string' || !/^sensor\.[a-z0-9_]+$/.test(c.entity))) throw Error('Select one sensor. / Kies één sensor.');
+  if(Object.hasOwn(input,'sum_entities')){
+    const extra=input.sum_entities;
+    if(!draft && (!Array.isArray(extra) || extra.length>7 || [...extra].some(id=>typeof id!=='string' || !/^sensor\.[a-z0-9_]+$/.test(id) || id===c.entity) || new Set(extra).size!==extra.length))
+      throw Error('sum_entities: choose up to 7 distinct additional sensors, not the primary sensor. / sum_entities: kies maximaal 7 unieke extra sensoren, niet de hoofdsensor.');
+    c.sum_entities=Array.isArray(extra)?[...extra]:extra;
+  }
   if (!draft && (!Number.isFinite(c.hours_to_show) || c.hours_to_show < 1 || c.hours_to_show > 8760)) throw Error('Period must be 1–8760 hours. / Periode moet 1–8760 uur zijn.');
   if (!draft && !['average','consumption'].includes(c.mode)) throw Error('Mode must be average or consumption. / Kies gemiddelde of verbruik.');
   if (!draft && !['hour','day','week','month'].includes(c.aggregation_period)) throw Error('Choose hour, day, week or month. / Kies uur, dag, week of maand.');
@@ -59,9 +65,44 @@ export function normalizeConfig(input = {}, {draft = false} = {}) {
 const time = value => typeof value === 'number' ? (value < 1e12 ? value * 1000 : value) : Date.parse(value);
 
 export async function loadHeatmapData(hass, config, start, end) {
+  const ids=[config.entity,...(config.sum_entities??[])];
+  if(ids.length===1)return loadSingleHeatmapData(hass,config,start,end);
+  if(ids.some(id=>!hass.states?.[id]))throw Error('sum_entity_missing');
+  const unit=hass.states[ids[0]].attributes?.unit_of_measurement??'';
+  if(ids.some(id=>(hass.states[id].attributes?.unit_of_measurement??'')!==unit))throw Error('sum_unit_mismatch');
+  let loaded=await Promise.all(ids.map(entity=>loadSingleHeatmapData(hass,{...config,entity},start,end)));
+  if(loaded.every(data=>data.source==='statistics')){
+    // Hourly summaries are indivisible: never hold or interpolate a mean over
+    // another contributor's differently aligned bin.
+    const indexed=loaded.map(data=>new Map(data.intervals.map(row=>[`${row.start}/${row.end}`,row])));
+    const intervals=loaded[0].intervals.map(row=>{
+      const matches=indexed.map(rows=>rows.get(`${row.start}/${row.end}`));
+      const complete=config.mode!=='consumption' || row.end-row.start===3600000;
+      return {...row,value:complete && matches.every(match=>match?.value!=null)?matches.reduce((sum,match)=>sum+match.value,0):null};
+    });
+    return {source:'statistics',unit:loaded[0].unit,intervals};
+  }
+  // A mean is not a raw reading. When sources differ, reload just the
+  // statistics contributors as history, then intersect actual valid coverage.
+  loaded=await Promise.all(loaded.map((data,i)=>data.source==='statistics'?loadSingleHeatmapData(hass,{...config,entity:ids[i]},start,end,true):data));
+  const boundaries=[...new Set([start,end,...loaded.flatMap(data=>data.intervals.flatMap(row=>[Math.max(start,row.start),Math.min(end,row.end)]))])].sort((a,b)=>a-b);
+  const indices=loaded.map(()=>0),intervals=[];
+  for(let i=0;i<boundaries.length-1;i++){
+    const a=boundaries[i],b=boundaries[i+1];
+    const values=loaded.map((data,j)=>{
+      while(indices[j]<data.intervals.length && data.intervals[indices[j]].end<=a)indices[j]++;
+      const row=data.intervals[indices[j]];
+      return row && row.start<=a && row.end>=b?row.value:null;
+    });
+    intervals.push({start:a,end:b,value:values.every(value=>value!=null)?values.reduce((sum,value)=>sum+value,0):null});
+  }
+  return {source:'history',unit:loaded[0].unit,intervals};
+}
+
+async function loadSingleHeatmapData(hass, config, start, end, historyOnly=false) {
   const id = config.entity, unit = hass.states?.[id]?.attributes?.unit_of_measurement ?? '';
   let statisticsFailed = false;
-  try {
+  if(!historyOnly)try {
     const metadata = await hass.callWS({type:'recorder/get_statistics_metadata', statistic_ids:[id]});
     const meta = metadata.find(row => row.statistic_id === id);
     const supported = config.mode === 'consumption' ? meta?.has_sum === true : meta?.mean_type!=null ? meta.mean_type===1 : meta?.has_mean===true;
