@@ -1,6 +1,7 @@
 """Local synthetic fixture; native CDP touch, not real-phone verification.
 Run with a Python environment containing Playwright. CHROME overrides Chromium.
 TOUCH_CARDS=history or timeline narrows the RED/GREEN tracer bullet.
+TOUCH_BUNDLE=combined exercises the same gesture through the collection entrypoint.
 """
 import json, os, pathlib
 from playwright.sync_api import sync_playwright
@@ -40,8 +41,11 @@ with sync_playwright() as p:
         context=browser.new_context(viewport={'width':width,'height':850},has_touch=True,is_mobile=True)
         page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
         page.set_content('<meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:12px;font:14px Arial;background:#f4f5f7;--ha-card-background:#fff;--primary-text-color:#20252b;--secondary-text-color:#666;--divider-color:#ddd;--primary-color:#2196f3}#cards{padding-top:180px}eleven-history-graph-card{display:block;height:320px}eleven-timeline-card{display:block;margin-top:20px}.spacer{height:1600px}</style><div id="cards"></div><div class="spacer"></div>')
-        for slug in ['history-graph-card','timeline-card']:
-            page.add_script_tag(content=(ROOT/f'cards/{slug}/dist/eleven-{slug}.js').read_text())
+        if os.environ.get('TOUCH_BUNDLE')=='combined':
+            page.add_script_tag(path=str(ROOT/'dist/eleven-cards.js'))
+        else:
+            for slug in ['history-graph-card','timeline-card']:
+                page.add_script_tag(content=(ROOT/f'cards/{slug}/dist/eleven-{slug}.js').read_text())
         page.evaluate(FIXTURE)
         page.wait_for_function("Object.values(cards).every(c=>c._status==='ready')")
         page.evaluate("async()=>{await Promise.all(Object.values(cards).map(c=>c.shadowRoot.querySelector('ha-card').updateComplete));scrollTo(0,150)}")
@@ -55,17 +59,17 @@ with sync_playwright() as p:
         touch(client,'touchStart',x,y);first=snap()
         assert not first['hidden'],(key,'touchStart hidden',first)
         moves=[];current=first
-        if key=='timeline':page.evaluate("()=>cards.timeline._testActiveChart=cards.timeline.shadowRoot.querySelector('.chart')")
-        for ratio in [.35,.61,.83,.55]*(4 if key=='timeline' else 1):
-            if key=='timeline':
-                # Sustained native drag with repeated metadata updates that require rendering.
-                page.evaluate("async()=>{const c=cards.timeline;refreshCard('timeline');await c.shadowRoot.querySelector('ha-card').updateComplete;}")
-                page.wait_for_timeout(150)
+        page.evaluate("key=>cards[key]._testActiveChart=cards[key].shadowRoot.querySelector('.chart')",key)
+        for ratio in [.35,.61,.83,.55]*4:
+            # Both cards must retain native capture and pinning across metadata updates.
+            page.evaluate("async key=>{const c=cards[key];refreshCard(key);await c.shadowRoot.querySelector('ha-card').updateComplete;}",key)
+            page.wait_for_timeout(150)
             x=box['x']+box['width']*ratio
             touch(client,'touchMove',x,y);page.wait_for_timeout(25)
             current=snap();expected=current['start']+(current['pointerX']-box['x'])/box['width']*(current['end']-current['start'])
             assert current['cursor'] is not None and close(current['cursor'],expected), (key,width,'finger move must follow exact timestamp',current,expected,first)
-            assert not current['hidden'] and current['pinned'] and current['viewport'] is None
+            assert not current['hidden'] and current['pinned'] and current['viewport'] is None,(key,width,'active gesture must stay visible and pinned',current)
+            assert page.evaluate("key=>{const c=cards[key];return c._testActiveChart===c.shadowRoot.querySelector('.chart')}",key),'active chart must retain native capture'
             assert close(current['scroll'],before['scroll']) and close(current['height'],before['height'],.1)
             assert current['tooltip']['x']>=0 and current['tooltip']['right']<=width+.5
             receiver='timeline' if key=='history' else 'history'
@@ -73,8 +77,7 @@ with sync_playwright() as p:
             moves.append({'pointerX':current['pointerX'],'expected_timestamp':expected,'actual_timestamp':current['cursor'],'guide':current['guide']})
         touch(client,'touchEnd');page.wait_for_timeout(100);ended=snap()
         assert close(ended['cursor'],current['cursor']) and ended['pinned'] and not ended['hidden'], ('release/focus must preserve exact timestamp',ended,current)
-        if key=='timeline':
-            assert page.evaluate("()=>{const c=cards.timeline;return c._touchPointer==null&&!c._touchRenderPending&&c._testActiveChart!==c.shadowRoot.querySelector('.chart')}"),'release must flush queued render'
+        assert page.evaluate("key=>{const c=cards[key];return c._touchPointer==null&&!c._touchRenderPending&&c._testActiveChart!==c.shadowRoot.querySelector('.chart')}",key),'release must flush queued render'
         page.evaluate("async key=>{const c=cards[key];refreshCard(key);await c.shadowRoot.querySelector('ha-card').updateComplete;}",key)
         page.wait_for_timeout(40);restored=snap()
         assert close(restored['cursor'],ended['cursor']) and close(restored['guide'],ended['guide'],.1) and not restored['hidden'],('hass rerender',restored,ended)
@@ -96,30 +99,49 @@ with sync_playwright() as p:
         page.wait_for_timeout(30);box=snap()['box'];y=box['y']+box['height']*.6
         # Vertical native gesture must scroll and cancel hover, never zoom.
         touch(client,'touchStart',box['x']+box['width']*.3,y)
-        if key=='timeline':
-            page.evaluate("()=>{const c=cards.timeline;c._testActiveChart=c.shadowRoot.querySelector('.chart');refreshCard('timeline')}")
+        page.evaluate("key=>{const c=cards[key];c._testActiveChart=c.shadowRoot.querySelector('.chart');refreshCard(key)}",key)
         for dy in [10,30,65,110]:
             touch(client,'touchMove',box['x']+box['width']*.3,y-dy);page.wait_for_timeout(25)
         touch(client,'touchEnd');page.wait_for_timeout(250)
         after=snap();assert after['scroll']>before['scroll']+20,('vertical scrolling',before,after)
         assert after['hidden'] and after['viewport'] is None,('scroll dismissal',after)
-        if key=='timeline':
-            assert page.evaluate("()=>{const c=cards.timeline;return c._touchPointer==null&&!c._touchRenderPending&&c._testActiveChart!==c.shadowRoot.querySelector('.chart')}"),'scroll cancellation must flush queued render'
-            # Return to chart, then recover from explicit cancellation and removal.
-            page.evaluate('scrollTo(0,150)');page.wait_for_timeout(50)
+        assert page.evaluate("key=>{const c=cards[key];return c._touchPointer==null&&!c._touchRenderPending&&c._testActiveChart!==c.shadowRoot.querySelector('.chart')}",key),'scroll cancellation must flush queued render'
+        # Return to chart, then recover from explicit cancellation and removal.
+        page.evaluate('scrollTo(0,150)');page.wait_for_timeout(50)
+        box=snap()['box'];y=box['y']+box['height']*.6
+        touch(client,'touchStart',box['x']+box['width']*.3,y)
+        page.evaluate("key=>refreshCard(key)",key)
+        touch(client,'touchCancel');page.wait_for_timeout(50)
+        assert snap()['hidden']
+        assert page.evaluate("key=>cards[key]._touchPointer==null&&!cards[key]._touchRenderPending",key)
+        touch(client,'touchStart',box['x']+box['width']*.3,y)
+        page.evaluate("key=>{const c=cards[key];refreshCard(key);c.remove();document.querySelector('#cards').append(c)}",key)
+        touch(client,'touchEnd');page.wait_for_timeout(100)
+        assert page.evaluate("key=>cards[key]._touchPointer==null&&!cards[key]._touchRenderPending&&cards[key]._status==='ready'",key)
+        if key=='history':
+            assert snap()['hidden'],'detach must not resurrect pinned selection'
+            # A local pin must survive even when shared hover is disabled.
+            page.evaluate("async()=>{const c=cards.history;await c.shadowRoot.querySelector('ha-card').updateComplete;c._config.sync_hover=false;c.scrollIntoView({block:'center'})}")
+            page.wait_for_timeout(100)
             box=snap()['box'];y=box['y']+box['height']*.6
             touch(client,'touchStart',box['x']+box['width']*.3,y)
-            page.evaluate("()=>{const c=cards.timeline;refreshCard('timeline')}")
-            touch(client,'touchCancel');page.wait_for_timeout(50)
-            assert snap()['hidden']
-            assert page.evaluate("()=>cards.timeline._touchPointer==null&&!cards.timeline._touchRenderPending")
+            page.evaluate("()=>refreshCard('history')")
+            touch(client,'touchMove',box['x']+box['width']*.7,y);page.wait_for_timeout(25)
+            local=snap();touch(client,'touchEnd');page.wait_for_timeout(50)
+            released=snap()
+            assert not released['hidden'] and released['pinned'] and close(released['cursor'],local['cursor']),('local pin must survive deferred render',local,released)
+            # Lost capture must flush, and reconfiguration must not strand a gesture.
+            hide();touch(client,'touchStart',box['x']+box['width']*.3,y)
+            page.evaluate("()=>{const c=cards.history;refreshCard('history');c.shadowRoot.querySelector('.chart').dispatchEvent(new PointerEvent('lostpointercapture',{pointerId:c._touchPointer}))}")
+            assert page.evaluate("()=>cards.history._touchPointer==null&&!cards.history._touchRenderPending")
+            touch(client,'touchEnd');hide()
             touch(client,'touchStart',box['x']+box['width']*.3,y)
-            page.evaluate("()=>{const c=cards.timeline;refreshCard('timeline');c.remove();document.querySelector('#cards').append(c)}")
-            touch(client,'touchEnd');page.wait_for_timeout(100)
-            assert page.evaluate("()=>cards.timeline._touchPointer==null&&!cards.timeline._touchRenderPending&&cards.timeline._status==='ready'")
+            page.evaluate("()=>{const c=cards.history;refreshCard('history');c.setConfig({...c._config})}")
+            touch(client,'touchEnd');page.wait_for_timeout(50)
+            assert page.evaluate("()=>cards.history._touchPointer==null&&!cards.history._touchRenderPending&&cards.history._status==='ready'")
         assert not errors,errors
-        results.append({'card':key,'width':width,'native_touch_drag':True,'exact_release_and_focus':True,'hass_rerender':True,'sync_each_move':True,'tap_pin':True,'outside_dismiss':True,'keyboard':True,'desktop_zoom':True,'vertical_scroll':True,'scroll_before':before['scroll'],'scroll_after':after['scroll'],'moves':moves,'errors':errors})
+        results.append({'card':key,'width':width,'native_touch_drag':True,'active_metadata_updates':len(moves),'deferred_release':True,'cancel_and_detach_recovery':True,'local_pin_lost_capture_reconfigure':key=='history','exact_release_and_focus':True,'hass_rerender':True,'sync_each_move':True,'tap_pin':True,'outside_dismiss':True,'keyboard':True,'desktop_zoom':True,'vertical_scroll':True,'scroll_before':before['scroll'],'scroll_after':after['scroll'],'moves':moves,'errors':errors})
         print('PASS',json.dumps(results[-1]),flush=True)
         context.close()
-    (OUT/'verified.json').write_text(json.dumps({'provenance':'Local standalone bundles, synthetic data, emulated native CDP touch; not a real phone','browser':browser.version,'results':results},indent=2))
+    (OUT/'verified.json').write_text(json.dumps({'provenance':'Local '+('combined bundle' if os.environ.get('TOUCH_BUNDLE')=='combined' else 'standalone bundles')+', synthetic data, emulated native CDP touch; not a real phone','browser':browser.version,'results':results},indent=2))
     browser.close()
