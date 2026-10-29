@@ -29,7 +29,7 @@ An already installed Chromium can be selected using `BROWSER_EXECUTABLE=/path/to
 
 ## Executed results
 
-- `npm test`: passed — root/card Node batch **511/511**, Energy Node **74/74**, Energy Python **20/20**, History Node **137/137**; zero failures and zero skipped Node tests.
+- `npm test`: passed — root/card Node batch **512/512**, Energy Node **74/74**, Energy Python **20/20**, History Node **137/137**; zero failures and zero skipped Node tests.
 - `npm run check`: passed for the collection and all twelve standalone card bundles.
 - Collection browser smoke: **1/1** passed.
 - House browser QA: **6/6** passed, no page errors.

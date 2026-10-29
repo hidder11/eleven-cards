@@ -95,6 +95,7 @@ class HouseBrowserQA(unittest.TestCase):
         # Controlled Page Visibility seam, not a native HA/background-tab claim.
         page.evaluate("Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'))")
         clock=page.evaluate('card.weather.clock');page.wait_for_timeout(150);self.assertEqual(page.evaluate('card.weather.clock'),clock);self.assertEqual(page.evaluate('card.weather.frame'),0)
+        self.assertEqual(page.evaluate('''() => {let clears=0;const ctx=card.weather.ctx,original=ctx.clearRect;ctx.clearRect=function(...args){clears++;return original.apply(this,args)};for(let i=0;i<100;i++)card.hass={...hass};ctx.clearRect=original;return clears;}'''),0)
         page.evaluate("delete document.hidden;document.dispatchEvent(new Event('visibilitychange'))");page.wait_for_timeout(150);self.assertGreater(page.evaluate('card.weather.clock'),clock)
         page.evaluate('card.hass={...hass,connected:false}');clock=page.evaluate('card.weather.clock');page.wait_for_timeout(100);self.assertEqual(page.evaluate('card.weather.clock'),clock)
         page.evaluate('card.hass=hass');page.wait_for_timeout(150);self.assertGreater(page.evaluate('card.weather.clock'),clock)

@@ -61,7 +61,10 @@ export class HouseWeather{
   if(this.last!==null){const dt=Math.max(0,Math.min((now-this.last)/1000,.05));this.clock+=dt;this.windClock+=dt*houseWindSpeed(this.state.wind*this.state.amount);}this.last=now;this.paint();this.frame=requestAnimationFrame(time=>this.tick(time));
  }
  paint(t=this.clock,windT=this.windClock){
-  const ctx=this.ctx,w=this.w||0,h=this.h||0;if(!ctx)return;ctx.clearRect(0,0,w,h);
+  const ctx=this.ctx,w=this.w||0,h=this.h||0;if(!ctx)return;
+  // Suspended cards retain pixels until visible again; no painting on HA updates.
+  if(this.connected===false||this.host.isConnected===false||this.visible===false||globalThis.document?.hidden)return;
+  ctx.clearRect(0,0,w,h);
   const {mode,amount}=this.state;if(mode==='none'||amount<=0||h<=0||w<=0)return;
   const dark=this.host._hass?.themes?.darkMode===true,r=houseWeatherRandom,snow=mode==='snow',storm=mode==='storm';ctx.save();
   const fade=ctx.createLinearGradient(0,0,0,h);fade.addColorStop(0,'rgba(255,255,255,1)');fade.addColorStop(.8,'rgba(255,255,255,1)');fade.addColorStop(1,'rgba(255,255,255,0)');

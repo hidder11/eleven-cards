@@ -39,6 +39,21 @@ test('unrelated HA updates do not reset the integrated wind clock or animation f
  const w=Object.assign(Object.create(HouseWeather.prototype),{host:{config:{weather_entity:'weather.example'},_hass:{states:{'weather.example':entity('windy',12)}}},frame:9,last:2000,clock:80,windClock:17,active:()=>true,paint(){},resume(){throw Error('must not reset an active frame');}});
  for(let i=0;i<100;i++)w.update();assert.equal(w.frame,9);assert.equal(w.last,2000);assert.equal(w.windClock,17);
 });
+test('hidden, offscreen and detached hosts do not paint on repeated HA updates',()=>{
+ const previousDocument=globalThis.document;
+ globalThis.document={hidden:false};
+ try{
+  for(const suspended of ['hidden','offscreen','detached']){
+   let clears=0,frames=0;
+   globalThis.requestAnimationFrame=()=>++frames;globalThis.cancelAnimationFrame=()=>{};
+   globalThis.document.hidden=suspended==='hidden';
+   const w=Object.assign(Object.create(HouseWeather.prototype),{host:{isConnected:suspended!=='detached',config:{weather_entity:'weather.example'},_hass:{states:{'weather.example':entity('rainy',4)}}},connected:true,visible:suspended!=='offscreen',w:440,h:300,frame:0,last:null,clock:0,windClock:0,ctx:new Proxy(recording().ctx,{get(target,key){return key==='clearRect'?()=>{clears++;}:target[key];}})});
+   w.resume=function(){this.last=null;cancelAnimationFrame(this.frame);this.frame=0;this.paint();if(this.active())this.frame=requestAnimationFrame(()=>{});};
+   for(let i=0;i<100;i++)w.update();
+   assert.equal(clears,0,suspended+' must not repaint');assert.equal(frames,0);
+  }
+ }finally{globalThis.document=previousDocument;}
+});
 function recording(){const commands=[];const ctx=new Proxy({}, {get(o,k){if(k==='createLinearGradient')return (...a)=>{commands.push([k,...a]);return {addColorStop:(...s)=>commands.push(['stop',...s])};};return o[k]||((...a)=>commands.push([k,...a]));},set(o,k,v){commands.push(['set',k,v]);o[k]=v;return true;}});return {commands,ctx};}
 test('actual painter keeps wind opacity independent of intensity, applies 80/20 mask and never writes house compositor',()=>{
  const record=amount=>{const {commands,ctx}=recording();HouseWeather.prototype.paint.call({ctx,w:440,h:300,state:{mode:'wind',amount},host:{_hass:{themes:{darkMode:true}}}},10,12);return commands;};
