@@ -1,6 +1,7 @@
 """Offline browser smoke test; never connects to Home Assistant."""
 from pathlib import Path
 import unittest
+import os
 
 from playwright.sync_api import sync_playwright
 
@@ -10,14 +11,14 @@ CARDS = [
     'eleven-timeline-card', 'eleven-overview-card', 'eleven-bar-chart',
     'eleven-heatmap-card', 'eleven-calendar-card',
     'eleven-car-card', 'eleven-weather-card', 'eleven-energy-flow-card',
-    'eleven-shopping-card',
+    'eleven-shopping-card', 'eleven-house-card',
 ]
 
 
 class CollectionSmokeTest(unittest.TestCase):
     def test_bundle_registers_cards_and_editors_without_errors(self):
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            browser = playwright.chromium.launch(**({'executable_path': os.environ['BROWSER_EXECUTABLE']} if os.getenv('BROWSER_EXECUTABLE') else {}))
             try:
                 page = browser.new_page()
                 errors = []
