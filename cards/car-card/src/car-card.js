@@ -3,7 +3,7 @@ import {uiPrimaryValue} from '../../../shared/ui-primary-value.js';
 import {uiMetric} from '../../../shared/ui-metric.js';
 import {uiEscape} from '../../../shared/ui-button.js';
 import {uiButtonStyles} from '../../../shared/ui-button.js';
-import {uiTabsStyles,bindUITabs} from '../../../shared/ui-tabs.js';
+import {uiTabsStyles,bindUITabs,uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';
 import {evccCardStyles} from './evcc/evcc-styles.js';
 import {EvccCard} from './evcc/evcc-card.js';
 import {CarEditor} from './car-editor.js';
@@ -171,7 +171,7 @@ export class CarCard extends EvccCard {
    .content button[data-entity],.metrics button{min-height:44px}
    .content button:focus-visible{outline-color:var(--accent-color,var(--primary-color))}
    .metrics{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}.metrics dt{font-size:12px;overflow-wrap:break-word}.metrics dd{overflow-wrap:break-word}.metrics button{overflow-wrap:break-word}
-  ${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}</style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
+  ${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
    <h2 class="car-heading">${uiEscape(title)}</h2><div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
     ${offline?`<p class="notice warning" role="status">${nl?'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.':'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>`:''}
     <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}

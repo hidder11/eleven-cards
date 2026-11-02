@@ -1,4 +1,5 @@
 import {cardThemeStyles} from '../../../shared/card-theme.js';
+import {uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';
 import {connectTimeframeSync,disconnectTimeframeSync} from '../../../shared/periods.js';
 import {normalizeConfig, numeric, escapeHtml, loadHeatmapData, buildHeatmap, colorScale, summarizeHeatmap, heatmapColumns} from './heatmap-utils.js';
 import {cardHeader, cardHeaderStyles} from '../../../shared/card-header.js';
@@ -152,7 +153,7 @@ export class HeatmapCard extends HTMLElement {
     const c=this._config??{},hours=c.hours_to_show??672,period=c.aggregation_period??'hour';
     const rows=this._rows.length || Math.ceil(hours/({hour:24,day:168,week:8760,month:8760}[period]))+(period==='hour'||period==='day'?1:2);
     const estimate=150+(rows+(c.show_labels!==false?1:0))*((this._matrixRowHeight??c.cell_height??24)+(c.cell_gap??2));
-    return Math.ceil(Math.max(estimate,this.shadowRoot.querySelector('.content')?.offsetHeight??0)/50);
+    return Math.ceil(Math.max(estimate,this.shadowRoot?.querySelector('.content')?.offsetHeight??0)/50);
   }
   getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(3,Math.ceil(this.getCardSize()*50/64)),min_rows:3};}
   _invalidate(){this._hideTooltip();this._insightOpen=null;this._insightPending=null;this._generation++;this._promise=null;this._data=null;this._rows=[];this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);this._timer=null;}
@@ -370,7 +371,7 @@ export class HeatmapCard extends HTMLElement {
       .status{font-size:12px;line-height:1.5;margin:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
       .retry{font:inherit;color:inherit;background:transparent;border:1px solid var(--divider-color,#ddd);border-radius:5px;min-height:44px;min-width:44px;padding:4px 10px;cursor:pointer}.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3)}
       @media(forced-colors:active){.cell{border:1px solid CanvasText}.missing{border-style:dashed}}
-    ${cardThemeStyles({chartUI:true,plots:'.matrix-well',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup],[data-ui-detail-surface]'})}
+    ${cardThemeStyles({chartUI:true,plots:'.matrix-well',wells:'.insight-sensor[data-ui-detail-surface]',controls:'.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period],.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}${uiBalancedTabsStyles()}
 .content>.card-header{display:flex;align-items:center;gap:4px 8px;margin:0 0 4px;position:relative}
 .content>.card-header h2{font-size:16px;line-height:1.3;font-weight:600;flex:1 1 0;margin:0}
 .chart-tools{margin-inline-start:auto;flex:none}

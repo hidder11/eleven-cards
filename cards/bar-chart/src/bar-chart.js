@@ -37,6 +37,7 @@ export class BarChartEditor extends HistoryGraphEditor {
 }
 export class BarChartCard extends HistoryGraphCard {
  get _calmChartLayout(){return true;}
+ get _legendUnitsInline(){return true;}
  constructor(){super();this._graph=new BarGraph();}
  static async getConfigElement(){
   await super.getConfigElement();
@@ -216,7 +217,6 @@ export class BarChartCard extends HistoryGraphCard {
   if(publish)SharedGraph.publishHover(this,(interval.start+interval.end)/2);
  }
  _defaultTitle(lang){return lang==='nl'?'Staafdiagram':'Bar chart';}
- _historyStyles(){return super._historyStyles()+`.legend:has(>.unit){display:flex;align-items:end;gap:4px 8px}.legend>.unit{margin:0 0 4px}`;}
  _styles(){
   const paints=this._config?.entities.map((id,i)=>`.series-bar[data-entity="${id}"]{fill:${this._appearance(i).stroke};stroke:none}`).join('')??'';
   return super._styles()+`\n${paints}\n.series-bar{stroke:none}.legend i{height:12px;width:8px;border:0!important;border-radius:2px;background:var(--series-color)}

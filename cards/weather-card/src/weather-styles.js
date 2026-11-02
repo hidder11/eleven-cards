@@ -104,9 +104,6 @@ export const weatherCalmStyles=`
 .weather-status[data-condition=true] .ui-metric-title{padding-bottom:2px}
 .weather-status{min-height:44px}
 .ui-metric-unit{font-size:12px;white-space:nowrap}
-[data-ui-tabs]{gap:8px;align-items:stretch;flex-wrap:wrap}
-[data-ui-tabs] [role=tab]{min-height:44px;min-width:88px;padding:10px 12px;border-radius:var(--eleven-material-control-radius,12px);font-size:13px;font-weight:500;line-height:1.4;white-space:normal;overflow-wrap:normal;text-decoration:none}
-[data-ui-tabs] [role=tab][aria-selected=true]:hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
 [data-ui-tabs] [role=tab]:focus-visible,.retry:focus-visible,button[data-ui-metric]:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
 .forecast-list{grid-auto-columns:minmax(max-content,1fr);gap:8px;padding-bottom:4px}
 .forecast-list li{min-width:max-content}

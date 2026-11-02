@@ -7,10 +7,13 @@
 // must keep their functional paint. chartUI is an explicit non-House opt-in
 // for shared chart-control geometry. No behavior or public-token writes.
 function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ // Segmented groups own their paint; descendants pressing must not press the group.
+ if(chartUI)controls=[...controls.split(',').filter(selector=>!['.zoom-controls','.chart-links'].includes(selector.trim())),'.period-default [data-ui-button=surface]'].filter(Boolean).join(',');
  const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
  return `
 ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
 ${well(wells)}
+${wells?`:is(${wells}):is([data-ui-detail-surface]){background:var(--secondary-background-color,#eee)}`:''}
 ${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
 ${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
 ${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
@@ -24,24 +27,41 @@ ${chartUI?`
 .header-actions{width:100%;gap:8px;justify-content:space-between}
 .header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
 .chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>[data-period]{position:relative;flex:none}
 .chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
 .chart-controls>.period-controls::after{display:none}
 .header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
 .period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
-.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
-.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
-.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
-.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
 .period-menu [data-period-option]{min-width:0}
 .period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
 .period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
 .period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
 .legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+${segmentedControlStyles('.chart-controls','.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period]',{first:'.chart-controls>.period-controls>.period-trigger'})}
+${segmentedControlStyles('.zoom-controls','.zoom-controls>[data-zoom]')}
+${segmentedControlStyles('.chart-links','.chart-links>.history-link,.chart-links>.insight-control>.insight-trigger',{last:'.chart-links>.insight-control>.insight-trigger'})}
 @container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
 `:''}
 @media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
 `;
 }
+
+// A single raised group with separate native button press states; no parent :active.
+function segmentedControlStyles(group,buttons,{first=`:is(${group})>:is(button,a):first-child`,last=`:is(${group})>:is(button,a):last-child`,dividers=`:is(${group})>:not(:first-child)`}={}){return `
+${group}{gap:0;align-items:stretch;background:var(--eleven-material-control-background,var(--secondary-background-color,#eee));box-shadow:var(--eleven-material-control-shadow,var(--eleven-surface-shadow,none));border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${buttons}){position:relative;align-self:stretch;height:auto;background:transparent;box-shadow:none;border:0;border-radius:0;min-height:44px;min-width:44px;box-sizing:border-box}
+${first?`:is(${buttons}):is(${first}){border-start-start-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));border-end-start-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));border-end-end-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+:is(${dividers}){position:relative}
+:is(${dividers})::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--divider-color,#ddd) 55%,transparent);pointer-events:none;z-index:1}
+:is(${buttons}):disabled{opacity:1;color:color-mix(in srgb,var(--primary-text-color,#20252b) 35%,transparent);cursor:default}
+:is(${buttons}):not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none}
+:is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
+:is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+@media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
 
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
@@ -2712,7 +2732,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         height: 100%;
       }
       ha-card { overflow: visible; height: 100%; min-height:var(--energy-required-height,0px); }
-      .card-content { display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; height: 100%; padding: 16px 16px 12px; color: var(--primary-text-color); font-weight: var(--font-weight-regular); line-height: var(--line-height-normal); }
+      .card-content { display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; height: 100%; padding: var(--eleven-card-padding,16px); color: var(--primary-text-color); font-weight: var(--font-weight-regular); line-height: var(--line-height-normal); }
       .header { display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:6px; }
       .heading { min-width: 0; }
       h2 { margin: 0; font-size: var(--font-size-title); line-height: var(--line-height-tight); font-weight: var(--font-weight-strong); letter-spacing: -0.01em; }

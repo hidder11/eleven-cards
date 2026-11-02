@@ -318,7 +318,7 @@ export class HistoryGraphCard extends HTMLElement {
     fills:display.flatMap((s,i)=>{const a=this._seriesAppearance(i);if(!visible[i]||!a.show_fill)return [];const fillColor=Array.isArray(a.fill_color)?`rgb(${a.fill_color.join(',')})`:a.fill_color;return [{d:this._area(s.points,x,seriesY(i),i),className:'series-fill',fill:a.fill_mode==='own'?fillColor:this._appearance(i).stroke,opacity:a.fill_opacity,mask:a.fill_fade?'url(#history-fill-fade)':null}];}),
     lines:display.flatMap((s,i)=>visible[i]?[{d:this._line(s.points,Math.max(this._viewEnd,s.points.at(-1)?.t??this._viewEnd),x,seriesY(i),i),className:'series-line',entity:s.id,appearance:this._appearance(i)}]:[]),
    });
-   const legend=uiLegend({items:meta.items.map((item,i)=>{const s=this._series[i],value=this._legendValue(s);const a=this._appearance(i,value);return {id:item.id,visible:visible[i],title:text(visible[i]?'hide_sensor':'show_sensor',lang)+' '+item.name,attrs:{'data-series':item.id},content:`<i style="--series-color:${a.color};border-top-width:${a.width}px;border-top-style:${a.style}"></i><span>${escapeHtml(item.name)}</span><strong>${value===null?text('unavailable',lang):escapeHtml(number(value,lang))}${mixed&&value!==null&&item.unit?` ${escapeHtml(item.unit)}`:''}</strong>`};}),afterContent:mixed?'':`<span class="unit">${escapeHtml(meta.unit)}</span>`});
+   const legend=uiLegend({items:meta.items.map((item,i)=>{const s=this._series[i],value=this._legendValue(s);const a=this._appearance(i,value);return {id:item.id,visible:visible[i],title:text(visible[i]?'hide_sensor':'show_sensor',lang)+' '+item.name,attrs:{'data-series':item.id},content:`<i style="--series-color:${a.color};border-top-width:${a.width}px;border-top-style:${a.style}"></i><span>${escapeHtml(item.name)}</span><strong>${value===null?text('unavailable',lang):escapeHtml(number(value,lang))}${(mixed||this._legendUnitsInline)&&value!==null&&item.unit?` ${escapeHtml(item.unit)}`:''}</strong>`};}),afterContent:mixed||this._legendUnitsInline?'':`<span class="unit">${escapeHtml(meta.unit)}</span>`});
    const missing=meta.items.filter((_,i)=>visible[i]&&!this._series[i].points.some(p=>p.v!==null)).map(s=>s.name);
    content=`${this._config.show_legend?legend:`<div class="data-status">${escapeHtml(mixed?'':meta.unit)}</div>`}${missing.length?`<div class="data-status">${text('partial',lang)} ${escapeHtml(missing.join(', '))}</div>`:''}<div class="chart" style="--axis-column:min(48px, calc((100% - 124px) / ${Math.max(1,extra)}));--axes-right:calc(${extra} * var(--axis-column))" tabindex="0" role="group" aria-label="${text('chart',lang)}">${anyVisible?axes+times:`<div class="empty-visibility" role="status">${escapeHtml(text('no_visible',lang))}</div>`}<div class="plot">${graph}<div class="zoom-selection" hidden></div></div>${this._config.show_hover_line?'<div class="guide" hidden></div>':''}<div class="markers"></div><div class="tooltip" hidden></div><div class="sr-only" aria-live="polite"></div></div>`;
   }
@@ -328,7 +328,9 @@ export class HistoryGraphCard extends HTMLElement {
   // teardown, not a user dismissal; the new chart gets its own blur handler.
   const previousChart=this.shadowRoot.querySelector('.chart');if(previousChart)previousChart.onblur=null;
   const toolsHadFocus=this.shadowRoot.activeElement?.matches?.('.history-tools summary');
-  this.shadowRoot.innerHTML=`<style>${this._styles()}${cardThemeStyles({chartUI:true,plots:'.chart',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}${this._calmChartLayout?this._historyStyles():''}</style><ha-card lang="${lang}"><div class="card-content">${controls}${content}</div></ha-card>`;
+  // Bar shares the information wells; the Default button correction stays History-only.
+  const historyOnly=this.constructor===HistoryGraphCard;
+  this.shadowRoot.innerHTML=`<style>${this._styles()}${cardThemeStyles({chartUI:true,plots:'.chart',wells:'.insight-sensor[data-ui-detail-surface]',controls:'.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period],.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]'+(historyOnly?',.period-default [data-ui-button=surface]':''),surfaces:'.tooltip,[data-ui-popup]'})}${this._calmChartLayout?this._historyStyles():''}${uiBalancedTabsStyles()}</style><ha-card lang="${lang}"><div class="card-content">${controls}${content}</div></ha-card>`;
   this._updateGraphTheme();bindPeriodControls(this);bindChartInsights(this);
   const tools=this.shadowRoot.querySelector('.history-tools');if(tools)tools.onkeydown=e=>{if(e.key==='Escape'&&!e.target.closest?.('[popover]')){e.preventDefault();tools.open=false;tools.querySelector('summary').focus();}};
   if(toolsHadFocus)tools?.querySelector('summary').focus({preventScroll:true});
@@ -494,7 +496,7 @@ export class HistoryGraphCard extends HTMLElement {
  _styles(){return `
  :host{display:block;height:100%;min-width:0;container-type:inline-size;--font-size-meta:11px;--font-size-label:12px;--font-size-title:18px;}
  ha-card{height:100%;display:flex;flex-direction:column;background:var(--ha-card-background,var(--card-background-color));color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
- .card-content{position:relative;display:flex;flex-direction:column;box-sizing:border-box;min-height:0;height:100%;overflow:auto;scrollbar-width:thin;padding:16px 16px 12px;line-height:1.4}
+ .card-content{position:relative;display:flex;flex-direction:column;box-sizing:border-box;min-height:0;height:100%;overflow:auto;scrollbar-width:thin;padding:var(--eleven-card-padding,16px);line-height:1.4}
  ${cardHeaderStyles()}
  ${periodControlsStyles()}
  ${chartInsightStyles()}
@@ -525,3 +527,4 @@ if(!customElements.get('eleven-history-graph-card'))customElements.define('eleve
 window.customCards=window.customCards??[];
 if(!window.customCards.some(card=>card.type==='eleven-history-graph-card'))window.customCards.push({type:'eleven-history-graph-card',name:'Eleven History Graph Card',get description(){return language(frontendHass())==='nl'?'Sensorhistorie met een eigen y-as per eenheid':'Sensor history with an independent y-axis per unit';}});
 import {cardThemeStyles} from '../../../shared/card-theme.js';
+import {uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';

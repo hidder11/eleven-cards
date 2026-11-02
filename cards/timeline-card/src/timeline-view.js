@@ -1,6 +1,6 @@
 import {SharedGraph} from '../../../shared/graph.js';
 import {timelineStateDurations} from './timeline-utils.js';
-import {cardHeader,cardHeaderStyles,cardHeaderIcon} from '../../../shared/card-header.js';
+import {cardHeader,cardHeaderStyles} from '../../../shared/card-header.js';
 import {graphPeriodRange,chooseGraphPeriod,moveGraphPeriod} from '../../../shared/periods.js';
 import {periodControls,periodControlsStyles,bindPeriodControls,disconnectPeriodControls} from '../../../shared/period-controls.js';
 import {chartZoomState,chartDataInformation,captureChartInsights,bindChartInsights,chartInsightStyles} from '../../../shared/chart-insights.js';
@@ -103,7 +103,7 @@ export const TimelineView={
     body+=`<div class="axis">${ticks.map((r,i)=>`<span>${esc(this._time(a+(b-a)*r,spansDates&&(i===0||i===ticks.length-1)))}</span>`).join('')}</div>`;
    }
    body='<div class="timeline-well">'+body+'</div>';
-   if(c.show_legend)body+=`<div class="legend">${[...legend.values()].map(v=>`<span><i style="background:${v.color}"></i>${esc(v.label)}</span>`).join('')}</div>`;
+   if(c.show_legend)body=`<div class="legend">${[...legend.values()].map(v=>`<span><i style="background:${v.color}"></i>${esc(v.label)}</span>`).join('')}</div>`+body;
   }
   this.shadowRoot.innerHTML=`<style>:host{display:block;container-type:inline-size;height:100%;min-width:0;min-height:0}ha-card{display:block;min-height:0;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font-family:inherit;height:100%}
 .content{height:100%;min-height:0;overflow:auto;padding:var(--eleven-card-padding,16px);box-sizing:border-box;position:relative;scrollbar-width:thin}
@@ -134,7 +134,7 @@ ${chartInsightStyles()}
 .summary{margin-top:6px;font-size:11px;color:var(--secondary-text-color,#666);background:transparent;position:relative;overflow-wrap:anywhere}
 .row+.row{margin-top:${c.row_gap}px}
 .row-label{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin-bottom:4px;overflow-wrap:anywhere}
-.row-label[data-series]{display:block;width:100%;min-height:24px;box-sizing:border-box;padding:3px 0;border:0;text-align:start;font-family:inherit;cursor:pointer}
+.row-label[data-series]{display:block;width:100%;min-height:44px;box-sizing:border-box;padding:8px 0;border:0;text-align:start;font-family:inherit;cursor:pointer}
 .row-label[data-series]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}
 .track{position:relative;height:${c.bar_height}px;border-radius:${c.border_radius}px;overflow:hidden;background:var(--divider-color,#ddd)}
 .segment{position:absolute;top:0;height:100%;padding:0;border:0;border-right:1px solid #ffffff24;box-sizing:border-box;cursor:pointer;color:white;min-width:0;overflow:hidden;font-family:inherit;font-size:11px;line-height:14px}
@@ -143,7 +143,7 @@ ${chartInsightStyles()}
 .segment:focus-visible{outline:2px solid var(--primary-text-color,#222);outline-offset:-2px;z-index:1}
 .gap{background-image:repeating-linear-gradient(135deg,transparent,transparent 4px,#ffffff40 4px,#ffffff40 8px)}
 .axis{position:relative;display:block;margin-top:10px;font-size:11px;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums}
-.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:12px;padding-inline:10px;font-size:12px;color:var(--secondary-text-color,#666)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:0 0 12px;padding-inline:10px;font-size:12px;color:var(--secondary-text-color,#666)}
 .legend span{display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
 .legend i,.tooltip i{width:9px;height:9px;border-radius:3px;flex-shrink:0}
 .guide{position:absolute;top:0;bottom:0;border-left:1px solid var(--primary-text-color,#20252b);opacity:.6;pointer-events:none;z-index:2}
@@ -153,9 +153,10 @@ ${SharedGraph.tooltipStyles()}
 .tooltip .tooltip-value{color:var(--primary-text-color,#20252b);font-style:normal}
 .state-limit{font-size:12px;color:var(--error-color,#db4437);overflow-wrap:anywhere;position:relative}
 .message{font-size:14px;color:var(--secondary-text-color,#666);min-height:60px}
-.retry{display:block;margin-top:12px;min-height:44px;background:transparent;color:inherit;border:1px solid var(--divider-color,#ddd);border-radius:6px;padding:8px 12px}[hidden]{display:none}${cardThemeStyles({chartUI:true,plots:'.timeline-well',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}</style><ha-card><div class="content">${controls}${body}</div></ha-card>`;
+.retry{display:block;margin-top:12px;min-height:44px;background:transparent;color:inherit;border:1px solid var(--divider-color,#ddd);border-radius:6px;padding:8px 12px}[hidden]{display:none}${cardThemeStyles({chartUI:true,plots:'.timeline-well',wells:'.insight-sensor[data-ui-detail-surface]',controls:'.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period],.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}${uiBalancedTabsStyles()}</style><ha-card><div class="content">${controls}${body}</div></ha-card>`;
   bindPeriodControls(this);bindChartInsights(this);this._bindTimelineTools(toolsHadFocus);this._layoutTimeline();this._timelineResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._timelineResize=new ResizeObserver(()=>this._layoutTimeline());const well=this.shadowRoot.querySelector('.timeline-well');if(well)this._timelineResize.observe(well);}
   const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();this.shadowRoot.querySelectorAll('[data-zoom]').forEach(button=>button.onclick=()=>this._zoom({in:.5,out:2,reset:0}[button.dataset.zoom]));this._bindInteractions();const renderedChart=this.shadowRoot.querySelector('.chart'),restoreTooltip=()=>{if(this.shadowRoot.querySelector('.chart')===renderedChart){SharedGraph.restoreHover(this);if(this._cursor!=null)this._showTooltip(this._cursor,false);}};const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(restoreTooltip);else restoreTooltip();
  }
 };
 import {cardThemeStyles} from '../../../shared/card-theme.js';
+import {uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';

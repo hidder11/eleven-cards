@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="nl">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+ <title>Eleven Cards — Weerkaart-tabbladen</title>
+ <style>
+  *{box-sizing:border-box}body{margin:0;background:var(--primary-background-color,#dfe4ed);color:var(--primary-text-color,#252b3e);font:14px/1.5 system-ui,sans-serif}
+  .page{max-width:1280px;margin:auto;padding:24px clamp(14px,3vw,32px)}header{display:flex;flex-wrap:wrap;align-items:start;justify-content:space-between;gap:16px;margin-bottom:24px}h1{font-size:22px;margin:0 0 8px}header p{margin:0;max-width:70ch;color:var(--secondary-text-color)}nav{display:flex;align-items:center;flex-wrap:wrap;gap:8px}button,select,a{font:inherit;color:inherit}nav button,nav select,nav a{min-height:44px;padding:10px 12px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);text-decoration:none}nav button{cursor:pointer}nav label{display:flex;align-items:center;gap:8px}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent-color);outline-offset:3px}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));gap:24px;align-items:start}article{min-width:0}h2{font-size:16px;font-weight:600;margin:0 0 4px}article>p{font-size:13px;color:var(--secondary-text-color);margin:0 0 12px;min-height:39px}eleven-tab-example{display:block;min-width:0}footer{margin-top:24px;font-size:12px;color:var(--secondary-text-color)}
+  .variants-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));gap:24px;align-items:start}.previous{margin-top:32px}.previous>summary{cursor:pointer;font-weight:600;min-height:44px;padding:10px 0}.previous>.variants-grid{margin-top:16px}.previous>summary:focus-visible{outline:2px solid var(--accent-color);outline-offset:3px}
+ </style>
+</head>
+<body>
+ <div class="page">
+  <header>
+   <div><h1>Optie 2A met verschillende paddings</h1><p>Dezelfde fijne lijn en gelijke tabbreedtes, met zes varianten in de ruimte boven en onder de labels. Links en rechts blijft de padding 8 px. De klikhoogte is minimaal 44 px.</p></div>
+   <nav aria-label="Previewinstellingen"><a href="./">Alle kaarten</a><label>Stijl <select id="theme"><option value="material">Eleven Material</option><option value="native">Home Assistant</option></select></label><button id="mode" type="button" aria-pressed="false">Donker thema</button></nav>
+  </header>
+  <main>
+   <article><h2>2A-1. Compact</h2><p>Compact, met het label 1 px lager voor optisch gelijke ruimte boven en tot de lijn.</p><eleven-weather-demo-padding-compact data-weather-demo="padding-compact"></eleven-weather-demo-padding-compact></article>
+   <article><h2>2A-2. Gebalanceerd</h2><p>12 px boven en 12 px onder. Optie 2A met gelijke padding aan beide kanten.</p><eleven-weather-demo-padding-original data-weather-demo="padding-original"></eleven-weather-demo-padding-original></article>
+   <article><h2>2A-3. Ruimer</h2><p>14 px boven en 14 px onder. Gelijke ruimte aan beide kanten van het label.</p><eleven-weather-demo-padding-roomy data-weather-demo="padding-roomy"></eleven-weather-demo-padding-roomy></article>
+   <article><h2>2A-4. Veel lucht</h2><p>18 px boven en 18 px onder. Een hogere tab met meer ademruimte.</p><eleven-weather-demo-padding-airy data-weather-demo="padding-airy"></eleven-weather-demo-padding-airy></article>
+   <article><h2>2A-5. Meer ruimte tot de lijn</h2><p>6 px boven en 18 px onder. Het label staat verder boven de onderstreping.</p><eleven-weather-demo-padding-lower data-weather-demo="padding-lower"></eleven-weather-demo-padding-lower></article>
+   <article><h2>2A-6. Dichter bij de lijn</h2><p>18 px boven en 6 px onder. Het label staat dichter bij de onderstreping.</p><eleven-weather-demo-padding-upper data-weather-demo="padding-upper"></eleven-weather-demo-padding-upper></article>
+  </main>
+  <details class="previous"><summary>De tien varianten op optie 2 vergelijken</summary><div class="variants-grid">
+   <article><h2>2A. Fijne lijn</h2><p>Een rustige onderstreping van 2 px over de volle tabbreedte.</p><eleven-weather-demo-underline-fine data-weather-demo="underline-fine"></eleven-weather-demo-underline-fine></article>
+   <article><h2>2B. Stevige lijn</h2><p>Een nadrukkelijke accentlijn van 4 px, met dezelfde rustige labels.</p><eleven-weather-demo-underline-bold data-weather-demo="underline-bold"></eleven-weather-demo-underline-bold></article>
+   <article><h2>2C. Afgeronde lijn</h2><p>Een iets kortere lijn met afgeronde uiteinden en gelijke marges aan beide kanten.</p><eleven-weather-demo-underline-round data-weather-demo="underline-round"></eleven-weather-demo-underline-round></article>
+   <article><h2>2D. Tabs op tekstbreedte</h2><p>De tabs staan compact links. De onderstreping volgt de breedte van de gekozen tab.</p><eleven-weather-demo-underline-natural data-weather-demo="underline-natural"></eleven-weather-demo-underline-natural></article>
+   <article><h2>2E. Korte markering</h2><p>Een korte accentlijn midden onder het label, zonder doorlopende basislijn.</p><eleven-weather-demo-underline-short data-weather-demo="underline-short"></eleven-weather-demo-underline-short></article>
+   <article><h2>2F. Zachte kleur achter de selectie</h2><p>De heldere lijn met een lichte accentkleur achter de actieve tab.</p><eleven-weather-demo-underline-wash data-weather-demo="underline-wash"></eleven-weather-demo-underline-wash></article>
+   <article><h2>2G. Sterkere tekst</h2><p>Een groter en zwaarder actief label, gecombineerd met de accentlijn.</p><eleven-weather-demo-underline-type data-weather-demo="underline-type"></eleven-weather-demo-underline-type></article>
+   <article><h2>2H. Icoon naast het label</h2><p>Een klein klok- of kalendericoon naast de tekst, met een onderstreping onder de hele tab.</p><eleven-weather-demo-underline-icons data-weather-demo="underline-icons"></eleven-weather-demo-underline-icons></article>
+   <article><h2>2I. Dubbele lijn</h2><p>Twee fijne accentlijnen geven de actieve tab een andere nadruk.</p><eleven-weather-demo-underline-double data-weather-demo="underline-double"></eleven-weather-demo-underline-double></article>
+   <article><h2>2J. Links uitgelijnd</h2><p>Gelijke tabvakken met links uitgelijnde tekst en een korte lijn aan dezelfde kant.</p><eleven-weather-demo-underline-start data-weather-demo="underline-start"></eleven-weather-demo-underline-start></article>
+  </div></details>
+  <details class="previous"><summary>De tien oorspronkelijke richtingen vergelijken</summary><div class="variants-grid">
+   <article><h2>1. Schuifschakelaar</h2><p>Eén afgeronde strook met een duidelijk gevuld actief segment.</p><eleven-weather-demo-fresh-switch data-weather-demo="fresh-switch"></eleven-weather-demo-fresh-switch></article>
+   <article><h2>2. Heldere onderstreping</h2><p>Vlakke teksttabs met een stevige accentlijn onder de actieve keuze.</p><eleven-weather-demo-fresh-underline data-weather-demo="fresh-underline"></eleven-weather-demo-fresh-underline></article>
+   <article><h2>3. Navigatie naast de inhoud</h2><p>De keuzes staan links onder elkaar; de verwachting staat er direct naast.</p><eleven-weather-demo-fresh-sidebar data-weather-demo="fresh-sidebar"></eleven-weather-demo-fresh-sidebar></article>
+   <article><h2>4. Losse pillen</h2><p>Twee compacte afgeronde keuzes met een omlijnde en licht gekleurde selectie.</p><eleven-weather-demo-fresh-pills data-weather-demo="fresh-pills"></eleven-weather-demo-fresh-pills></article>
+   <article><h2>5. Dossierlippen</h2><p>Herkenbare mapvormen boven een doorlopende lijn. De actieve lip sluit aan op de inhoud.</p><eleven-weather-demo-fresh-folder data-weather-demo="fresh-folder"></eleven-weather-demo-fresh-folder></article>
+   <article><h2>6. Icoontegels</h2><p>Klok en kalender boven het label; de actieve tegel krijgt een zachte kleur.</p><eleven-weather-demo-fresh-icons data-weather-demo="fresh-icons"></eleven-weather-demo-fresh-icons></article>
+   <article><h2>7. Keuzekaarten</h2><p>Twee duidelijke keuzevakken met een rond selectiemerk naast de tekst.</p><eleven-weather-demo-fresh-cards data-weather-demo="fresh-cards"></eleven-weather-demo-fresh-cards></article>
+   <article><h2>8. Typografie als selectie</h2><p>Geen vlakken of contouren: het actieve label wordt groter en nadrukkelijker.</p><eleven-weather-demo-fresh-type data-weather-demo="fresh-type"></eleven-weather-demo-fresh-type></article>
+   <article><h2>9. Menurijen</h2><p>Twee rijen over de volle breedte, met een pijl en een gekleurde actieve rij.</p><eleven-weather-demo-fresh-menu data-weather-demo="fresh-menu"></eleven-weather-demo-fresh-menu></article>
+   <article><h2>10. Compacte keuzelijst</h2><p>Een alternatief voor tabbladen: kies Per uur of Per dag via een gewone keuzelijst.</p><eleven-weather-demo-fresh-select data-weather-demo="fresh-select"></eleven-weather-demo-fresh-select></article>
+  </div></details>
+  <details class="previous"><summary>Eerdere studies (archief)</summary><div class="variants-grid">
+   <article><h2>W4-5A. Evenwichtige inset</h2><p>De oorspronkelijke W4-5-schaduw uit het thema, nu met een duidelijkere contour van 2 px.</p><eleven-weather-demo-deep-balanced data-weather-demo="deep-balanced"></eleven-weather-demo-deep-balanced></article>
+   <article><h2>W4-5B. Strakke bovenrand</h2><p>Een kortere, gerichte schaduw langs de bovenkant. Minder zachte spreiding in het midden.</p><eleven-weather-demo-deep-top data-weather-demo="deep-top"></eleven-weather-demo-deep-top></article>
+   <article><h2>W4-5C. Zachte zijwanden</h2><p>De inset volgt de bovenkant en beide zijkanten, voor een gelijkmatige uitsparing.</p><eleven-weather-demo-deep-sides data-weather-demo="deep-sides"></eleven-weather-demo-deep-sides></article>
+   <article><h2>W4-5D. Brede zachte inset</h2><p>Een bredere schaduw met meer vervaging: zachter van rand en ruimer van diepte.</p><eleven-weather-demo-deep-soft data-weather-demo="deep-soft"></eleven-weather-demo-deep-soft></article>
+   <article><h2>W4-5E. Gelaagde diepte</h2><p>Een korte randschaduw met een tweede, ruimere inset en een subtiele lichte tegenrand.</p><eleven-weather-demo-deep-layered data-weather-demo="deep-layered"></eleven-weather-demo-deep-layered></article>
+  </div>
+  <details class="previous"><summary>De vijf eerdere W4-verfijningen vergelijken</summary><div class="variants-grid">
+   <article><h2>W4-1. Dezelfde inset</h2><p>De fijne lijn in de informatiekleur en exact dezelfde inset-schaduw als de informatievlakken.</p><eleven-weather-demo-well-exact data-weather-demo="well-exact"></eleven-weather-demo-well-exact></article>
+   <article><h2>W4-2. Duidelijkere lijn</h2><p>Dezelfde inset, met een lijn van 2 px voor een iets zichtbaardere aansluiting.</p><eleven-weather-demo-well-line data-weather-demo="well-line"></eleven-weather-demo-well-line></article>
+   <article><h2>W4-3. Compact links</h2><p>Tabs op tekstbreedte met dezelfde inset. De lijn in de informatiekleur loopt daarnaast door.</p><eleven-weather-demo-well-compact data-weather-demo="well-compact"></eleven-weather-demo-well-compact></article>
+   <article><h2>W4-4. Meer ademruimte</h2><p>Iets hogere tabs met meer ruimte rond de labels; dezelfde fijne lijn en informatie-inset.</p><eleven-weather-demo-well-airy data-weather-demo="well-airy"></eleven-weather-demo-well-airy></article>
+   <article><h2>W4-5. Iets diepere selectie</h2><p>Dezelfde lijnkleur, met de iets diepere inset uit het bestaande selectierecept van het thema.</p><eleven-weather-demo-well-deep data-weather-demo="well-deep"></eleven-weather-demo-well-deep></article>
+  </div></details>
+  <details class="previous"><summary>De oorspronkelijke vijf Weer-varianten vergelijken</summary><div class="variants-grid">
+   <article><h2>W1. Rustiger en lager</h2><p>De huidige contour, met iets lagere tabs en kleinere labels.</p><eleven-weather-demo-quiet data-weather-demo="quiet"></eleven-weather-demo-quiet></article>
+   <article><h2>W2. Compact links</h2><p>Tabs op tekstbreedte, links gegroepeerd. De lijn loopt over de overige breedte door.</p><eleven-weather-demo-compact data-weather-demo="compact"></eleven-weather-demo-compact></article>
+   <article><h2>W3. Icoon en tekst</h2><p>Een klein klok- of kalendericoon naast het label onderscheidt de twee verwachtingen.</p><eleven-weather-demo-icons data-weather-demo="icons"></eleven-weather-demo-icons></article>
+   <article><h2>W4. Zachte inset</h2><p>De huidige aansluiting met een subtiele inset boven in de actieve tab.</p><eleven-weather-demo-inset data-weather-demo="inset"></eleven-weather-demo-inset></article>
+   <article><h2>W5. Gecentreerde groep</h2><p>Twee compactere tabs in het midden, met gelijke breedtes en wat meer ruimte ernaast.</p><eleven-weather-demo-centered data-weather-demo="centered"></eleven-weather-demo-centered></article>
+  </div></details>
+  <details class="previous"><summary>De tien eerdere varianten op A</summary><div class="variants-grid">
+   <article><h2>A3. Klassiek open</h2><p>Gelijke tabbreedtes, een dunne neutrale contour en ronde bovenhoeken van 12 px.</p><eleven-tab-example variant="joined-a-set-classic"></eleven-tab-example></article>
+   <article><h2>A4. Strakkere hoeken</h2><p>Dezelfde rustige contour met kleinere bovenhoeken van 6 px.</p><eleven-tab-example variant="joined-a-set-precise"></eleven-tab-example></article>
+   <article><h2>A5. Ronde boog</h2><p>Een iets hogere tab met zachte bovenhoeken van 18 px.</p><eleven-tab-example variant="joined-a-set-arch"></eleven-tab-example></article>
+   <article><h2>A6. Bijna recht</h2><p>Nauwelijks afgeronde bovenhoeken voor een strakkere dossierstijl.</p><eleven-tab-example variant="joined-a-set-square"></eleven-tab-example></article>
+   <article><h2>A7. Compact</h2><p>Lagere tabs met kleinere tekst en een klikhoogte van minimaal 44 px.</p><eleven-tab-example variant="joined-a-set-compact"></eleven-tab-example></article>
+   <article><h2>A8. Meer ruimte</h2><p>Hogere tabs en wat meer afstand tot de inhoud, met een dunne contour.</p><eleven-tab-example variant="joined-a-set-airy"></eleven-tab-example></article>
+   <article><h2>A9. Op tekstbreedte</h2><p>Compacte tabbreedtes die de labels volgen. De lijn loopt naast de tabgroep door.</p><eleven-tab-example variant="joined-a-set-natural"></eleven-tab-example></article>
+   <article><h2>A10. Links uitgelijnd</h2><p>Drie gelijke tabvakken met de labels op een vaste afstand van de linkerrand.</p><eleven-tab-example variant="joined-a-set-start"></eleven-tab-example></article>
+   <article><h2>A11. Zachte accentcontour</h2><p>De dunne lijn en actieve contour krijgen een subtiele tint van de bestaande accentkleur.</p><eleven-tab-example variant="joined-a-set-accent"></eleven-tab-example></article>
+   <article><h2>A12. Duidelijkere contour</h2><p>Een iets stevigere boven- en zijrand, met neutrale tekst in de actieve tab.</p><eleven-tab-example variant="joined-a-set-defined"></eleven-tab-example></article>
+  </div></details>
+  <details class="previous"><summary>De vijf eerdere varianten op A en C</summary><div class="variants-grid">
+   <article><h2>A1. Fijne contour</h2><p>De open aansluiting van A met iets strakkere bovenhoeken en een rustigere, neutrale rand.</p><eleven-tab-example variant="joined-a-fine"></eleven-tab-example></article>
+   <article><h2>A2. Ruimere boog</h2><p>Een iets hogere tab met rondere bovenhoeken en meer lucht boven de inhoud. De lijn blijft dun.</p><eleven-tab-example variant="joined-a-arc"></eleven-tab-example></article>
+   <article><h2>C1. Ondiepe uitsparing</h2><p>Een zachtere versie van C: minder accent in de rand en slechts een lichte inset bovenin.</p><eleven-tab-example variant="joined-c-shallow"></eleven-tab-example></article>
+   <article><h2>C2. Zachte zijwanden</h2><p>De inset loopt subtiel langs de bovenkant en zijkanten. De onderkant blijft open naar het inhoudsvlak.</p><eleven-tab-example variant="joined-c-sides"></eleven-tab-example></article>
+   <article><h2>AC1. Rustige balans</h2><p>De neutrale contour van A met de lichte diepte van C. Een klein accent boven het actieve label maakt de selectie herkenbaar.</p><eleven-tab-example variant="joined-ac-balanced"></eleven-tab-example></article>
+  </div></details>
+  <details class="previous"><summary>De oorspronkelijke A, B, C en D vergelijken</summary><div class="variants-grid">
+   <article><h2>A. Open tab</h2><p>Een dunne omlijning met afgeronde bovenhoeken. De lijn loopt door naast de actieve tab en is eronder open.</p><eleven-tab-example variant="joined-line"></eleven-tab-example></article>
+   <article><h2>B. Verbonden paneel</h2><p>De actieve tab en het inhoudsvlak hebben dezelfde zachte achtergrond en vormen samen één geheel.</p><eleven-tab-example variant="joined-panel"></eleven-tab-example></article>
+   <article><h2>C. Zachte uitsparing</h2><p>Dezelfde open aansluiting, met een lichte accentkleur in de lijn en een subtiele inset boven in de actieve tab.</p><eleven-tab-example variant="joined-soft"></eleven-tab-example></article>
+   <article><h2>D. Compacte dossierlip</h2><p>Smallere tabs op tekstbreedte met rustigere hoeken. De lijn loopt naast de tabgroep verder.</p><eleven-tab-example variant="joined-compact"></eleven-tab-example></article>
+  </div></details>
+  <details class="previous"><summary>De vijf eerdere verfijningen van 4A</summary><div class="variants-grid">
+   <article><h2>4A-1. Evenwichtig</h2><p>Dicht bij 4A: iets meer tussenruimte, zorgvuldig gecentreerde tekst en dezelfde afgeronde hoeken als de gewone knoppen.</p><eleven-tab-example variant="refined-balanced"></eleven-tab-example></article>
+   <article><h2>4A-2. Ruimer ritme</h2><p>Iets hogere tabs en meer ademruimte voor de inhoud. De rustige scheidingslijn houdt beide delen bij elkaar.</p><eleven-tab-example variant="refined-airy"></eleven-tab-example></article>
+   <article><h2>4A-3. Compact en stil</h2><p>Een compactere kop met kleinere tekst en minder witruimte. De horizontale scheidingslijn vervalt.</p><eleven-tab-example variant="refined-compact"></eleven-tab-example></article>
+   <article><h2>4A-4. Zachte scheiding</h2><p>Een zachtere, iets terugliggende scheidingslijn en meer afstand rond de tabgroep. De tablabels behouden hun vaste positie.</p><eleven-tab-example variant="refined-divider"></eleven-tab-example></article>
+   <article><h2>4A-5. Sterkere teksthiërarchie</h2><p>Lichtere inactieve labels en een nadrukkelijker geselecteerde tab. Zonder scheidingslijn, met een wat grotere afstand tot de inhoud.</p><eleven-tab-example variant="refined-type"></eleven-tab-example></article>
+  </div></details>
+  <details class="previous"><summary>4A en de vorige zes varianten vergelijken</summary><div class="variants-grid">
+   <article><h2>1A. Gelijke vakken, gecentreerd</h2><p>Drie even brede tabs, gecentreerde tekst en gelijke ruimte rondom. De strook en inhoud liggen op dezelfde buitenlijnen.</p><eleven-tab-example variant="rail-equal"></eleven-tab-example></article>
+   <article><h2>1B. Gelijke vakken, links uitgelijnd</h2><p>Dezelfde strook, met elk label op een vaste afstand van de linkerrand van zijn vak.</p><eleven-tab-example variant="rail-start"></eleven-tab-example></article>
+   <article><h2>1C. Aaneengesloten segmenten</h2><p>Een strakkere strook zonder tussenruimte. Subtiele verticale scheidingen houden de drie gelijke delen herkenbaar.</p><eleven-tab-example variant="rail-segments"></eleven-tab-example></article>
+   <article><h2>4A. Teksttabs over de volle breedte</h2><p>Drie gelijke kolommen zonder achtergrondstrook. Alleen de actieve tab krijgt een ondiepe uitsparing.</p><eleven-tab-example variant="text-equal"></eleven-tab-example></article>
+   <article><h2>4B. Compacte tekstgroep</h2><p>Tabs op tekstbreedte, gegroepeerd aan de linkerkant. Minder afstand en zachtere hoeken dan het oorspronkelijke voorbeeld.</p><eleven-tab-example variant="text-compact"></eleven-tab-example></article>
+   <article><h2>4C. Teksttabs met scheidingen</h2><p>Gelijke teksttabs met kleine verticale scheidingen. Geen achtergrondstrook en geen horizontale lijn boven de inhoud.</p><eleven-tab-example variant="text-divided"></eleven-tab-example></article>
+  </div></details>
+  <details class="previous"><summary>Eerdere vijf voorstellen ter vergelijking</summary><div class="variants-grid">
+   <article><h2>1. Verbonden strook</h2><p>Een gezamenlijke rail maakt de drie tabs herkenbaar als één navigatiegroep.</p><eleven-tab-example variant="rail"></eleven-tab-example></article>
+   <article><h2>2. Dossierlippen</h2><p>Afgeronde bovenhoeken en een aansluiting op het paneel geven de tabs een herkenbare mapvorm.</p><eleven-tab-example variant="folder"></eleven-tab-example></article>
+   <article><h2>3. Paneelkop</h2><p>Een doorlopende kop met gelijke segmenten verbindt de navigatie direct met de inhoud.</p><eleven-tab-example variant="header"></eleven-tab-example></article>
+   <article><h2>4. Compacte teksttabs</h2><p>Rustige tekst boven de inhoud; alleen de actieve tab krijgt de bestaande verdiepte selectie.</p><eleven-tab-example variant="text"></eleven-tab-example></article>
+   <article><h2>5. Icoon en tekst</h2><p>Kleine categorie-iconen en een gedeelde kop onderscheiden de tabs van de actieknoppen.</p><eleven-tab-example variant="icons"></eleven-tab-example></article>
+  </div></details>
+  </details>
+  <footer>Ontwerpvoorstellen met het bestaande gedeelde tabbladcomponent. 2A-1 is doorgevoerd in de goedgekeurde kaarten; de overige varianten blijven voorstellen. Voorbeeldbediening; geen verbinding met Home Assistant.</footer>
+ </div>
+ <script src="ha-stub.js"></script>
+ <script src="../dist/eleven-cards.js"></script>
+ <script type="module" src="tab-variants.js"></script>
+</body>
+</html>

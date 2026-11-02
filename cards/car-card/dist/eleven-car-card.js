@@ -6,10 +6,13 @@
 // must keep their functional paint. chartUI is an explicit non-House opt-in
 // for shared chart-control geometry. No behavior or public-token writes.
 function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ // Segmented groups own their paint; descendants pressing must not press the group.
+ if(chartUI)controls=[...controls.split(',').filter(selector=>!['.zoom-controls','.chart-links'].includes(selector.trim())),'.period-default [data-ui-button=surface]'].filter(Boolean).join(',');
  const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
  return `
 ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
 ${well(wells)}
+${wells?`:is(${wells}):is([data-ui-detail-surface]){background:var(--secondary-background-color,#eee)}`:''}
 ${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
 ${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
 ${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
@@ -23,24 +26,41 @@ ${chartUI?`
 .header-actions{width:100%;gap:8px;justify-content:space-between}
 .header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
 .chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>[data-period]{position:relative;flex:none}
 .chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
 .chart-controls>.period-controls::after{display:none}
 .header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
 .period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
-.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
-.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
-.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
-.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
 .period-menu [data-period-option]{min-width:0}
 .period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
 .period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
 .period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
 .legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+${segmentedControlStyles('.chart-controls','.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period]',{first:'.chart-controls>.period-controls>.period-trigger'})}
+${segmentedControlStyles('.zoom-controls','.zoom-controls>[data-zoom]')}
+${segmentedControlStyles('.chart-links','.chart-links>.history-link,.chart-links>.insight-control>.insight-trigger',{last:'.chart-links>.insight-control>.insight-trigger'})}
 @container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
 `:''}
 @media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
 `;
 }
+
+// A single raised group with separate native button press states; no parent :active.
+function segmentedControlStyles(group,buttons,{first=`:is(${group})>:is(button,a):first-child`,last=`:is(${group})>:is(button,a):last-child`,dividers=`:is(${group})>:not(:first-child)`}={}){return `
+${group}{gap:0;align-items:stretch;background:var(--eleven-material-control-background,var(--secondary-background-color,#eee));box-shadow:var(--eleven-material-control-shadow,var(--eleven-surface-shadow,none));border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${buttons}){position:relative;align-self:stretch;height:auto;background:transparent;box-shadow:none;border:0;border-radius:0;min-height:44px;min-width:44px;box-sizing:border-box}
+${first?`:is(${buttons}):is(${first}){border-start-start-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));border-end-start-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));border-end-end-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+:is(${dividers}){position:relative}
+:is(${dividers})::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--divider-color,#ddd) 55%,transparent);pointer-events:none;z-index:1}
+:is(${buttons}):disabled{opacity:1;color:color-mix(in srgb,var(--primary-text-color,#20252b) 35%,transparent);cursor:default}
+:is(${buttons}):not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none}
+:is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
+:is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+@media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
 
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
@@ -94,7 +114,7 @@ function uiPrimaryValueStyles(){return `
 [data-ui-primary-value] button.primary-number{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}[data-ui-primary-value] button:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px;border-radius:3px}
 [data-ui-primary-value] .primary-value small{display:block;margin:8px 0 0;font-size:var(--ui-primary-unit-size,16px);line-height:1.4;font-weight:400;letter-spacing:-.03em;color:var(--secondary-text-color,#626a78)}
 [data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid color-mix(in srgb,var(--_primary-tone) 55%,transparent);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
-[data-ui-primary-value] button.primary-label{display:block;max-width:100%;min-height:0;margin-bottom:0;padding-block:0;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
+[data-ui-primary-value] button.primary-label{display:flex;align-items:center;box-sizing:border-box;max-width:100%;min-width:44px;min-height:44px;margin-bottom:0;padding-block:6px;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
 [data-ui-primary-value][data-density=compact] .primary-value{font-size:var(--ui-primary-size,46px)}
 [data-ui-primary-value][data-density=compact] .primary-value small{font-size:var(--ui-primary-unit-size,14px);margin-top:5px}
 `;}
@@ -154,7 +174,11 @@ function bindUITabs({tabs,panels,onSelect=()=>{}}){
   const target=buttons.find(tab=>tab.dataset.uiTab===value&&!tab.disabled);if(!target)return false;
   for(const tab of buttons){const active=tab===target;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
   for(const panel of sections)panel.hidden=panel.dataset.uiTabPanel!==value;
-  if(focus)target.focus({preventScroll:true});if(notify)onSelect(value,target);return true;
+  if(focus)target.focus({preventScroll:true});
+  // Keep a selected tab visible within a scrolling strip without moving the page.
+  const list=target.parentElement;
+  if(list&&list.scrollWidth>list.clientWidth&&target.getBoundingClientRect){const box=target.getBoundingClientRect(),view=list.getBoundingClientRect();list.scrollLeft+=box.left<view.left?box.left-view.left:box.right>view.right?box.right-view.right:0;}
+  if(notify)onSelect(value,target);return true;
  };
  for(const tab of buttons){
   const click=()=>select(tab.dataset.uiTab,{focus:true});
@@ -180,6 +204,24 @@ function uiTabsStyles(){return `
 [data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
 [data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
+
+// Approved 2A-1 appearance. Retain the existing helper name for consumers.
+function uiBalancedTabsStyles(){
+ const strip=':host [data-ui-tabs][role=tablist]';
+ const tab=strip+' [role=tab][data-ui-tab]';
+ return `
+${strip}{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:stretch;gap:0;width:100%;box-sizing:border-box;padding:0;border:0;border-bottom:1px solid var(--divider-color,#ddd);background:transparent;box-shadow:none;overflow:visible}
+${strip}:has(>[role=tab]:nth-child(4)){display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+${strip}::-webkit-scrollbar{display:none}
+${strip}:has(>[role=tab]:nth-child(4)) [role=tab][data-ui-tab]{flex:1 0 88px}
+${tab}{display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:44px;max-width:none;min-height:44px;height:auto;margin:0 0 -1px;padding:7px 8px 5px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--secondary-text-color,#666);font-family:inherit;font-size:13px;font-weight:500;line-height:1.3;text-align:center;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;text-decoration:none;transform:none}
+${tab}:not(:disabled):hover{color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none;transform:none}
+${tab}[aria-selected=true],${tab}[aria-selected=true]:not(:disabled):hover{color:var(--primary-text-color,#20252b);font-weight:650;background:transparent;box-shadow:none;border-bottom:2px solid var(--accent-color,var(--primary-color));text-decoration:none;transform:none}
+${tab}:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+${strip}~[data-ui-tab-panel]{border:0;padding-block-start:16px;background:transparent}
+@media(forced-colors:active){${strip}{border-bottom-color:CanvasText}${tab}[aria-selected=true]{border-bottom-color:Highlight;outline:1px solid Highlight;outline-offset:-2px;box-shadow:none}${tab}:focus-visible{outline:2px solid CanvasText;outline-offset:-4px}}
+`;
+}
 
 
 const entityTabText=value=>typeof value==='string'?value.trim():'';
@@ -1196,9 +1238,8 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content[data-density=compact] .car-stage{min-height:0}
 .content[data-density=compact] .car-stage .picture{height:108px}
 /* Opt in locally; shared tab defaults remain protected for House. */
-[data-ui-tabs]{border-bottom:0}
-[data-ui-tabs] [role=tab],.mode-options [data-ui-button]{min-height:44px;border-bottom:0;text-decoration:none}
-[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true],.mode-options button[aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
+.mode-options [data-ui-button]{min-height:44px;border-bottom:0;text-decoration:none}
+.mode-options [aria-pressed=true],.mode-options button[aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
 /* EVCC-only refinement: regular Auto keeps its approved renderer and paint. */
 .content[data-evcc]{--ui-primary-size:44px;--ui-primary-size-compact:44px}
 .content[data-evcc] h2{font-size:16px;font-weight:600}
@@ -1235,11 +1276,9 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content[data-evcc] .evcc-panel{padding-top:12px}
 .content[data-evcc] .evcc-tabs{margin-top:16px}
 .content[data-evcc] .mode-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,64px),1fr));gap:8px}
-.content[data-evcc] [data-ui-tabs]{gap:8px;flex-wrap:wrap}
-.content[data-evcc] [data-ui-tabs] [role=tab]{flex:1 1 72px;min-width:0;white-space:normal;overflow-wrap:normal;padding:8px}
 .content[data-evcc] button:focus-visible,.content[data-evcc] input:focus-visible,.content[data-evcc] .plot:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
 .content[data-evcc] .mode-options [data-ui-button]{padding:8px 4px;font-size:13px}
-.content[data-evcc] [data-ui-tabs] [role=tab][aria-selected=true],.content[data-evcc] [data-ui-tabs] [role=tab][aria-selected=true]:hover,.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true],.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));border-bottom:0;text-decoration:none;box-shadow:var(--eleven-material-selection-well,none)}
+.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true],.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));border-bottom:0;text-decoration:none;box-shadow:var(--eleven-material-selection-well,none)}
 .content[data-evcc] input[data-solar-share]{min-height:44px;accent-color:var(--accent-color,var(--primary-color))}
 .content[data-evcc] input[data-solar-share]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(var(--accent-color,var(--primary-color)),var(--accent-color,var(--primary-color))) left/var(--solar-position) 100% no-repeat,var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}
 .content[data-evcc] input[data-solar-share]::-moz-range-track{height:8px;border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}
@@ -1414,7 +1453,7 @@ class EvccCard extends HTMLElement {
  }
  _render() {
   if (!this._config) return;
-  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
+  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
   const hass = this._hass, states = hass.states ?? {}, dutch = evccDutch(hass), config = this._config;
   this._ensureClock();
   const previousSolar = this._entities?.solar_share, previousPower = this._entities?.power;
@@ -1439,7 +1478,7 @@ class EvccCard extends HTMLElement {
   const soc = evccPercent(states[this._entities.soc]), target = evccPercent(states[this._entities.target_soc]);
   const image = this._vehicleImage ? this._vehicleImage() : evccImageUrl(states[config.image_entity], hass);
   const imageWarning = dutch ? 'Autoafbeelding niet beschikbaar' : 'Vehicle image unavailable';
-  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-evcc data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
+  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-evcc data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
    <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene"><div class="gallery-top">${!configured ? `<header><h2>${uiEscape(this._title(dutch))}</h2></header>` : ''}
    ${offline ? `<p class="notice warning" role="status">${dutch ? 'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.' : 'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>` : ''}
    ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${(this._hasVehicleImage?.()??config.image_entity) ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? `<div class="battery-track" role="progressbar" aria-label="${dutch ? 'Accuniveau' : 'Battery level'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${soc}"><div class="battery-fill" style="width:${soc}%"></div>${target != null ? `<span class="target-marker" style="left:${target}%"></span>` : ''}</div>` : ''}</div>
@@ -1898,7 +1937,7 @@ class CarCard extends EvccCard {
    .content button[data-entity],.metrics button{min-height:44px}
    .content button:focus-visible{outline-color:var(--accent-color,var(--primary-color))}
    .metrics{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}.metrics dt{font-size:12px;overflow-wrap:break-word}.metrics dd{overflow-wrap:break-word}.metrics button{overflow-wrap:break-word}
-  ${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}</style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
+  ${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
    <h2 class="car-heading">${uiEscape(title)}</h2><div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
     ${offline?`<p class="notice warning" role="status">${nl?'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.':'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>`:''}
     <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}

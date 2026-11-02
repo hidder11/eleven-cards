@@ -23,7 +23,7 @@ export class RoomCard extends HTMLElement{
   const focused=this.shadowRoot.activeElement?.className;
   this.shadowRoot.innerHTML=`<style>
    :host{display:block;min-width:0;height:100%}ha-card{display:block;box-sizing:border-box;height:100%;overflow:hidden;background:var(--ha-card-background,var(--card-background-color));color:var(--primary-text-color);border-radius:var(--ha-card-border-radius,16px)}
-   .room{padding:14px 16px 10px;min-height:132px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;font-family:inherit}
+   .room{padding:var(--eleven-card-padding,16px);min-height:132px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;font-family:inherit}
    .head{display:flex;align-items:center;justify-content:space-between;gap:8px}.room-icon{color:var(--primary-color);--mdc-icon-size:24px}.temp{font-size:13px;font-variant-numeric:tabular-nums;color:var(--secondary-text-color)}
    a,.identity{color:inherit;text-decoration:none;min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;border-radius:4px}a:focus-visible,button:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
    .name{font-size:16px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}.note{font-size:11px;color:var(--secondary-text-color);line-height:1.4;overflow-wrap:anywhere}

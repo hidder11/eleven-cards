@@ -2,6 +2,8 @@
 
 Horizontal status-history bars, one per entity. Uses Home Assistant Recorder history; missing history remains unknown and is never replaced by the current state. Read-only: no devices or automations are controlled.
 
+Use the graph directly or its arrow-key navigation to browse state changes; Home/End jump to the bounds and Escape dismisses the details. Sensor labels have a 44px minimum height. Short intervals retain their accurate width on the time scale.
+
 ## Installation
 
 The Graph and Timeline cards share one header implementation, including title typography, responsive spacing and stroke-based SVG icons. The visual editor’s Show title / Titel tonen switch (`show_title`, default `true`) hides only the heading, preserving its configured text and the zoom and History controls.

@@ -64,9 +64,8 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content[data-density=compact] .car-stage{min-height:0}
 .content[data-density=compact] .car-stage .picture{height:108px}
 /* Opt in locally; shared tab defaults remain protected for House. */
-[data-ui-tabs]{border-bottom:0}
-[data-ui-tabs] [role=tab],.mode-options [data-ui-button]{min-height:44px;border-bottom:0;text-decoration:none}
-[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true],.mode-options button[aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
+.mode-options [data-ui-button]{min-height:44px;border-bottom:0;text-decoration:none}
+.mode-options [aria-pressed=true],.mode-options button[aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
 /* EVCC-only refinement: regular Auto keeps its approved renderer and paint. */
 .content[data-evcc]{--ui-primary-size:44px;--ui-primary-size-compact:44px}
 .content[data-evcc] h2{font-size:16px;font-weight:600}
@@ -103,11 +102,9 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content[data-evcc] .evcc-panel{padding-top:12px}
 .content[data-evcc] .evcc-tabs{margin-top:16px}
 .content[data-evcc] .mode-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,64px),1fr));gap:8px}
-.content[data-evcc] [data-ui-tabs]{gap:8px;flex-wrap:wrap}
-.content[data-evcc] [data-ui-tabs] [role=tab]{flex:1 1 72px;min-width:0;white-space:normal;overflow-wrap:normal;padding:8px}
 .content[data-evcc] button:focus-visible,.content[data-evcc] input:focus-visible,.content[data-evcc] .plot:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
 .content[data-evcc] .mode-options [data-ui-button]{padding:8px 4px;font-size:13px}
-.content[data-evcc] [data-ui-tabs] [role=tab][aria-selected=true],.content[data-evcc] [data-ui-tabs] [role=tab][aria-selected=true]:hover,.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true],.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));border-bottom:0;text-decoration:none;box-shadow:var(--eleven-material-selection-well,none)}
+.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true],.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));border-bottom:0;text-decoration:none;box-shadow:var(--eleven-material-selection-well,none)}
 .content[data-evcc] input[data-solar-share]{min-height:44px;accent-color:var(--accent-color,var(--primary-color))}
 .content[data-evcc] input[data-solar-share]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(var(--accent-color,var(--primary-color)),var(--accent-color,var(--primary-color))) left/var(--solar-position) 100% no-repeat,var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}
 .content[data-evcc] input[data-solar-share]::-moz-range-track{height:8px;border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}

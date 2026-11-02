@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-// Compare the combined bundle's non-target renderers to actual dirty task-entry bytes.
+// Preserve control/action markup while shared presentation is intentionally unified.
 const entry=readFileSync(new URL('./fixtures/actions-before-material-refinement.js',import.meta.url),'utf8');
 const current=readFileSync(new URL('../cards/home-controls/dist/eleven-home-controls-card.js',import.meta.url),'utf8');
 function load(code){
@@ -21,7 +21,8 @@ for(const language of ['nl','en'])for(const unavailable of [false,true])test(`Co
   'sensor.waste':{state:unavailable?'unavailable':'2026-11-03',attributes:{friendly_name:'Papier'}}}};
  for(const [tag,config] of [['eleven-controls-card',{entities:['light.living','climate.room']}],['eleven-waste-card',{entities:[{entity:'sensor.waste',source:'date'}]}]]){
   const a=before(tag),b=after(tag);for(const c of [a,b]){c.setConfig(config);c.hass=hass;}
-  assert.equal(b.shadowRoot.innerHTML,a.shadowRoot.innerHTML,tag);
+  const markup=html=>html.replace(/<style>[\s\S]*?<\/style>/g,'');
+  assert.equal(markup(b.shadowRoot.innerHTML),markup(a.shadowRoot.innerHTML),tag);
  }
 });
 

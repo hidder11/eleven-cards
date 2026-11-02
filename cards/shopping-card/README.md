@@ -1,6 +1,6 @@
 # Eleven Shopping Card
 
-Standalone shopping/to-do list with the compact Eleven look: a single surface, 18px heading, 16px padding, flat rows, light/dark Home Assistant theme variables and 44px action targets.
+Standalone shopping/to-do list with the compact Eleven look: a single surface, 16px heading, 16px padding, flat rows, light/dark Home Assistant theme variables and 44px action targets.
 
 ```yaml
 type: custom:eleven-shopping-card

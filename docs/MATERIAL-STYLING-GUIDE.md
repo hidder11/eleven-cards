@@ -4,11 +4,19 @@ Status: goedgekeurde stylingbasis voor de gehele Eleven Cards-collectie. Vastgel
 
 ## Actueel thema-eigenaarschap — gebruikersbesluit 30 oktober 2026
 
+### Tabbladen — gebruikersbesluit 2 november 2026
+
+Actuele aanvulling: geselecteerde 2A-1-tabtekst volgt `--primary-text-color`, gelijk aan informatiewaarden zoals laadvermogen. De 2px-accentonderstreping blijft bij hover staan. Tijd-, zoom-, geschiedenis/informatie- en Agenda-knopbalken hebben één groepsschaduw, lichtere scheidingslijnen over de volle hoogte (55% van de dividerkleur) en drukfeedback die het hele segment vult. Alleen de buitenhoeken van de eerste en laatste knop volgen de groepsafronding; binnenhoeken zijn recht. Een druk op een kindknop verandert de groepsschaduw niet.
+
+2A-1 vervangt A11 voor alle goedgekeurde kaarten met echte tabbladen: History, Staaf, Tijdlijn, Heatmap, Weer en Auto/EVCC. Gebruik gelijke tabbreedtes, 44px minimumhoogte, gecentreerde tekst (13px/500, geselecteerd 650), een neutrale basislijn en een 2px accentonderstreping voor de actieve tab. De padding is boven 7px, opzij 8px en onder 5px: een optische correctie van 1px naar beneden voor gelijke ruimte boven de tekst en tot de lijn. Hoeken zijn recht; tabs en inhoud hebben geen extra achtergrond of inset. De ruimte tot de inhoud blijft 16px. Tabtekst verschuift niet bij selectie. Vier of meer tabs blijven in één horizontaal scrolbare rij; selectie brengt de actieve tab binnen die rij in beeld zonder de pagina te verplaatsen. Lange labels mogen binnen de tab ombreken. Focus blijft apart zichtbaar. Deze keuze geldt voor tabbladen, niet voor periodeopties, legenda, laadmodi of andere actieknoppen. De implementatie blijft een expliciete gedeelde opt-in.
+
 De materiaalstijl is een optioneel Home Assistant-thema, niet de standaard ingebakken uitstraling van Eleven Cards. Met het normale HA-thema volgen kaarten de normale HA-kleuren, oppervlakken, radius en schaduwen. Met Eleven Material krijgen zowel standaardkaarten als Eleven Cards de goedgekeurde materiaalbasis. Onderstaande materiaalrecepten beschrijven die optionele themaweergave, niet verplichte fallbackwaarden in kaartcode.
 
 De kaart bepaalt indeling en bediening; het actieve thema bepaalt basispaint en diepte. Behoud functionele sensor-, grafiek-, status- en gebruikerskleuren. Voeg geen achtergrondafbeeldingen toe. De goedgekeurde House Card blijft referentie; de gebruiker heeft deze zelf op zijn dashboard gezet en daar goedgekeurd. Overige kaarten migreren lokaal/geïsoleerd; installatie en publicatie blijven afzonderlijke stappen.
 
 ## 1. Centrale referentie en reikwijdte
+
+Consistentie-opvolging: vergelijkbare kaarttitels gebruiken 16px/600 en kaarten standaard 16px binnenruimte rondom, ook op mobiel en desktop. Informatiepopupvlakken volgen dezelfde secundaire achtergrondbasis, inset en afronding als weer-/autoinformatie. Disabled knopsegmenten dimmen tekst en iconen via kleur, zodat de scheidingslijnen onveranderd blijven. Interactieve hoofdwaarde-ondertitels krijgen minimaal 44px raakruimte; Tijdlijn heeft sensornamen met minimaal 44px hoogte en behoudt bediening via de grafiek en het toetsenbord, zonder extra Vorige/Volgende-knoppen.
 
 Dit document is de centrale bron voor stylingbesluiten. Het vervangt eerdere, tegenstrijdige ontwerpregels voor Liquid Light en de materiaalstudies. De naam Material Light beschrijft de ingetogen materiaalwerking, niet alleen het lichte thema.
 

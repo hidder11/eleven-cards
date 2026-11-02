@@ -1737,7 +1737,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         height: 100%;
       }
       ha-card { overflow: visible; height: 100%; min-height:var(--energy-required-height,0px); }
-      .card-content { display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; height: 100%; padding: 16px 16px 12px; color: var(--primary-text-color); font-weight: var(--font-weight-regular); line-height: var(--line-height-normal); }
+      .card-content { display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; height: 100%; padding: var(--eleven-card-padding,16px); color: var(--primary-text-color); font-weight: var(--font-weight-regular); line-height: var(--line-height-normal); }
       .header { display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:6px; }
       .heading { min-width: 0; }
       h2 { margin: 0; font-size: var(--font-size-title); line-height: var(--line-height-tight); font-weight: var(--font-weight-strong); letter-spacing: -0.01em; }

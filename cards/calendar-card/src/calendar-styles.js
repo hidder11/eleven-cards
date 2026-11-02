@@ -1,6 +1,6 @@
 import {uiDetailSurfaceStyles} from '../../../shared/ui-detail-surface.js';
 import {uiSurfaceStyles} from '../../../shared/ui-surface.js';
-import {cardThemeStyles} from '../../../shared/card-theme.js';
+import {cardThemeStyles,segmentedControlStyles} from '../../../shared/card-theme.js';
 export function calendarCardStyles(){return uiDetailSurfaceStyles()+uiSurfaceStyles('.navigation,.info-button')+`
 :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
 ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
@@ -120,7 +120,13 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .popup-date time,.popup-date-range time{min-width:0;overflow-wrap:anywhere}
 .content [data-ui-popup] [data-ui-button]{min-height:44px;min-width:44px;box-sizing:border-box}
 .popup-field-label{font-size:12px}.popup-location,.popup-description{font-size:13px;line-height:1.5}
-${cardThemeStyles({controls:'.navigation,.info-button,.legend-item',selected:'.legend-item[aria-pressed=true]',surfaces:'[data-ui-popup],.tooltip,[data-ui-detail-surface]'})}
-/* Selection must win over ordinary theme control faces. */
-.legend-item[aria-pressed=true],.legend-item[aria-pressed=true]:not(:disabled):hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none)}
+${cardThemeStyles({wells:'.calendar-info [data-ui-detail-surface]',controls:'.info-button',surfaces:'[data-ui-popup],.tooltip,[data-ui-detail-surface]'})}
+/* Match chart legends: functional swatches and plain labels. */
+.legend,.compact .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0 0 12px;font-size:12px}
+.legend-item{padding:4px 0;gap:6px;min-width:0;justify-content:flex-start;border:0;border-radius:4px;background:transparent;box-shadow:none;color:var(--secondary-text-color);font-weight:400;line-height:1.3}
+.legend-item[aria-pressed=true],.legend-item[aria-pressed=true]:hover,.legend-item[aria-pressed=false],.legend-item[aria-pressed=false]:hover{background:transparent;box-shadow:none}
+.legend-item .dot{width:9px;height:9px;border-radius:3px}
+.navigation{flex-wrap:nowrap}
+.navigation .range{flex:1 1 auto;min-width:0;padding:8px;white-space:normal;overflow-wrap:anywhere;line-height:1.35;border:0}
+${segmentedControlStyles('.navigation','.navigation-actions>[data-nav]',{last:'.navigation-actions>[data-nav]:last-child',dividers:'.navigation-actions>[data-nav]'})}
 `;}
