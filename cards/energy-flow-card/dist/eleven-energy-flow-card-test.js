@@ -8,6 +8,48 @@ function energyFlowSelectedPrice(host,direction){
  return id?{configured:true,price:energyFlowCurrentPrice({priceEntity:id},host._hass)}:{configured:false,price:null};
 }
 
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -1455,6 +1497,9 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .flow-arrow{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.flow-route[data-active=false] .flow-arrow{opacity:.24}
 .header-region>[data-ui-metric]{grid-column:1/-1;grid-row:3}
 .flow-secondary{margin-top:12px}
+.content .flow-secondary .ui-metric-title{overflow-wrap:normal;word-break:normal}
+.toolbar .view-period>[data-view-button]{min-height:44px}
+@container(max-width:340px){.content .flow-secondary{grid-template-columns:minmax(0,1fr)}}
 .content[data-animated=false] .flow-dot,.content[data-view=history] .flow-dot{display:none}
 :host([data-motion-paused]) .flow-dot{animation-play-state:paused}
 .content[data-compact=true] .header-region{row-gap:12px}
@@ -1592,6 +1637,7 @@ class EnergyFlowEditor extends customTabsEditor(HTMLElement){
   this._form.computeHelper=item=>['price_entity','export_price_entity'].includes(item.name)?text('Toont de huidige sensorwaarde in Net · Actueel. Gebruik een prijs per kWh, Wh of MWh. Leeg gebruikt de prijs uit Energy.','Shows the current sensor value in Grid · Live. Use a price per kWh, Wh or MWh. Empty uses the Energy tariff.'):previousHelper(item);
  }
 }
+
 
 
 
@@ -1777,7 +1823,7 @@ class EnergyFlowCard extends HTMLElement{
   const toolbar=`<div class="toolbar"><div class="header-actions"><div class="chart-controls" role="group" aria-label="${text('Weergave en tijdvak','View and timeframe')}"><div class="view-period">${switchButton}${history?period.picker:''}</div>${history?period.navigation:''}</div></div></div>`;
   let notice=offline?text('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'):this._error?text('Energy-gegevens laden mislukt. Controleer de Energy-configuratie en Recorder.','Could not load Energy data. Check Energy configuration and Recorder.'):!this._prefs?text('Energy-configuratie laden…','Loading Energy configuration…'):!configured?text('Stel elektriciteitsbronnen in via het Home Assistant Energy-dashboard.','Configure electricity sources in the Home Assistant Energy dashboard.'):this._loading&&history&&!this._statistics?text('Energiestatistieken laden…','Loading energy statistics…'):Object.values({solar:data.solar,import:data.import,export:data.export,home:data.home}).some(value=>value==null)?history?text('Niet alle energiestatistieken zijn beschikbaar voor deze periode.','Some energy statistics are unavailable for this period.'):text('Actueel vermogen ontbreekt. Stel vermogenssensoren in bij Energy of kies ze in de kaartconfiguratie.','Live power is missing. Configure power sensors in Energy or select them in the card editor.'):'';
   if(data.battery)notice+=(notice?' ':'')+text('Thuisbatterij meegerekend in woningverbruik.','Home consumption includes the battery balance.');
-  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div>${toolbar}<div class="energy-heading">${uiPrimaryValue({value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
+  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}${cardThemeStyles({wells:'.content [data-ui-metric],.circle-node[data-ui-metric]',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'[data-ui-detail-surface],[data-ui-popup]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div>${toolbar}<div class="energy-heading">${uiPrimaryValue({value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
   if(!this._bound){this._bound=true;this.shadowRoot.addEventListener('click',event=>{
    const entity=event.target.closest?.('[data-entity]');
    if(entity){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:entity.dataset.entity},bubbles:true,composed:true}));return;}

@@ -1,5 +1,47 @@
 // Eleven Weather (beta) — self-contained module
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -452,11 +494,15 @@ const weatherStyledIconStyles=`
 ﻿// Layered vector illustrations with CSS motion; unique paint IDs per instance.
 
 let weatherArtId=0;
-function weatherArt(kind,style='classic',iconKind=kind) {
+function weatherArt(kind,style='classic',iconKind=kind,hero=true) {
  if(style==='glass'||style==='neon')return weatherStyledArt(iconKind,style);
  const id=`wx-${++weatherArtId}`,paint=name=>`url(#${id}-${name})`;
- const sun=`<g class="wx-sun"><circle class="wx-corona" cx="70" cy="55" r="32" fill="${paint('glow')}"/><g class="wx-rays" stroke="#f8cd70" stroke-width="3.5" stroke-linecap="round"><path d="M70 14v-6m0 94v-6M29 55h-6m94 0h-6M41 26l-5-5m68 68-5-5M41 84l-5 5m68-68-5 5"/></g><circle cx="70" cy="55" r="25" fill="${paint('sun')}" stroke="#ffe5a3" stroke-width="1.5"/><path d="M51 53a20 20 0 0 1 25-17" stroke="#fff6d6" stroke-width="3" stroke-linecap="round" opacity=".8"/></g>`;
- const cloud=`<g class="wx-cloud"><path d="M43 101a23 23 0 0 1 1-46 32 32 0 0 1 60-10 27 27 0 0 1 8 54H43z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/><path d="M47 62a26 26 0 0 1 49-11" stroke="#fff" stroke-opacity=".8" stroke-width="2.5" stroke-linecap="round"/><path d="M29 87c21 10 59 14 91 0" stroke="#65829f" stroke-opacity=".16" stroke-width="4" stroke-linecap="round"/></g>`;
+ const clippedRays=hero&&kind==='partly';
+ const sun=`<g class="wx-sun">${clippedRays?`<g clip-path="${paint('partly-rays')}">`:''}<g class="wx-rays" stroke="#f8cd70" stroke-width="3.5" stroke-linecap="round"><path d="M70 14v-6m0 94v-6M29 55h-6m94 0h-6M41 26l-5-5m68 68-5-5M41 84l-5 5m68-68-5 5"/></g>${clippedRays?'</g>':''}<circle cx="70" cy="55" r="25" fill="${paint('sun')}" stroke="#ffe5a3" stroke-width="1.5"/><path d="M51 53a20 20 0 0 1 25-17" stroke="#fff6d6" stroke-width="3" stroke-linecap="round" opacity=".8"/></g>`;
+ // A single continuous outline: soft side lobes, a taller main dome and a calm base.
+ const cloud=hero?`<g class="wx-cloud"><path d="M46 101C32 101 22 91 22 78C22 65 32 55 45 55C48 39 61 28 77 29C93 29 105 40 108 55C123 52 138 64 138 79C138 92 128 101 114 101Z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/></g>`:`<g class="wx-cloud"><path d="M43 101a23 23 0 0 1 1-46 32 32 0 0 1 60-10 27 27 0 0 1 8 54H43z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/><path d="M47 62a26 26 0 0 1 49-11" stroke="#fff" stroke-opacity=".8" stroke-width="2.5" stroke-linecap="round"/><path d="M29 87c21 10 59 14 91 0" stroke="#65829f" stroke-opacity=".16" stroke-width="4" stroke-linecap="round"/></g>`;
+ // Offset/scale outside wx-rays so its CSS rotation retains the local 70/55 origin.
+ const partlySun=`<g class="wx-partly-sun" transform="translate(54.6 -3.1) scale(.82)">${sun}</g>`;
  const rain='<g class="wx-rain" stroke="#8dcfff" stroke-width="5" stroke-linecap="round"><path class="wx-drop wx-drop-one" d="m54 109-6 12"/><path class="wx-drop wx-drop-two" d="m80 109-6 12"/><path class="wx-drop wx-drop-three" d="m106 109-6 12"/></g>';
  const snow='<g class="wx-snow" fill="#e0f7ff" stroke="#d0efff" stroke-width="1.5"><path class="wx-flake wx-drop-one" d="M52 108v12m-6-6h12m-10-4 8 8m-8 0 8-8"/><path class="wx-flake wx-drop-two" d="M80 116v12m-6-6h12m-10-4 8 8m-8 0 8-8"/><path class="wx-flake wx-drop-three" d="M108 106v12m-6-6h12m-10-4 8 8m-8 0 8-8"/></g>';
  const night=`<g class="wx-moon"><path d="M102 91a39 39 0 0 1-38-64 40 40 0 1 0 38 64" fill="${paint('moon')}" stroke="#dce4ff" stroke-width="1.5"/><path d="M43 49a33 33 0 0 0 7 40" stroke="#f5f4ff" stroke-width="2.5" stroke-linecap="round" opacity=".6"/></g><g fill="#e6e6ff"><path class="wx-star wx-star-one" d="m114 24 2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/><path class="wx-star wx-star-two" d="m128 64 1.5 4.5L134 70l-4.5 1.5L128 76l-1.5-4.5L122 70l4.5-1.5z"/><circle class="wx-star wx-star-three" cx="93" cy="17" r="2"/></g>`;
@@ -464,8 +510,8 @@ function weatherArt(kind,style='classic',iconKind=kind) {
  const fog='<g class="wx-fog" stroke="#c6dbe9" stroke-width="5" stroke-linecap="round"><path d="M30 110h100"/><path d="M43 122h74"/><path d="M52 134h63"/></g>';
  const lightning=`<path class="wx-lightning" d="m84 94-20 27h15l-6 20 27-31H84l8-16z" fill="${paint('sun')}" stroke="#ffe9b1" stroke-width="1"/>`;
  const unknown='<circle cx="80" cy="70" r="34" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 8"/><path d="M70 58c0-16 25-16 25 0 0 11-15 9-15 20m0 10v3" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
- const body=kind==='sun'?sun:kind==='night'?night:kind==='wind'?wind:kind==='unknown'?unknown:(kind==='partly'?sun:'')+cloud+(kind==='rain'?rain:kind==='snow'?snow:kind==='storm'?rain+lightning:kind==='fog'?fog:'');
- return `<svg class="weather-icon" viewBox="0 0 160 150" fill="none" aria-hidden="true" focusable="false"><defs><radialGradient id="${id}-glow"><stop stop-color="#ffd775" stop-opacity=".3"/><stop offset="1" stop-color="#ffd775" stop-opacity="0"/></radialGradient><linearGradient id="${id}-sun" x2=".3" y2="1"><stop stop-color="#fff0b4"/><stop offset=".5" stop-color="#f6ce6d"/><stop offset="1" stop-color="#eda743"/></linearGradient><linearGradient id="${id}-cloud" x2=".2" y2="1"><stop stop-color="#f8fbff"/><stop offset=".5" stop-color="#c8d9ea"/><stop offset="1" stop-color="#91aac2"/></linearGradient><linearGradient id="${id}-moon" x2=".6" y2="1"><stop stop-color="#f0edff"/><stop offset="1" stop-color="#9aadee"/></linearGradient><linearGradient id="${id}-wind"><stop stop-color="#88b1cb" stop-opacity=".6"/><stop offset="1" stop-color="#d4efff"/></linearGradient></defs>${body}</svg>`;
+ const body=kind==='sun'?sun:kind==='night'?night:kind==='wind'?wind:kind==='unknown'?unknown:(kind==='partly'?(hero?partlySun:sun):'')+cloud+(kind==='rain'?rain:kind==='snow'?snow:kind==='storm'?rain+lightning:kind==='fog'?fog:'');
+ return `<svg class="weather-icon" viewBox="0 0 160 150" fill="none" aria-hidden="true" focusable="false"><defs>${clippedRays?`<clipPath id="${id}-partly-rays"><path d="M0 0H160V58H0Z"/></clipPath>`:''}<linearGradient id="${id}-sun" x2=".3" y2="1"><stop stop-color="#fff0b4"/><stop offset=".5" stop-color="#f6ce6d"/><stop offset="1" stop-color="#eda743"/></linearGradient><linearGradient id="${id}-cloud" x2=".2" y2="1"><stop stop-color="#f8fbff"/><stop offset=".5" stop-color="#c8d9ea"/><stop offset="1" stop-color="#91aac2"/></linearGradient><linearGradient id="${id}-moon" x2=".6" y2="1"><stop stop-color="#f0edff"/><stop offset="1" stop-color="#9aadee"/></linearGradient><linearGradient id="${id}-wind"><stop stop-color="#88b1cb" stop-opacity=".6"/><stop offset="1" stop-color="#d4efff"/></linearGradient></defs>${body}</svg>`;
 }
 
 
@@ -480,19 +526,20 @@ const weatherAtmosphereStyles=headerAtmosphereStyles;
 const weatherStyles=`
 :host{display:block;min-width:0;container-type:inline-size;font:inherit}
 *{box-sizing:border-box}ha-card{display:block;overflow:hidden;border-radius:var(--ha-card-border-radius,12px);background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit}
-.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--tone:#536b82}.content[data-dark=true]{--tone:#a8c9eb}
-.content[data-kind=sun],.content[data-kind=partly]{--tone:#946800}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--tone:#f2c451}
-.content[data-kind=rain]{--tone:#427fac}.content[data-dark=true][data-kind=rain]{--tone:#82b8e8}
-.content[data-kind=night],.content[data-kind=storm]{--tone:#6553a3}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--tone:#aca3f1}
-.content[data-kind=snow]{--tone:#45858c}.content[data-dark=true][data-kind=snow]{--tone:#a2dce6}
+/* Supplemental semantic glyphs have fresh paint; readable text is a separate theme role. */
+.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--weather-icon-tone:#6599bb;--weather-text-tone:var(--secondary-text-color,#666);--tone:var(--weather-icon-tone)}.content[data-dark=true]{--weather-icon-tone:#add6ef}
+.content[data-kind=sun],.content[data-kind=partly]{--weather-icon-tone:#f3b51b}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--weather-icon-tone:#ffd45c}
+.content[data-kind=rain]{--weather-icon-tone:#269ad5}.content[data-dark=true][data-kind=rain]{--weather-icon-tone:#76cafa}
+.content[data-kind=night],.content[data-kind=storm]{--weather-icon-tone:#8873dc}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--weather-icon-tone:#b8a7ff}
+.content[data-kind=snow]{--weather-icon-tone:#32a9bb}.content[data-dark=true][data-kind=snow]{--weather-icon-tone:#8bdeec}
 .scene{position:relative;isolation:isolate;margin:-16px -16px 0;padding:16px 16px 16px;overflow:visible}
 .hero{min-height:160px;position:relative;display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:12px;align-content:start;padding-top:6px}
 .temperature{font-size:76px;font-weight:500;line-height:1.15;letter-spacing:-.065em;font-variant-numeric:tabular-nums;margin-top:-20px}.temperature .unit{font-size:.53em;letter-spacing:-.03em;margin-left:2px}
-header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:color-mix(in srgb,var(--tone) 88%,#fff);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
-.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:drop-shadow(0 8px 14px color-mix(in srgb,var(--tone) 25%,transparent))}
+header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:var(--primary-text-color,#20252b);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
+.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:none}
 button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(--secondary-background-color,#eee);border-radius:7px;padding:12px}.status{display:flex;gap:12px;align-items:center;width:100%;text-align:left;border:0;min-height:0;margin:16px 0 0}.status-icon{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:10px;color:var(--tone);background:color-mix(in srgb,var(--tone) 13%,transparent)}.status-icon svg{width:30px;height:30px}.status strong{font-size:13px;line-height:1.4;font-weight:600}.status small{display:block;font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}
 .metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0}.metrics:has(.metric:only-child){grid-template-columns:minmax(0,1fr)}.metric{min-width:0;display:grid;grid-template-rows:auto auto;gap:2px;align-content:start}.metric dt{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin:0;overflow-wrap:anywhere}.metric dd{font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:0;overflow-wrap:anywhere}
-.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--tone)}
+.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--weather-text-tone)}
 .notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.retry{background:transparent;color:var(--primary-color,#2196f3);border:0;min-height:32px;padding:4px 0}.status:focus-visible,.retry:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
 @container(max-width:320px){.hero{min-height:150px}.temperature{font-size:65px;margin-top:-17px}header{margin-top:-17px;padding-top:14px}.art svg{height:100px}.forecast-list{grid-auto-columns:minmax(46px,1fr)}}
 @supports(grid-template-rows:subgrid){.metrics{grid-template-rows:auto auto;row-gap:2px}.metric{grid-row:span 2;grid-template-rows:subgrid}}
@@ -503,7 +550,7 @@ button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(
 .content[data-compact=true] .temperature{font-size:64px;margin-top:-16px}
 .content[data-compact=true] header{padding-top:14px;margin-top:-16px}
 .content[data-compact=true] .art{inset:38px 0 0}
-.content[data-compact=true] .art svg{height:74px;width:100px;filter:drop-shadow(0 5px 10px color-mix(in srgb,var(--tone) 20%,transparent))}
+.content[data-compact=true] .art svg{height:74px;width:100px}
 .content[data-compact=true] .scene{padding-bottom:12px}
 .content:not(:has(.weather-metrics)) .scene{padding-bottom:0}
 .content[data-compact=true] .status{padding:10px;gap:10px;margin-top:12px}
@@ -520,10 +567,10 @@ button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(
 .forecast-extra{font-size:11px;line-height:1.4;margin-top:5px;color:var(--primary-text-color)}.forecast-label{display:block;overflow-wrap:anywhere;font-size:10px;color:var(--secondary-text-color)}
 ${weatherBackgroundStyles}
 
-.wx-rays{transform-origin:70px 55px}.wx-corona{transform-origin:70px 55px}
+.wx-rays{transform-origin:70px 55px}
 @media(prefers-reduced-motion:no-preference){
  .content[data-animated=true] .wx-rays{animation:wx-rotate 24s linear infinite}
- .content[data-animated=true] .wx-corona{animation:wx-glow 5s ease-in-out infinite}
+
  .content[data-animated=true] .wx-cloud{animation:wx-float 6s ease-in-out infinite}
  .content[data-animated=true] .wx-drop{animation:wx-rain 1.5s linear infinite}
  .content[data-animated=true] .wx-flake{animation:wx-snow 4s ease-in-out infinite}
@@ -540,7 +587,7 @@ ${weatherBackgroundStyles}
  .content[data-animated=true] .wx-lightning{animation:wx-lightning 5s ease-in-out infinite}
 }
 @keyframes wx-rotate{to{transform:rotate(360deg)}}
-@keyframes wx-glow{50%{transform:scale(1.12);opacity:.6}}
+
 @keyframes wx-float{50%{transform:translate(3px,-2px)}}
 @keyframes wx-rain{0%{transform:translate(2px,-3px);opacity:0}15%,75%{opacity:1}100%{transform:translate(-4px,12px);opacity:0}}
 @keyframes wx-snow{0%{transform:translate(-2px,-2px);opacity:0}20%,70%{opacity:1}100%{transform:translate(4px,9px);opacity:0}}
@@ -551,6 +598,44 @@ ${weatherBackgroundStyles}
 ${weatherAtmosphereStyles}
 ${weatherStyledIconStyles}
 ${headerSceneStyles}
+`;
+
+// Weather-specific anatomy and neutral role mapping; theme paint stays owned upstream.
+const weatherCalmStyles=`
+/* Theme-owned readings; condition color belongs to icons, not a decorative wash. */
+[data-ui-metric]{background:var(--secondary-background-color,transparent)}
+.content .hero{min-height:124px}
+.content[data-compact=true] .hero{min-height:100px}
+.hero .temperature .primary-value{font-size:48px;flex-wrap:nowrap;white-space:nowrap;overflow-wrap:normal;gap:5px}
+.content[data-compact=true] .hero .temperature .primary-value{font-size:40px}
+.hero .primary-number{overflow-wrap:normal;word-break:normal;max-width:none}
+.hero .primary-value small{margin-top:6px;white-space:nowrap}
+.hero .temperature .primary-label{border:0;padding:0;font-size:12px;overflow-wrap:normal;word-break:normal}
+.content .hero[data-wide-reading=true]{padding-bottom:116px;min-height:0}
+.content .hero[data-wide-reading=true] .temperature{max-width:100%}
+.content[data-icon-style] .hero[data-wide-reading=true]>.art{top:auto;bottom:0;height:110px}
+.content[data-compact=true] .hero[data-wide-reading=true]{padding-bottom:86px}
+.content[data-compact=true][data-icon-style] .hero[data-wide-reading=true]>.art{height:80px}
+.weather-metrics{grid-template-columns:repeat(var(--weather-reading-columns,1),minmax(0,1fr));column-gap:12px;row-gap:12px}
+.weather-metrics>[data-ui-metric]{padding:12px;min-height:44px}
+[data-ui-metric] .ui-metric-title,[data-ui-metric] .ui-metric-info{font-size:12px;overflow-wrap:normal;word-break:normal}
+[data-ui-metric] .ui-metric-icon{transform:none;width:20px;height:20px}
+[data-ui-metric] .ui-metric-value{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.weather-status[data-condition=true] .ui-metric-value{white-space:normal;overflow-wrap:normal;word-break:normal;font-size:22px;font-weight:600}
+.weather-status[data-condition=true] .ui-metric-title{padding-bottom:2px}
+.weather-status{min-height:44px}
+.ui-metric-unit{font-size:12px;white-space:nowrap}
+[data-ui-tabs]{gap:8px;align-items:stretch;flex-wrap:wrap}
+[data-ui-tabs] [role=tab]{min-height:44px;min-width:88px;padding:10px 12px;border-radius:var(--eleven-material-control-radius,12px);font-size:13px;font-weight:500;line-height:1.4;white-space:normal;overflow-wrap:normal;text-decoration:none}
+[data-ui-tabs] [role=tab][aria-selected=true]:hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+[data-ui-tabs] [role=tab]:focus-visible,.retry:focus-visible,button[data-ui-metric]:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.forecast-list{grid-auto-columns:minmax(max-content,1fr);gap:8px;padding-bottom:4px}
+.forecast-list li{min-width:max-content}
+.forecast-list time{font-size:12px;white-space:nowrap}
+.forecast-atomic{display:inline-block;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.forecast-label{font-size:11px;white-space:normal;overflow-wrap:normal;word-break:normal}
+.forecast-low,.rain-chance,.forecast-extra{font-size:12px}
+.retry{min-height:44px;padding:8px 12px;border-radius:var(--eleven-material-control-radius,12px);color:var(--accent-color,var(--primary-color));background:var(--secondary-background-color);font-size:13px}
 `;
 
 // Retain live nodes, focus, scroll offsets and running SVG animations on telemetry updates.
@@ -708,6 +793,7 @@ class WeatherEditor extends HTMLElement{
 
 
 
+
 class WeatherCard extends HTMLElement {
  constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._forecast=[];this._iconCache=new Map();}
  static async getConfigElement(){if(!customElements.get('eleven-weather-editor-test'))customElements.define('eleven-weather-editor-test',WeatherEditor);return document.createElement('eleven-weather-editor-test');}
@@ -720,7 +806,7 @@ class WeatherCard extends HTMLElement {
  set hass(hass){this._hass=hass;this._syncForecast();this._render();}
  get hass(){return this._hass;}
  connectedCallback(){this._attached=true;this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>{this._ensureForecastClock();this._render();});this._syncForecast();this._ensureForecastClock();this._render();}
- disconnectedCallback(){this._attached=false;this._motionCleanup?.();this._motionCleanup=null;clearInterval(this._forecastClock);this._forecastClock=null;this._stopForecast();this._tabs?.disconnect();this._key=null;}
+ disconnectedCallback(){this._attached=false;this._readingObserver?.disconnect();if(this._readingFrame!=null)globalThis.cancelAnimationFrame?.(this._readingFrame);this._motionCleanup?.();this._motionCleanup=null;clearInterval(this._forecastClock);this._forecastClock=null;this._stopForecast();this._tabs?.disconnect();this._key=null;}
  _ensureForecastClock(){
   const active=this._attached&&!!this._config?.entity&&this._forecastEnabled()&&(typeof document==='undefined'||!document.hidden);
   if(!active){clearInterval(this._forecastClock);this._forecastClock=null;return;}
@@ -729,7 +815,7 @@ class WeatherCard extends HTMLElement {
  _weatherArt(kind,style,iconKind,slot){
   const signature=kind+'|'+style+'|'+iconKind,cached=this._iconCache.get(slot);
   if(cached?.signature===signature)return cached.markup;
-  const markup=weatherArt(kind,style,iconKind);this._iconCache.set(slot,{signature,markup});
+  const markup=weatherArt(kind,style,iconKind,slot==='hero');this._iconCache.set(slot,{signature,markup});
   if(this._iconCache.size>32)this._iconCache.delete(this._iconCache.keys().next().value);
   return markup;
  }
@@ -745,7 +831,7 @@ class WeatherCard extends HTMLElement {
   const plain=weatherField({...this._config,metric_status_show_unit:false},'metric_status',attributes,this._hass,available),split=metric.value.startsWith(plain.value);
   const value=plain.value==='\u2014'?null:split?plain.value:metric.value,unit=split?metric.value.slice(plain.value.length).trim():'';
   const icon=this._config.metric_status_icon?`<ha-icon icon="${uiEscape(this._config.metric_status_icon)}"></ha-icon>`:this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'status');
-  return uiMetric({title:label||metric.label,value,unit,iconContent:icon,compact:this._config.compact,action:!!id,info:this._offline()?(nl?'Geen verbinding · laatst ontvangen gegevens':'Offline · last received readings'):'',attrs:{class:'weather-status', 'data-status-entity':id||'', 'aria-label':(label?label+': ':'')+metric.value}});
+  return uiMetric({title:label||metric.label,value,unit,iconContent:icon,compact:this._config.compact,action:!!id,info:this._offline()?(nl?'Geen verbinding · laatst ontvangen gegevens':'Offline · last received readings'):'',attrs:{class:'weather-status','data-condition':String(condition), 'data-status-entity':id||'', 'aria-label':(label?label+': ':'')+metric.value}});
  }
  _metricsMarkup(attributes,available){
   const icons={wind_speed:'mdi:weather-windy',humidity:'mdi:water-percent',pressure:'mdi:gauge',visibility:'mdi:eye-outline',uv_index:'mdi:sun-wireless-outline',cloud_coverage:'mdi:weather-cloudy',wind_gust_speed:'mdi:weather-windy',dew_point:'mdi:thermometer-water',temperature:'mdi:thermometer'};
@@ -796,13 +882,43 @@ class WeatherCard extends HTMLElement {
     const units={temperature:attributes.temperature_unit||'°C',templow:attributes.temperature_unit||'°C',precipitation_probability:'%',precipitation:attributes.precipitation_unit||'',wind_speed:attributes.wind_speed_unit||'',wind_gust_speed:attributes.wind_speed_unit||'',humidity:'%',uv_index:''};
     const label=WEATHER_FORECAST_FIELDS[key][nl?0:1],value=weatherNumber(row[key],this._hass,units[key],this._config['forecast_'+this._forecastType+'_'+key+'_decimals']??(['precipitation','wind_speed','wind_gust_speed','uv_index'].includes(key)?1:0));
     const className=key==='temperature'?'forecast-value':key==='templow'?'forecast-low':key==='precipitation_probability'?'rain-chance':'forecast-extra';
-    return '<div class="'+className+'" data-forecast-field="'+key+'" aria-label="'+uiEscape(label)+'" title="'+uiEscape(label)+'">'+(!['temperature','templow','precipitation_probability'].includes(key)?'<span class="forecast-label">'+uiEscape(label)+'</span>':'')+uiEscape(value)+'</div>';
+    return '<div class="'+className+'" data-forecast-field="'+key+'" aria-label="'+uiEscape(label)+'" title="'+uiEscape(label)+'">'+(!['temperature','templow','precipitation_probability'].includes(key)?'<span class="forecast-label">'+uiEscape(label)+'</span>':'')+ '<span class="forecast-atomic">'+uiEscape(value)+'</span></div>';
    }).join('');
    return '<li data-weather-key="'+uiEscape(row.datetime)+'"><time datetime="'+uiEscape(row.datetime)+'">'+uiEscape(when)+'</time>'+fields+'</li>';
   }).join('')}</ol>`;
   if(weatherVisibleTabs(this._config).length===1)return `<section class="forecast" aria-label="${heading}">${body}</section>`;
   const items=[{value:'hourly',label:nl?'Per uur':'Hourly'},{value:'daily',label:nl?'Per dag':'Daily'}].filter(item=>weatherVisibleTabs(this._config).includes(item.value)).map(item=>({...item,content:item.value===this._forecastType?body:''}));
   return `<section class="forecast" aria-label="${nl?'Weersverwachting':'Weather forecast'}">${uiTabs({id:'weather-forecast',label:nl?'Weersverwachting':'Weather forecast',items,selected:this._forecastType,panelClassName:'forecast-panel'})}</section>`;
+ }
+ _fitReadings(){
+  const root=this.shadowRoot,grid=root.querySelector('.weather-metrics'),hero=root.querySelector('.hero');
+  if(!hero||!hero.clientWidth)return;
+  const inkWidth=node=>{const range=document.createRange();range.selectNodeContents(node);return range.getBoundingClientRect().width;};
+  // Measure with unscaled atomic text. Reflow before fitting a genuinely extreme value.
+  const primary=root.querySelector('.primary-value');
+  for(const node of root.querySelectorAll('.ui-metric-value,.primary-value'))node.style.removeProperty('zoom');
+  if(grid){
+   grid.style.setProperty('--weather-reading-columns','1');
+   const readings=[...grid.querySelectorAll('[data-weather-field]')];
+   const available=(grid.clientWidth-12)/2;
+   const natural=readings.map(node=>{
+    const value=node.querySelector('.ui-metric-value'),title=node.querySelector('.ui-metric-title'),font=getComputedStyle(title),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+    ctx.font=`${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;ctx.letterSpacing=font.letterSpacing;
+    const word=Math.max(0,...title.textContent.split(/\s+/).map(text=>ctx.measureText(text).width));
+    return Math.max(inkWidth(value)+24,word+24+28);
+   });
+   if(readings.length>1&&natural.every(width=>width<=available))grid.style.setProperty('--weather-reading-columns','2');
+  }
+  const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+  const textWidth=(node,text=node.textContent)=>{const font=getComputedStyle(node);ctx.font=`${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;ctx.letterSpacing=font.letterSpacing;return ctx.measureText(text).width;};
+  const primaryWidth=()=>[...primary.children].reduce((width,node)=>width+textWidth(node),0)+parseFloat(getComputedStyle(primary).gap||0);
+  hero.dataset.wideReading=String(primaryWidth()>hero.clientWidth/2);
+  // Values remain complete: only full-card extremes scale, never break or round digits.
+  for(const node of root.querySelectorAll('.ui-metric-value,.primary-value')){
+   const condition=node.closest('.weather-status')&&this._config.metric_status==='condition';
+   const width=condition?Math.max(...node.textContent.split(/\s+/).map(word=>textWidth(node,word))):node===primary?primaryWidth():inkWidth(node),available=node.clientWidth;
+   if(width>available&&available>0)node.style.zoom=String(Math.max(.1,available/width));
+  }
  }
  _render(){
   if(!this._config)return;
@@ -815,8 +931,23 @@ class WeatherCard extends HTMLElement {
   const number=(value,unit='',digits=0)=>weatherNumber(available?value:null,hass,unit,digits);
   const unit=attributes.temperature_unit||'°C';
   patchWeatherDOM(this.shadowRoot,`<style>${uiButtonStyles()}${uiTabsStyles()}${weatherStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}
-.weather-status{margin-top:16px}.weather-metrics{margin:0}.header-region{--ui-metric-tone:var(--tone)}.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}.content[data-compact=true] .weather-status{margin-top:12px}.hero{padding-top:0;grid-template-columns:minmax(0,1fr)}.hero .temperature{max-width:50%;position:relative;z-index:1}.content[data-icon-style] .hero>.art{inset:0 auto 0 50%;width:50%;transform:translate(calc(-50% + var(--weather-icon-x,0px)),var(--weather-icon-y,0px)) scale(var(--weather-icon-scale,1));transform-origin:center;min-width:0}.hero .art svg{max-width:100%}.hero .temperature{margin-top:0;font-size:inherit;letter-spacing:inherit}.content[data-compact=true] .hero .temperature{margin-top:0}
-</style><ha-card aria-label="${uiEscape(this._config.title||(nl?'Het weer':'Weather'))}"><div class="content" style="--header-background-opacity:${this._config.background_strength/100};--weather-icon-scale:${this._config.icon_scale/100};--weather-icon-x:${this._config.icon_offset_x}px;--weather-icon-y:${this._config.icon_offset_y}px" data-background="${this._config.background}" data-icon-style="${this._config.icon_style}" data-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_icons&&!this._offline()}" data-background-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_background&&!this._offline()}" data-compact="${this._config.compact}" data-kind="${state.kind}" data-dark="${!!hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${weatherAtmosphere(this._config.background)}</div><div class="scene"><div class="hero">${uiPrimaryValue({value:available?number(attributes.temperature):null,unit,subtitle:attributes.apparent_temperature!=null&&available?(nl?'Voelt als ':'Feels like ')+number(attributes.apparent_temperature,unit):'',compact:this._config.compact,attrs:{class:'temperature'}})}<div class="art">${this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'hero')}</div></div>${this._statusMarkup(attributes,available,state,nl)}</div>${this._metricsMarkup(attributes,available)}</div>${!this._config.entity?`<p class="notice">${nl?'Kies een weerentiteit in de configuratie.':'Choose a weather entity in the editor.'}</p>`:`${this._forecastMarkup(nl,attributes)}`}</div></ha-card>`);
+.weather-status{margin-top:16px}.weather-metrics{margin:0}.header-region{--ui-metric-tone:var(--weather-icon-tone)}.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}.content[data-compact=true] .weather-status{margin-top:12px}.hero{padding-top:0;grid-template-columns:minmax(0,1fr)}.hero .temperature{max-width:50%;position:relative;z-index:1}.content[data-icon-style] .hero>.art{inset:0 auto 0 50%;width:50%;transform:translate(calc(-50% + var(--weather-icon-x,0px)),var(--weather-icon-y,0px)) scale(var(--weather-icon-scale,1));transform-origin:center;min-width:0}.hero .art svg{max-width:100%}.hero .temperature{margin-top:0;font-size:inherit;letter-spacing:inherit}.content[data-compact=true] .hero .temperature{margin-top:0}
+/* Reserve the icon for the label row; keep readings and their units together. */
+[data-ui-metric] .ui-metric-icon{grid-row:1}
+[data-ui-metric] .ui-metric-value{grid-column:1/-1;overflow-wrap:normal;word-break:normal}
+.weather-metrics .ui-metric-value{white-space:nowrap}
+[data-ui-metric] .ui-metric-title{overflow-wrap:normal;word-break:normal}
+@container(max-width:340px){.weather-metrics{grid-template-columns:minmax(0,1fr);row-gap:12px}}
+[data-ui-tabs]{border-bottom:0}
+[data-ui-tabs] [role=tab]{min-height:44px;border-bottom:0;text-decoration:none}
+[data-ui-tabs] [role=tab][aria-selected=true]{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
+${cardThemeStyles({wells:'[data-ui-metric],.status',controls:'[data-ui-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}${weatherCalmStyles}</style><ha-card aria-label="${uiEscape(this._config.title||(nl?'Het weer':'Weather'))}"><div class="content" style="--header-background-opacity:${this._config.background_strength/100};--weather-icon-scale:${this._config.icon_scale/100};--weather-icon-x:${this._config.icon_offset_x}px;--weather-icon-y:${this._config.icon_offset_y}px" data-background="${this._config.background}" data-icon-style="${this._config.icon_style}" data-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_icons&&!this._offline()}" data-background-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_background&&!this._offline()}" data-compact="${this._config.compact}" data-kind="${state.kind}" data-dark="${!!hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${weatherAtmosphere(this._config.background)}</div><div class="scene"><div class="hero">${uiPrimaryValue({value:available?number(attributes.temperature):null,unit,subtitle:attributes.apparent_temperature!=null&&available?(nl?'Voelt als ':'Feels like ')+number(attributes.apparent_temperature,unit):'',compact:this._config.compact,attrs:{class:'temperature'}})}<div class="art">${this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'hero')}</div></div>${this._statusMarkup(attributes,available,state,nl)}</div>${this._metricsMarkup(attributes,available)}</div>${!this._config.entity?`<p class="notice">${nl?'Kies een weerentiteit in de configuratie.':'Choose a weather entity in the editor.'}</p>`:`${this._forecastMarkup(nl,attributes)}`}</div></ha-card>`);
+  this._fitReadings();
+  if(this._attached&&typeof ResizeObserver!=='undefined'){
+   this._readingObserver??=new ResizeObserver(()=>{cancelAnimationFrame(this._readingFrame);this._readingFrame=requestAnimationFrame(()=>this._fitReadings());});
+   this._readingObserver.disconnect();
+   for(const node of this.shadowRoot.querySelectorAll('.content,.ui-metric-title,.ui-metric-value,.primary-value'))this._readingObserver.observe(node);
+  }
   this._tabs?.disconnect();
   this._tabs=bindUITabs({tabs:this.shadowRoot.querySelectorAll('[data-ui-tab]'),panels:this.shadowRoot.querySelectorAll('[data-ui-tab-panel]'),onSelect:value=>{
    this._forecastSelection=value;this._syncForecast();this._render();

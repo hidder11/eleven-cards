@@ -1,4 +1,46 @@
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -944,14 +986,45 @@ const TimelineView={
   chart.onkeydown=e=>{this._pointerFocusPending=null;if(e.key==='Escape'){drag=null;selection.hidden=true;this._hideTooltip();return;}if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const times=[...new Set([this._viewStart,...this._series.flatMap((s,i)=>this._isSeriesVisible(i)?s.map(v=>v.start):[]).filter(t=>t>this._viewStart&&t<this._viewEnd),this._viewEnd])].sort((a,b)=>a-b);let i=times.findIndex(t=>t>=(this._cursor??this._viewStart));if(i<0)i=times.length-1;i=e.key==='Home'?0:e.key==='End'?times.length-1:Math.max(0,Math.min(times.length-1,i+(e.key==='ArrowRight'?1:-1)));this._pinned=true;this._showTooltip(times[i]);};
   chart.onfocusout=e=>{if(!chart.contains(e.relatedTarget))this._hideTooltip();};this.shadowRoot.querySelectorAll('.segment').forEach(button=>{button.onfocus=()=>{const fromPointer=this._pointerFocusPending===button;this._pointerFocusPending=null;if(fromPointer&&this._cursor!=null)return;this._pinned=true;this._showTooltip(Number(button.dataset.time));};});
  },
+ _timelineHeader(options){
+  const label=options.language==='nl'?'Grafiekopties':'Graph tools',open=this.shadowRoot.querySelector('.chart-tools')?.open;
+  const header=cardHeader({...options,periods:{},zoomState:{...options.zoomState,zoomed:options.zoomState.zoomed&&!options.periods.picker}});
+  return header.replace('<div class="header-actions">',`<details class="chart-tools"${open?' open':''}><summary aria-label="${label}" title="${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="header-actions chart-tools-panel">`).replace('</div></header>',`</div></details>${options.periods.picker?`<div class="header-actions primary-timeframe"><div class="chart-controls" role="group" aria-label="${options.language==='nl'?'Tijdvak':'Timeframe'}">${options.periods.picker}${options.periods.navigation??''}</div></div>`:''}</header>`);
+ },
+ _layoutTimeline(){
+  // Measure complete captions, not clipped word fragments. Preserve accessible
+  // segment names and tooltip content even when the visible caption cannot fit.
+  for(const text of this.shadowRoot.querySelectorAll('.segment span')){
+   text.hidden=false;
+   const segment=text.parentElement,style=getComputedStyle(segment),range=document.createRange();range.selectNodeContents(text);
+   const track=segment.parentElement,scale=track.getBoundingClientRect().width/track.clientWidth||1;
+   text.hidden=range.getBoundingClientRect().width/scale+12>segment.clientWidth||parseFloat(style.lineHeight)>segment.clientHeight;
+  }
+  const axis=this.shadowRoot.querySelector('.axis');if(!axis?.getBoundingClientRect)return;
+  const ticks=[...axis.children],width=axis.clientWidth,scale=axis.getBoundingClientRect().width/width||1;
+  for(const [i,node]of ticks.entries()){const ratio=i/(ticks.length-1);node.hidden=false;node.style.left=ratio*100+'%';node.style.transform=ratio===0?'none':ratio===1?'translateX(-100%)':'translateX(-50%)';node.style.maxWidth=Math.max(40,(width-8)/2)+'px';node.style.textAlign=ratio===0?'left':ratio===1?'right':'center';}
+  let previous=null;for(const node of ticks){const box=node.getBoundingClientRect(),last=ticks.at(-1).getBoundingClientRect();if(node!==ticks[0]&&node!==ticks.at(-1)&&((previous&&box.left<previous.right+8*scale)||box.right+8*scale>last.left)){node.hidden=true;continue;}previous=box;}
+  axis.style.height=Math.max(0,...ticks.filter(n=>!n.hidden).map(n=>n.getBoundingClientRect().height/scale))+'px';
+ },
+ _bindTimelineTools(hadFocus){
+  const tools=this.shadowRoot.querySelector('.chart-tools');if(!tools)return;
+  tools.onkeydown=e=>{if(e.key==='Escape'&&!e.target.closest?.('[popover]')){e.preventDefault();tools.open=false;tools.querySelector('summary').focus();}};
+  this._chartToolsOutside??=e=>{const current=this.shadowRoot.querySelector('.chart-tools');if(current?.open&&!e.composedPath().includes(current)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))current.open=false;};globalThis.document?.addEventListener?.('pointerdown',this._chartToolsOutside);
+  if(hadFocus)tools.querySelector('summary').focus({preventScroll:true});
+ },
  _render(){
-  if(!this._config)return;if(this._touchPointer!=null){this._touchRenderPending=true;return;}this._touchRenderPending=false;if(this._hoverFrame!=null){cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;}captureChartInsights(this);const c=this._config,nl=this._nl(),esc=escapeTimeline;this._viewStart=this._viewport?.[0]??this._start;this._viewEnd=this._viewport?.[1]??this._end;const a=this._viewStart,b=this._viewEnd;let body='';const controls=cardHeader({title:c.title??(nl?'Statustijdlijn':'Status timeline'),showTitle:c.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:nl?'nl':'en',periods:periodControls(this,nl?'nl':'en'),zoomState:chartZoomState(this),information:chartDataInformation(this,nl?'nl':'en')});
+  if(!this._config)return;if(this._touchPointer!=null){this._touchRenderPending=true;return;}this._touchRenderPending=false;if(this._hoverFrame!=null){cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;}captureChartInsights(this);const c=this._config,nl=this._nl(),esc=escapeTimeline;this._viewStart=this._viewport?.[0]??this._start;this._viewEnd=this._viewport?.[1]??this._end;const a=this._viewStart,b=this._viewEnd;let body='';const toolsHadFocus=this.shadowRoot.activeElement?.matches?.('.chart-tools summary');const controls=this._timelineHeader({title:c.title??(nl?'Statustijdlijn':'Status timeline'),showTitle:c.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:nl?'nl':'en',periods:periodControls(this,nl?'nl':'en'),zoomState:chartZoomState(this),information:chartDataInformation(this,nl?'nl':'en')});
   if(this._status!=='ready')body=`<div class="message" role="status">${this._status==='error'?(nl?'Geschiedenis kon niet worden geladen.':'Unable to load history.'):(nl?'Geschiedenis laden…':'Loading history…')}${this._status==='error'?`<button class="retry">${nl?'Opnieuw proberen':'Retry'}</button>`:''}</div>`;
   else{
 
    const legend=new Map(),rows=c.entities.map((id,i)=>{if(!this._isSeriesVisible(i))return '';const name=this._name(id),label=`<button type="button" class="row-label" data-series="${esc(id)}">${esc(name)}</button>`;if(this._stateLimits?.[i])return `<div class="row">${label}<div class="state-limit" role="status">${esc(this._stateLimitMessage())}</div></div>`;const bars=(this._series[i]??[]).filter(s=>s.end>a&&s.start<b).map(s=>{const v=this._segmentAppearance(s,id);legend.set(v.label+'|'+v.color,v);const start=Math.max(a,s.start),end=Math.min(b,s.end),description=`${name}: ${v.label}, ${this._time(s.start)} – ${this._time(s.end)} · ${this._duration(s.end-s.start)}`;return `<button class="segment ${['unknown','unavailable'].includes(s.state)?'gap':''}" style="left:${(start-a)/(b-a)*100}%;width:${(end-start)/(b-a)*100}%;background-color:${v.color};color:${v.textColor??'inherit'}" aria-label="${esc(description)}" data-time="${start}">${c.show_state_labels?`<span>${esc(v.label)}</span>`:''}</button>`;}).join('');return `<div class="row">${c.show_labels?`${label}`:''}<div class="track">${bars}</div>${c.show_summary?`<div class="summary">${esc(this._summary(i))}</div>`:''}</div>`;}).join('');
    body=`<div class="chart" tabindex="0" role="group" aria-label="${nl?'Statustijdlijn':'Status timeline'}">${c.show_grid!==false?this._ticks().map(r=>`<div class="grid-line" style="left:${r*100}%"></div>`).join(''):''}${rows}<div class="guide" hidden></div><div class="zoom-selection" hidden></div><div class="tooltip" role="status" hidden></div></div>`;
-   if(c.show_axis)body+=`<div class="axis">${this._ticks().map(r=>`<span>${esc(this._time(a+(b-a)*r))}</span>`).join('')}</div>`;
+   if(c.show_axis){
+    const dates=new Intl.DateTimeFormat('en-CA',{timeZone:this._hass?.config?.time_zone,year:'numeric',month:'2-digit',day:'2-digit'});
+    const spansDates=dates.format(a)!==dates.format(b),ticks=this._ticks();
+    body+=`<div class="axis">${ticks.map((r,i)=>`<span>${esc(this._time(a+(b-a)*r,spansDates&&(i===0||i===ticks.length-1)))}</span>`).join('')}</div>`;
+   }
+   body='<div class="timeline-well">'+body+'</div>';
    if(c.show_legend)body+=`<div class="legend">${[...legend.values()].map(v=>`<span><i style="background:${v.color}"></i>${esc(v.label)}</span>`).join('')}</div>`;
   }
   this.shadowRoot.innerHTML=`<style>:host{display:block;container-type:inline-size;height:100%;min-width:0;min-height:0}ha-card{display:block;min-height:0;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font-family:inherit;height:100%}
@@ -959,23 +1032,40 @@ const TimelineView={
 ${cardHeaderStyles()}
 ${periodControlsStyles()}
 ${chartInsightStyles()}
+.content>.card-header{display:flex;align-items:center;gap:4px 8px;margin:0 0 12px;position:relative}
+.content>.card-header h2{font-size:16px;line-height:1.3;font-weight:600;flex:1 1 0;margin:0}
+.chart-tools{margin-inline-start:auto;flex:none}
+.chart-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+.chart-tools summary::-webkit-details-marker{display:none}
+.chart-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
+.chart-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.chart-tools-panel.header-actions{position:absolute;z-index:5;inset-inline-end:0;top:48px;width:max-content;max-width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color);box-shadow:var(--eleven-material-surface-shadow,var(--ha-card-box-shadow,none));gap:8px;justify-content:flex-start}
+.chart-tools:not([open])>.chart-tools-panel{display:none}
+.primary-timeframe.header-actions{width:100%;flex:1 1 100%;margin:0;gap:0}
+.primary-timeframe .chart-controls{width:100%;flex:1 1 100%}
+.primary-timeframe .period-controls{min-width:0;flex:1 1 auto}
+.primary-timeframe .period-trigger{font-size:12px}
+.timeline-well{padding:10px;min-width:0}
+.axis{position:relative;display:block}
+.axis span{position:absolute;top:0;width:max-content;white-space:normal;overflow-wrap:anywhere}
 @container(max-width:480px){.content{padding:var(--eleven-card-padding,16px)}}
 .chart{position:relative;touch-action:pan-y;min-width:0}
 .grid-line{position:absolute;top:0;bottom:0;border-left:1px solid var(--divider-color,#ddd);opacity:.45;pointer-events:none}
 .row{position:relative}
-.row-label{position:relative;width:fit-content;background:var(--ha-card-background,var(--card-background-color,#fff))}
-.summary{margin-top:6px;font-size:11px;color:var(--secondary-text-color,#666);background:var(--ha-card-background,var(--card-background-color,#fff));position:relative;overflow-wrap:anywhere}
+.row-label{position:relative;background:transparent}
+.summary{margin-top:6px;font-size:11px;color:var(--secondary-text-color,#666);background:transparent;position:relative;overflow-wrap:anywhere}
 .row+.row{margin-top:${c.row_gap}px}
-.row-label{font-size:12px;color:var(--secondary-text-color,#666);margin-bottom:7px;overflow-wrap:anywhere}
-.row-label[data-series]{display:block;max-width:100%;padding:0;border:0;text-align:start;font-family:inherit;cursor:pointer}
+.row-label{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin-bottom:4px;overflow-wrap:anywhere}
+.row-label[data-series]{display:block;width:100%;min-height:24px;box-sizing:border-box;padding:3px 0;border:0;text-align:start;font-family:inherit;cursor:pointer}
 .row-label[data-series]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}
 .track{position:relative;height:${c.bar_height}px;border-radius:${c.border_radius}px;overflow:hidden;background:var(--divider-color,#ddd)}
-.segment{position:absolute;top:0;height:100%;padding:0;border:0;border-right:1px solid #ffffff24;box-sizing:border-box;cursor:pointer;color:white;min-width:0;overflow:hidden;font:11px inherit}
-.segment span{padding:0 6px;white-space:nowrap}
+.segment{position:absolute;top:0;height:100%;padding:0;border:0;border-right:1px solid #ffffff24;box-sizing:border-box;cursor:pointer;color:white;min-width:0;overflow:hidden;font-family:inherit;font-size:11px;line-height:14px}
+.segment span{display:inline-block;padding:0 6px;white-space:nowrap}
+.segment span[hidden]{display:none}
 .segment:focus-visible{outline:2px solid var(--primary-text-color,#222);outline-offset:-2px;z-index:1}
 .gap{background-image:repeating-linear-gradient(135deg,transparent,transparent 4px,#ffffff40 4px,#ffffff40 8px)}
-.axis{display:flex;justify-content:space-between;gap:8px;margin-top:10px;font-size:11px;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums}
-.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:16px;font-size:12px;color:var(--secondary-text-color,#666)}
+.axis{position:relative;display:block;margin-top:10px;font-size:11px;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:12px;padding-inline:10px;font-size:12px;color:var(--secondary-text-color,#666)}
 .legend span{display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
 .legend i,.tooltip i{width:9px;height:9px;border-radius:3px;flex-shrink:0}
 .guide{position:absolute;top:0;bottom:0;border-left:1px solid var(--primary-text-color,#20252b);opacity:.6;pointer-events:none;z-index:2}
@@ -985,8 +1075,8 @@ ${SharedGraph.tooltipStyles()}
 .tooltip .tooltip-value{color:var(--primary-text-color,#20252b);font-style:normal}
 .state-limit{font-size:12px;color:var(--error-color,#db4437);overflow-wrap:anywhere;position:relative}
 .message{font-size:14px;color:var(--secondary-text-color,#666);min-height:60px}
-.retry{display:block;margin-top:12px;min-height:44px;background:transparent;color:inherit;border:1px solid var(--divider-color,#ddd);border-radius:6px;padding:8px 12px}[hidden]{display:none}</style><ha-card><div class="content">${controls}${body}</div></ha-card>`;
-  bindPeriodControls(this);bindChartInsights(this);
+.retry{display:block;margin-top:12px;min-height:44px;background:transparent;color:inherit;border:1px solid var(--divider-color,#ddd);border-radius:6px;padding:8px 12px}[hidden]{display:none}${cardThemeStyles({chartUI:true,plots:'.timeline-well',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}</style><ha-card><div class="content">${controls}${body}</div></ha-card>`;
+  bindPeriodControls(this);bindChartInsights(this);this._bindTimelineTools(toolsHadFocus);this._layoutTimeline();this._timelineResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._timelineResize=new ResizeObserver(()=>this._layoutTimeline());const well=this.shadowRoot.querySelector('.timeline-well');if(well)this._timelineResize.observe(well);}
   const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();this.shadowRoot.querySelectorAll('[data-zoom]').forEach(button=>button.onclick=()=>this._zoom({in:.5,out:2,reset:0}[button.dataset.zoom]));this._bindInteractions();const renderedChart=this.shadowRoot.querySelector('.chart'),restoreTooltip=()=>{if(this.shadowRoot.querySelector('.chart')===renderedChart){SharedGraph.restoreHover(this);if(this._cursor!=null)this._showTooltip(this._cursor,false);}};const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(restoreTooltip);else restoreTooltip();
  }
 };
@@ -1121,7 +1211,7 @@ class TimelineCard extends HTMLElement{
  }
  get hass(){return this._hass;}
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._outside??=e=>{if(!e.composedPath().includes(this)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip();};globalThis.document?.addEventListener('pointerdown',this._outside);if(typeof ResizeObserver!=='undefined'){this._resizeObserver??=new ResizeObserver(entries=>{const narrow=(entries[0]?.contentRect?.width??this.clientWidth)<400;if(this._axisNarrow!==undefined&&this._axisNarrow!==narrow&&this._config)this._render();this._axisNarrow=narrow;});this._resizeObserver.observe(this);}if(this._config&&this._hass)this._refresh();}
- disconnectedCallback(){this._touchPointer=null;this._touchRenderPending=false;disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);globalThis.document?.removeEventListener('pointerdown',this._outside);this._resizeObserver?.disconnect();if(this._hoverFrame!=null)cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;this._hideTooltip();this._connected=false;this._started=false;this._inFlight=false;this._generation++;clearTimeout(this._timer);}
+ disconnectedCallback(){this._timelineResize?.disconnect();globalThis.document?.removeEventListener?.('pointerdown',this._chartToolsOutside);this._touchPointer=null;this._touchRenderPending=false;disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);globalThis.document?.removeEventListener('pointerdown',this._outside);this._resizeObserver?.disconnect();if(this._hoverFrame!=null)cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;this._hideTooltip();this._connected=false;this._started=false;this._inFlight=false;this._generation++;clearTimeout(this._timer);}
  getCardSize(){return Math.ceil((90+(this._config?.entities.length??1)*((this._config?.bar_height??18)+(this._config?.row_gap??16)+24))/50);}
  getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(3,Math.ceil(this.getCardSize()*50/64)),min_rows:3};}
  _isSeriesVisible(index){return chartSeriesVisible(this,index);}

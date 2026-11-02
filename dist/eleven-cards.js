@@ -2,6 +2,48 @@
 // Eleven Dynamic Energy Price Card — standalone dashboard bundle
 (()=>{
 "use strict";
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -1736,6 +1778,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._labelResize?.disconnect();if(this._labelLayoutFrame!=null)cancelAnimationFrame(this._labelLayoutFrame);this._labelLayoutFrame=null;
     this._connected=false;disconnectTimeframeSync(this);
     SharedGraph.disconnectHover(this);
     this._unwatchTibberConnection();
@@ -1750,22 +1793,66 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _observeConsumptionSize() {
-    if (this._config?.show_consumption !== true) {
-      this._consumptionResizeObserver?.disconnect();
-      this._consumptionResizeObserver = undefined;
-      return;
-    }
     if (this._consumptionResizeObserver || typeof ResizeObserver === 'undefined') return;
     this._consumptionResizeObserver = new ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width;
-      if (!width || width === this._consumptionWidth) return;
+      const height = entries[0]?.contentRect.height;
+      if (!width || (width === this._consumptionWidth && height === this._chartHeight)) return;
       this._consumptionWidth = width;
+      this._chartHeight = height;
+      this._layoutChartLabels();
       if (this._hass && this._config?.show_consumption && this._consumptionResizeFrame==null) {
         if(typeof requestAnimationFrame!=='function'){this._render();return;}
         this._consumptionResizeFrame=requestAnimationFrame(()=>{this._consumptionResizeFrame=null;if(this.isConnected)this._render();});
       }
     });
     this._consumptionResizeObserver.observe(this);
+  }
+
+  _layoutChartLabels() {
+    const chart=this.shadowRoot.querySelector('.chart');
+    if(!chart?.getBoundingClientRect||!globalThis.getComputedStyle)return;
+    const rawBounds=chart.getBoundingClientRect();if(!rawBounds.width||!rawBounds.height)return;
+    const scale=rawBounds.width/chart.clientWidth||1,bounds={left:rawBounds.left,top:rawBounds.top,width:rawBounds.width/scale,height:rawBounds.height/scale,right:rawBounds.left+rawBounds.width/scale,bottom:rawBounds.top+rawBounds.height/scale};
+    const inset=10,gap=8,all=s=>[...chart.querySelectorAll(s)],size=n=>{const r=n.getBoundingClientRect();return {left:bounds.left+(r.left-bounds.left)/scale,right:bounds.left+(r.right-bounds.left)/scale,top:bounds.top+(r.top-bounds.top)/scale,bottom:bounds.top+(r.bottom-bounds.top)/scale,width:r.width/scale,height:r.height/scale};};
+    const y=all('.y-label'),energy=all('.energy-axis-label'),ticks=all('.x-label');
+    for(const n of [...y,...energy,...ticks,...all('.level-label,.day-label,.average-label,.now-label,.energy-unit')]){n.hidden=false;n.style.marginLeft='0px';}
+    const width=nodes=>Math.max(0,...nodes.map(n=>size(n).width)),height=nodes=>Math.max(0,...nodes.map(n=>size(n).height));
+    const refs=all('.day-label,.average-label,.level-label,.now-label,.energy-unit').sort((a,b)=>{const priority=n=>n.matches('.day-label,.energy-unit')?0:n.matches('.average-label')?1:n.matches('.level-label')?2:3;return priority(a)-priority(b);});
+    for(const n of refs){n.dataset.anchorTop??=n.style.top;n.style.top=n.dataset.anchorTop;}
+    // Measure rendered typography, never infer gutters from SVG units or digit counts.
+    const next={left:inset+width(y)+gap,right:inset+(energy.length?Math.max(width(energy),width(all('.energy-unit')))+gap:0),top:inset+Math.max(height(all('.day-label,.energy-unit'))+gap,height(y)/2),bottom:inset+height(ticks)+gap+height(y)/2};
+    const minChart=Math.max(180,Math.min(460,refs.reduce((sum,n)=>sum+size(n).height+6,0)+next.top+next.bottom));
+    chart.style.minHeight=`${minChart}px`;
+    const content=this.shadowRoot.querySelector('.card-content');
+    if(content){const style=getComputedStyle(content),other=[...content.children].filter(n=>n!==chart&&n.tagName!=='STYLE').reduce((sum,n)=>{const s=getComputedStyle(n);return sum+size(n).height+parseFloat(s.marginTop||0)+parseFloat(s.marginBottom||0);},0);this.style?.setProperty('--energy-required-height',`${Math.ceil(other+minChart+parseFloat(style.paddingTop)+parseFloat(style.paddingBottom)+2)}px`);}
+    const changed=!this._labelInsets||Object.keys(next).some(k=>Math.abs(next[k]-this._labelInsets[k])>.5)||!this._renderChartSize||Math.abs(chart.clientWidth-this._renderChartSize.width)>.5||Math.abs(chart.clientHeight-this._renderChartSize.height)>.5;
+    this._labelInsets=next;
+    if(changed&&typeof requestAnimationFrame==='function'&&this._labelLayoutFrame==null){this._labelLayoutFrame=requestAnimationFrame(()=>{this._labelLayoutFrame=null;if(this.isConnected&&this._hass)this._render();});}
+    // Endpoints survive; suppress only interior captions, never grid lines or data.
+    const density=(nodes,vertical=false)=>{
+      for(const n of nodes){const r=size(n);if(!vertical){n.style.marginLeft=`${Math.max(0,bounds.left+inset-r.left)-Math.max(0,r.right-(bounds.right-inset))}px`;}}
+      const ordered=[...nodes].sort((a,b)=>vertical?size(a).top-size(b).top:size(a).left-size(b).left);if(ordered.length<2)return;
+      const start=r=>vertical?r.top:r.left,end=r=>vertical?r.bottom:r.right;
+      let previous=size(ordered[0]);const last=size(ordered.at(-1));
+      for(const n of ordered.slice(1,-1)){const r=size(n);n.hidden=start(r)<end(previous)+gap||end(r)+gap>start(last);if(!n.hidden)previous=r;}
+    };
+    density(y,true);density(energy,true);density(ticks);
+    const days=all('.day-label');
+    for(const day of days){day.title ||=day.textContent;day.textContent=day.title;}
+    for(let i=0;i<days.length;i++){const day=days[i],r=size(day),right=days[i+1]?size(days[i+1]).left-gap:bounds.right-inset;if(r.right>right)day.textContent=day.dataset.shortLabel;}
+    // Captions may move, their SVG lines retain exact tariff/time coordinates.
+    // Place date references first, then averages/thresholds/Now in free measured slots.
+    const placed=[];
+    for(const n of refs){
+      let r=size(n);n.style.marginLeft=`${Math.max(0,bounds.left+inset-r.left)-Math.max(0,r.right-(bounds.right-inset))}px`;
+      r=size(n);const low=bounds.top+inset,high=bounds.bottom-next.bottom-r.height,desired=Math.max(low,Math.min(r.top,high));
+      const candidates=[desired,low,...placed.flatMap(p=>[p.bottom+6,p.top-r.height-6])].filter(t=>t>=low&&t<=high).sort((a,b)=>Math.abs(a-desired)-Math.abs(b-desired));
+      const top=candidates.find(t=>!placed.some(p=>r.left<p.right+6&&r.right+6>p.left&&t<p.bottom+6&&t+r.height+6>p.top))??desired;
+      // Use the actual transformed box when applying top; no guessed text baseline.
+      n.style.top=`${parseFloat(getComputedStyle(n).top)+top-r.top}px`;
+      placed.push(size(n));
+    }
   }
 
   _unwatchConsumptionConnection() {
@@ -1999,7 +2086,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const consumptionPoints = this._consumption?.points ?? [];
     const consumptionIntervalMs = (this._consumption?.intervalMinutes ?? intervalMinutes) * 60000;
     const chartPixels = this.shadowRoot.querySelector('.chart')?.clientWidth || Math.max(1, (this.clientWidth || 1000) - (this.clientWidth <= 520 ? 24 : 32));
-    const plotRight = PLOT.right + (graphShowsConsumption ? 32 * svgWidth / chartPixels : 0);
+    const chartHeight=this.shadowRoot.querySelector('.chart')?.clientHeight||this._chartHeight||SVG_HEIGHT;
+    this._renderChartSize={width:chartPixels,height:chartHeight};
+    const insets=this._labelInsets??{left:40,right:graphShowsConsumption?52:10,top:36,bottom:36};
+    const PLOT={left:insets.left*svgWidth/chartPixels,right:insets.right*svgWidth/chartPixels,top:insets.top*svgHeight/chartHeight,bottom:insets.bottom*svgHeight/chartHeight};
+    const plotRight = PLOT.right;
     const plotWidth = svgWidth - PLOT.left - plotRight;
     const plotHeight = svgHeight - PLOT.top - PLOT.bottom;
     const span = Math.max(sharedRange?1:intervalMs, end - start);
@@ -2101,7 +2192,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         (positionedAverages[index - 1].labelY ?? positionedAverages[index - 1].y) + 18,
       );
     }
-    const averageLabel = positionedAverages.map((average) => `<span class="chart-label average-label ${average.key}-average-label" style="top:${(Math.min(PLOT.top + plotHeight - 8, average.labelY ?? average.y) / svgHeight) * 100}%;left:${PLOT.left + 6}px">${average.label} ${this._formatPrice(average.value)} ct</span>`).join('');
+    const averageLabel = positionedAverages.map((average) => `<span class="chart-label average-label ${average.key}-average-label" style="top:${(Math.min(PLOT.top + plotHeight - 8, average.labelY ?? average.y) / svgHeight) * 100}%;left:${(PLOT.left / svgWidth) * 100}%">${average.label} ${this._formatPrice(average.value)} ct</span>`).join('');
     const hoverLine = this._config.show_hover_line
       ? `<line class="hover-line" x1="0" y1="${PLOT.top}" x2="0" y2="${PLOT.top + plotHeight}" hidden />`
       : '';
@@ -2142,7 +2233,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     }).join('');
     const dayLabels = [...groups.values()].map((dayPoints, index) => {
       const x = Math.max(PLOT.left + 8, xFor(dayPoints[0].timestamp) + 10);
-      return `<span class="chart-label day-label" style="left:${(x / svgWidth) * 100}%">${sharedRange?'':`${index === 0 ? this._t("Vandaag") : this._t("Morgen")} · `}${this._formatDay(dayPoints[0].timestamp, timeZone)}</span>`;
+      return `<span class="chart-label day-label" data-short-label="${escapeHtml(this._formatDay(dayPoints[0].timestamp,timeZone))}" style="left:${(x / svgWidth) * 100}%">${sharedRange?'':`${index === 0 ? this._t("Vandaag") : this._t("Morgen")} · `}${this._formatDay(dayPoints[0].timestamp, timeZone)}</span>`;
     }).join('');
 
     const todayKey = localDayKey(now, timeZone);
@@ -2169,8 +2260,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const currentImport = currentPricePoint(rawImportData,now,timeZone,this._config.tomorrow_after);
     const currentExport = currentPricePoint(rawExportData,now,timeZone,this._config.tomorrow_after);
     const currentCards = [];
-    if (currentShowsImport) currentCards.push(this._currentMetric(this._t("Afname"), currentImport, 'import', importSelected, cheapestEnabled));
-    if (currentShowsExport) currentCards.push(this._currentMetric(this._t("Teruglevering"), currentExport, 'export', exportSelected, exportBestEnabled));
+    if (currentShowsImport) currentCards.push(this._currentMetric(this._t("Afname"), currentImport, 'import', importSelected, cheapestEnabled, graphIncludesImport));
+    if (currentShowsExport) currentCards.push(this._currentMetric(this._t("Teruglevering"), currentExport, 'export', exportSelected, exportBestEnabled, graphIncludesExport));
 
     const showTitle = this._config.show_title !== false;
     const useCompactSummary = !showTitle
@@ -2194,8 +2285,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
           ? `<div class="heading"><div class="header-cheapest">${contextLabels.join('')}</div></div>`
           : '';
     const seriesLegend = [];
-    if (graphIncludesImport && !useCompactSummary) seriesLegend.push(this._seriesLegendItem('import', this._t("Afname")));
-    if (graphIncludesExport) seriesLegend.push(this._seriesLegendItem('export', this._t("Teruglevering")));
+    if (graphIncludesImport && !currentShowsImport && !useCompactSummary) seriesLegend.push(this._seriesLegendItem('import', this._t("Afname")));
+    if (graphIncludesExport && !currentShowsExport) seriesLegend.push(this._seriesLegendItem('export', this._t("Teruglevering")));
     if (consumptionEnabled) seriesLegend.push(this._seriesLegendItem('consumption', `${this._t('Netafname')} · kWh / ${this._consumption?.intervalMinutes ?? intervalMinutes} min`));
     const legendItems = [...seriesLegend, ...(showTitle ? contextLabels : [])];
     const legend = legendItems.length
@@ -2208,16 +2299,20 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const exportPeriods = exportBestEnabled && this._config.show_export_table
       ? exportSelectedPeriods
       : [];
-    const favorableTable = importPeriods.length || exportPeriods.length
-      ? this._periodTable(importPeriods, exportPeriods, timeZone, todayKey, tomorrowKey)
+    const periodDetailsOpen=this.shadowRoot.querySelector('.price-periods')?.open;
+    const periodTable = importPeriods.length || exportPeriods.length
+      ? this._periodTable(importPeriods, exportPeriods, timeZone, todayKey, tomorrowKey) : '';
+    const favorableTable = periodTable
+      ? `<details class="price-periods"${periodDetailsOpen?' open':''}><summary>${this._t("Gunstige momenten")}${this._config.show_period_average?'<span class="table-unit">ct/kWh</span>':''}</summary>${periodTable}</details>`
       : '';
 
     this._chart = {
       timeline, importSelected, exportSelected, intervalMs, timeZone, xFor, yFor, start, span,
       cheapPrice, normalPrice, expensivePrice, svgWidth, svgHeight, graphShowsImport, graphShowsExport,
-      importAppearance, exportAppearance, plotRight, consumptionPoints, consumptionAppearance, consumptionIntervalMs, graphShowsConsumption, energyYFor,
+      importAppearance, exportAppearance, plotLeft:PLOT.left, plotRight, consumptionPoints, consumptionAppearance, consumptionIntervalMs, graphShowsConsumption, energyYFor,
     };
 
+    const active=this.shadowRoot.activeElement,focusSeries=active?.matches('.legend-series')?active.dataset.series:null,focusPeriods=active?.matches('.price-periods>summary');
     this._graph ??= new SharedGraph();
     this.shadowRoot.innerHTML = `
       <ha-card lang="${this._language}">
@@ -2275,14 +2370,21 @@ class DynamicEnergyPriceCard extends HTMLElement {
           <div class="sr-only" aria-live="polite"></div>
         </div>
       </ha-card>
-      <style>${this._styles()}</style>`;
+      <style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
+    this._layoutChartLabels();
+    this._labelResize?.disconnect();
+    const labelChart=this.shadowRoot.querySelector('.chart');
+    if(labelChart&&globalThis.ResizeObserver){this._labelResize=new ResizeObserver(()=>{if(this.shadowRoot.querySelector('.chart')===labelChart)this._layoutChartLabels();});for(const n of [labelChart,...labelChart.querySelectorAll('.chart-label'),this.shadowRoot.querySelector('.header')].filter(Boolean))this._labelResize.observe(n);}
     this._graph.restore(this);
     this._chartHasLoaded = this._graph.loaded;
     this._bindInteractions();
+    if(focusSeries)this.shadowRoot.querySelector(`.legend-series[data-series="${focusSeries}"]`)?.focus({preventScroll:true});
+    if(focusPeriods)this.shadowRoot.querySelector('.price-periods>summary')?.focus({preventScroll:true});
+    const periods=this.shadowRoot.querySelector('.price-periods');if(periods)periods.ontoggle=()=>this._layoutChartLabels();
     SharedGraph.restoreHover(this);
   }
 
-  _currentMetric(label, point, type, selected, enabled) {
+  _currentMetric(label, point, type, selected, enabled, interactive=false) {
     const price = point?.price ?? null;
     const priceClass = price === null
       ? 'unavailable'
@@ -2294,12 +2396,13 @@ class DynamicEnergyPriceCard extends HTMLElement {
         ? `<div class="current-window active">${this._t("Goedkoopst")}</div>`
         : `<div class="current-window active">${this._t("Beste opbrengst")}</div>`
       : '';
-    return `<div class="current-metric ${type}">
-      <span class="current-label">${label}</span>
+    const tag=interactive?'button':'div',appearance=this._seriesAppearance(type);
+    return `<${tag} class="current-metric ${type}${interactive?' legend-series':''}" ${interactive?`type="button" data-series="${type}" aria-pressed="${!this._hiddenSeries.has(type)}"`:""}>
+      <span class="current-label">${interactive?`<i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i>`:""}${label}</span>
       <div class="current ${priceClass}" aria-label="${this._t("Huidige {tariff}prijs {price}", { tariff: label.toLowerCase(), price: price === null ? this._t("onbekend") : `${priceText} ${this._t("cent per kilowattuur")}` })}">
         <strong>${priceText}</strong><span>ct/kWh</span>
       </div>${badge}
-    </div>`;
+    </${tag}>`;
   }
 
   _compactCurrentMetric(label, point, type, selected, enabled) {
@@ -2387,7 +2490,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _stateCard(title, message) {
-    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}</style>`;
+    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
   }
 
   _bindInteractions() {
@@ -2428,7 +2531,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const chart = this.shadowRoot.querySelector('.chart');
     const bounds = chart.getBoundingClientRect();
     const svgX = ((event.clientX - bounds.left) / bounds.width) * this._chart.svgWidth;
-    const timestamp = this._chart.start + Math.max(0, Math.min(1, (svgX - PLOT.left) / (this._chart.svgWidth - PLOT.left - this._chart.plotRight))) * this._chart.span;
+    const timestamp = this._chart.start + Math.max(0, Math.min(1, (svgX - (this._chart.plotLeft??PLOT.left)) / (this._chart.svgWidth - (this._chart.plotLeft??PLOT.left) - this._chart.plotRight))) * this._chart.span;
     let low = 0;
     let high = this._chart.timeline.length - 1;
     while (low < high) {
@@ -2586,6 +2689,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     }).join('\n');
     return `
       :host {
+        min-height:var(--energy-required-height,0px);
         --cheap: var(--success-color, #19a974);
         --normal: #f2a93b;
         --expensive: var(--error-color, #e45c4f);
@@ -2596,10 +2700,10 @@ class DynamicEnergyPriceCard extends HTMLElement {
         ${colorOverrides}
         --cheapest-fill: color-mix(in srgb, var(--import-best) 13%, transparent);
         --export-best-fill: color-mix(in srgb, var(--export-best) 18%, transparent);
-        --font-size-meta: 10px;
+        --font-size-meta: 11px;
         --font-size-label: 12px;
-        --font-size-title: 18px;
-        --font-size-value: 20px;
+        --font-size-title: 16px;
+        --font-size-value: 16px;
         --font-weight-regular: 400;
         --font-weight-medium: 500;
         --font-weight-strong: 600;
@@ -2608,9 +2712,9 @@ class DynamicEnergyPriceCard extends HTMLElement {
         display: block;
         height: 100%;
       }
-      ha-card { overflow: hidden; height: 100%; }
+      ha-card { overflow: visible; height: 100%; min-height:var(--energy-required-height,0px); }
       .card-content { display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; height: 100%; padding: 16px 16px 12px; color: var(--primary-text-color); font-weight: var(--font-weight-regular); line-height: var(--line-height-normal); }
-      .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+      .header { display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:6px; }
       .heading { min-width: 0; }
       h2 { margin: 0; font-size: var(--font-size-title); line-height: var(--line-height-tight); font-weight: var(--font-weight-strong); letter-spacing: -0.01em; }
       .header-cheapest { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; min-height: 34px; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
@@ -2622,11 +2726,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .compact-current strong { font-size: 16px; font-variant-numeric: tabular-nums; }
       .compact-current em { padding: 2px 5px; border-radius: 999px; color: var(--import-best); background: var(--cheapest-fill); font-size: var(--font-size-meta); font-style: normal; }
       .compact-context { overflow: hidden; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); text-overflow: ellipsis; white-space: nowrap; }
-      .current-block { display: flex; justify-content: flex-end; align-items: flex-start; gap: 8px; flex: none; margin-left: auto; }
-      .current-metric { display: grid; justify-items: end; gap: 3px; min-width: 0; }
-      .current-label { color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
-      .current { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 5px; padding: 7px 9px; border-radius: 8px; background: var(--secondary-background-color); font-variant-numeric: tabular-nums; }
-      .current strong { font-size: var(--font-size-value); line-height: 1; font-weight: var(--font-weight-strong); }
+      .current-block { display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start;gap:8px 24px; }
+      .current-metric,.current-metric.legend-series { display:grid;justify-items:start;align-content:center;gap:3px;min-width:44px;max-width:100%;text-align:start; }
+      .current-label { display:flex;align-items:center;gap:6px;color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
+      .current { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 5px; padding:0;border-radius:0;background:none;max-width:100%; font-variant-numeric: tabular-nums; }
+      .current strong { white-space:nowrap;min-width:0;font-size: var(--font-size-value); line-height: 1; font-weight: var(--font-weight-strong); }
       .current span { font-size: var(--font-size-meta); color: var(--secondary-text-color); }
       .current.negative strong { color: var(--negative-color); }
       .current.cheap strong { color: var(--cheap); }
@@ -2641,7 +2745,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .legend span { display: inline-flex; align-items: center; gap: 6px; }
       .legend-label { color: var(--secondary-text-color); }
       .legend-value { color: var(--primary-text-color,#20252b); }
-      .legend-series { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 1px 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+      .legend-series { display: inline-flex; align-items: center; gap: 6px; min-width: 44px; min-height: 44px; box-sizing: border-box; margin: 0; padding: 1px 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
       .legend-series[aria-pressed="false"] { opacity: 0.45; text-decoration: line-through; }
       .legend-series:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; border-radius: 3px; }
       .data-status { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-height: 14px; margin: 3px 0 0; color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
@@ -2657,16 +2761,16 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .chart:focus-visible { box-shadow: inset 0 0 0 2px var(--primary-color); border-radius: 8px; }
       svg { display: block; width: 100%; height: 100%; overflow: hidden; }
       .chart-label { position: absolute; z-index: 1; pointer-events: none; font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: 0 1px 2px var(--card-background-color), 0 0 4px var(--card-background-color); }
-      .x-label { bottom: 4px; transform: translateX(-50%); color: var(--secondary-text-color); }
-      .energy-axis-label { right: 1px; transform: translateY(-50%); color: var(--secondary-text-color); }
-      .energy-unit { right: 1px; top: 0; color: var(--secondary-text-color); }
-      .with-consumption .level-label { right: 34px; }
+      .x-label { bottom: 10px; transform: translateX(-50%); color: var(--secondary-text-color); }
+      .energy-axis-label { right: 10px; transform: translateY(-50%); color: var(--secondary-text-color); }
+      .energy-unit { right: 10px; top: 10px; color: var(--secondary-text-color); }
+      .with-consumption .level-label { right:var(--energy-right-label-gap,54px); }
       .consumption-area { fill: var(--consumption-fill-color); }
       .consumption-area.fade { fill: url(#consumption-area-gradient); opacity: 1; }
-      .y-label { left: 1px; transform: translateY(-50%); color: var(--secondary-text-color); }
-      .day-label { top: 8px; color: var(--primary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
+      .y-label { left: 10px; transform: translateY(-50%); color: var(--secondary-text-color); }
+      .day-label { top: 10px; color: var(--primary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
       .now-label { top: 24px; transform: translateX(-50%); color: var(--primary-text-color); font-weight: var(--font-weight-strong); }
-      .level-label { right: 3px; transform: translateY(-135%); padding: 1px 4px; border-radius: 3px; color: var(--secondary-text-color); background: color-mix(in srgb, var(--card-background-color) 88%, transparent); }
+      .level-label { right: 10px; transform: translateY(-135%); padding: 1px 4px; border-radius: 3px; color: var(--secondary-text-color); background: color-mix(in srgb, var(--card-background-color) 88%, transparent); }
       .level-label.import-level:nth-of-type(1) { color: var(--cheap); }
       .average-label { transform: translateY(-135%); padding: 2px 5px; border-radius: 4px; color: var(--primary-text-color); background: color-mix(in srgb, var(--card-background-color) 88%, transparent); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
       .export-average-label { border-left: 2px dashed currentColor; }
@@ -2714,6 +2818,14 @@ class DynamicEnergyPriceCard extends HTMLElement {
 
       .tooltip[data-horizontal="positioned"] { transform: none; }
 
+      .price-periods{flex:none;margin-top:8px;border-top:1px solid var(--divider-color)}
+      .price-periods>summary{min-height:44px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:var(--font-size-label);font-weight:500;color:var(--secondary-text-color);list-style:none}
+      .price-periods>summary::-webkit-details-marker{display:none}
+      .price-periods>summary::after{content:'⌄';margin-inline-start:auto}
+      .price-periods[open]>summary::after{content:'⌃'}
+      .price-periods>summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+      .price-periods .price-table-wrap{margin-top:0;border-top:0;padding-top:0}
+      .price-periods .price-table-wrap h3{display:none}
       .price-table-wrap { flex: 0 1 auto; min-height: 0; max-height: 190px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider-color); overflow: auto; }
       .price-table-wrap h3 { margin: 0 0 4px; font-size: var(--font-size-label); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
       .table-unit { float: right; color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); }
@@ -2730,7 +2842,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       [hidden] { display: none !important; }
       @media (max-width: 520px) {
-        :host { --font-size-title: 17px; --font-size-value: 18px; }
+        :host { --font-size-title: 16px; --font-size-value: 16px; }
         .card-content { padding: 12px 12px 10px; }
         .compact-summary { gap: 8px; }
         .compact-current { font-size: 11px; }
@@ -2738,8 +2850,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
         .compact-context { font-size: var(--font-size-meta); }
         .header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; }
         .heading { grid-column: 1 / -1; }
-        .current-block { grid-column: 1 / -1; width: 100%; max-width: none; margin-left: 0; gap: 5px; justify-content: flex-end; }
-        .current { padding: 5px 7px; column-gap: 3px; }
+        .current-block { grid-column:1 / -1;width:100%;max-width:none;margin-left:0;gap:8px 24px;justify-content:flex-start; }
+        .current { padding:0;column-gap:5px; }
         .legend { gap: 6px 10px; margin-top: 9px; }
         .data-status { margin-top: 2px; }
         .chart { flex-basis: 260px; min-height: 110px; }
@@ -2750,9 +2862,9 @@ class DynamicEnergyPriceCard extends HTMLElement {
       }
       @media (max-width: 360px) {
         .cheapest-table { font-size: 10px; }
-        .current-block { justify-content: stretch; }
-        .current-metric { flex: 1 1 0; justify-items: stretch; }
-        .current { justify-content: center; }
+        .current-block { justify-content:flex-start; }
+        .current-metric { flex:0 1 auto;justify-items:start; }
+        .current { justify-content:start; }
       }
       @media (prefers-reduced-motion: reduce) { .tooltip { transition: none; } }
       ${this._config?.embedded===true?`:host{height:auto;min-width:0}ha-card{height:auto;background:transparent;border:0;border-radius:0;box-shadow:none}.card-content{height:auto;padding:0}.state{padding:8px 0}.chart{flex:0 0 auto;height:260px;min-height:180px}.current{border-radius:8px}.cheapest-table .period-type{border-radius:8px}`:''}
@@ -2780,6 +2892,49 @@ if (!window.customCards.some((card) => card.type === 'eleven-dynamic-energy-pric
 /* Eleven Cards 0.3.1-local — Eleven History Graph Card; standalone, no dependencies. */
 (()=>{
 "use strict";
+
+// ../../shared/card-theme.js
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
 
 // ../../shared/graph.js
 // Domain-neutral SVG renderer. Adapters own data, geometry, colors and annotations.
@@ -4300,7 +4455,7 @@ class HistoryGraphCard extends HTMLElement {
   if(!customElements.get('eleven-history-graph-editor'))customElements.define('eleven-history-graph-editor',HistoryGraphEditor);
   return document.createElement('eleven-history-graph-editor');
  }
- constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._timer=null;this._connected=false;this._status='loading';this._series=[];this._outside=e=>{const chart=this.shadowRoot.querySelector('.chart');if(chart&&!e.composedPath().includes(chart)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip?.();};}
+ constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._timer=null;this._connected=false;this._status='loading';this._series=[];this._outside=e=>{const tools=this.shadowRoot.querySelector('.history-tools');if(tools?.open&&!e.composedPath().includes(tools)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))tools.open=false;const chart=this.shadowRoot.querySelector('.chart');if(chart&&!e.composedPath().includes(chart)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip?.();};}
  static _formContract(schema){
   return {schema,computeLabel:function(item){return text(item?.name==='title'?'titleField':item?.name??'',language(this?.hass??frontendHass()));},computeHelper:function(item){const key=`${item?.name}Helper`,value=text(key,language(this?.hass??frontendHass()));return value===key?undefined:value;}};
  }
@@ -4455,7 +4610,7 @@ class HistoryGraphCard extends HTMLElement {
   if(this._connected){this._elfTimer=setTimeout(()=>this._syncElf(),Math.min(60000-now%60000,this._elfPreviewUntil>now?this._elfPreviewUntil-now:60000));this._elfTimer.unref?.();}
  }
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._elfPreview??=()=>{this._elfPreviewUntil=Date.now()+ELF_FLIGHT_MS;this.shadowRoot.querySelector('.eleven-elf')?.remove();this._syncElf();};registerElfPreview(this._elfPreview);document.addEventListener('pointerdown',this._outside);this._syncElf();if(this._config&&this._hass)this._refresh();}
- disconnectedCallback(){this._touchPointer=null;this._touchRenderPending=false;this._hideTooltip();disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);this._connected=false;unregisterElfPreview(this._elfPreview);this._elfPreviewUntil=0;this._generation++;this._inFlight=false;this._started=false;clearTimeout(this._timer);this._timer=null;clearTimeout(this._elfTimer);this._elfTimer=null;document.removeEventListener('pointerdown',this._outside);}
+ disconnectedCallback(){this._axisResize?.disconnect();this._touchPointer=null;this._touchRenderPending=false;this._hideTooltip();disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);this._connected=false;unregisterElfPreview(this._elfPreview);this._elfPreviewUntil=0;this._generation++;this._inFlight=false;this._started=false;clearTimeout(this._timer);this._timer=null;clearTimeout(this._elfTimer);this._elfTimer=null;document.removeEventListener('pointerdown',this._outside);}
  _sumDataContext(hass){return this._config.series_options.some(s=>s.sum_entities?.length)?JSON.stringify([hass.config?.time_zone,historyEntityIds(this._config).map(id=>{const s=hass.states?.[id];return [id,!!s,s?.attributes?.unit_of_measurement??''];})]):null;}
  async _refresh(){
   if(!this._connected||!this._config||!this._hass||this._inFlight)return;
@@ -4517,10 +4672,12 @@ class HistoryGraphCard extends HTMLElement {
    const x=t=>(t-this._viewStart)/(this._viewEnd-this._viewStart)*1000,y=v=>(max-v)/(max-min)*300;
    const axes=this._axes.map((axis,index)=>{
     const position=index?`left:auto;right:calc(12px + ${index-1} * var(--axis-column));width:var(--axis-column);max-width:var(--axis-column);text-align:right;`:'';
-    const unit=mixed?`<span class="axis-unit" style="${position}">${escapeHtml(axis.unit||'—')}</span>`:'';
-    return unit+[...axis.ticks].reverse().map(value=>{const ratio=(axis.max-value)/(axis.max-axis.min);return `<span class="axis-y" style="top:calc(${ratio*100}% + ${22-ratio*52}px);${position}">${escapeHtml(number(value,lang,true))}</span>`;}).join('');
+    const unit=mixed?`<span class="axis-unit" data-axis="${index}" title="${escapeHtml(axis.unit||'—')}" style="${position}">${escapeHtml(axis.unit||'—')}</span>`:'';
+    return unit+[...axis.ticks].reverse().map(value=>{const ratio=(axis.max-value)/(axis.max-axis.min);return `<span class="axis-y" style="top:calc(${ratio*100}% + ${22-ratio*52}px);${position}" data-axis="${index}" data-ratio="${ratio}">${escapeHtml(number(value,lang,true))}</span>`;}).join('');
    }).join('');
-   const times=Array.from({length:4},(_,i)=>`<span class="axis-x" data-tick="${i}" style="left:calc(${i/3*100}% + ${44-i/3*56}px - ${i/3} * var(--axes-right,0px))">${escapeHtml(time(this._timeAtPlotPosition(i/3),lang,this._zone,(this._viewEnd-this._viewStart)>86400000))}</span>`).join('');
+   const dateFormat=new Intl.DateTimeFormat('en-CA',{timeZone:this._zone,year:'numeric',month:'2-digit',day:'2-digit'});
+   const spansDates=dateFormat.format(this._viewStart)!==dateFormat.format(this._viewEnd);
+   const times=Array.from({length:4},(_,i)=>`<span class="axis-x" data-tick="${i}" style="left:calc(${i/3*100}% + ${44-i/3*56}px - ${i/3} * var(--axes-right,0px))">${escapeHtml(time(this._timeAtPlotPosition(i/3),lang,this._zone,spansDates))}</span>`).join('');
 
    const display=this._plotSeries.map((s,i)=>({...s,points:this._displayPoints(s.points,i)}));
    const seriesY=i=>{const a=this._axes[this._seriesAxes[i]];return v=>(a.max-v)/(a.max-a.min)*300;};
@@ -4535,13 +4692,25 @@ class HistoryGraphCard extends HTMLElement {
    const missing=meta.items.filter((_,i)=>visible[i]&&!this._series[i].points.some(p=>p.v!==null)).map(s=>s.name);
    content=`${this._config.show_legend?legend:`<div class="data-status">${escapeHtml(mixed?'':meta.unit)}</div>`}${missing.length?`<div class="data-status">${text('partial',lang)} ${escapeHtml(missing.join(', '))}</div>`:''}<div class="chart" style="--axis-column:min(48px, calc((100% - 124px) / ${Math.max(1,extra)}));--axes-right:calc(${extra} * var(--axis-column))" tabindex="0" role="group" aria-label="${text('chart',lang)}">${anyVisible?axes+times:`<div class="empty-visibility" role="status">${escapeHtml(text('no_visible',lang))}</div>`}<div class="plot">${graph}<div class="zoom-selection" hidden></div></div>${this._config.show_hover_line?'<div class="guide" hidden></div>':''}<div class="markers"></div><div class="tooltip" hidden></div><div class="sr-only" aria-live="polite"></div></div>`;
   }
-  const controls=cardHeader({title,showTitle:this._config.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:lang,periods:periodControls(this,lang),zoomState:chartZoomState(this),information:chartDataInformation(this,lang)});
+  const headerOptions={title,showTitle:this._config.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:lang,periods:periodControls(this,lang),zoomState:chartZoomState(this),information:chartDataInformation(this,lang)};
+  const controls=this.constructor===HistoryGraphCard?this._historyHeader(headerOptions):cardHeader(headerOptions);
   // DOM replacement blurs a focused old chart before disconnecting it. This is
   // teardown, not a user dismissal; the new chart gets its own blur handler.
   const previousChart=this.shadowRoot.querySelector('.chart');if(previousChart)previousChart.onblur=null;
-  this.shadowRoot.innerHTML=`<style>${this._styles()}</style><ha-card lang="${lang}"><div class="card-content">${controls}${content}</div></ha-card>`;
+  const toolsHadFocus=this.shadowRoot.activeElement?.matches?.('.history-tools summary');
+  this.shadowRoot.innerHTML=`<style>${this._styles()}${cardThemeStyles({chartUI:true,plots:'.chart',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}${this.constructor===HistoryGraphCard?this._historyStyles():''}</style><ha-card lang="${lang}"><div class="card-content">${controls}${content}</div></ha-card>`;
   this._updateGraphTheme();bindPeriodControls(this);bindChartInsights(this);
+  const tools=this.shadowRoot.querySelector('.history-tools');if(tools)tools.onkeydown=e=>{if(e.key==='Escape'&&!e.target.closest?.('[popover]')){e.preventDefault();tools.open=false;tools.querySelector('summary').focus();}};
+  if(toolsHadFocus)tools?.querySelector('summary').focus({preventScroll:true});
   this.shadowRoot.querySelectorAll?.('[data-zoom]').forEach(button=>button.onclick=()=>this._zoom({in:0.5,out:2,reset:0}[button.dataset.zoom]));
+  this._axisResize?.disconnect();
+  if(this.constructor===HistoryGraphCard){
+   this.style?.removeProperty('--history-required-height');
+   const chart=this.shadowRoot.querySelector('.chart'),layout=()=>{if(this.shadowRoot.querySelector('.chart')===chart)this._layoutHistoryAxes();};
+   this._layoutHistoryAxes();
+   if(chart&&globalThis.ResizeObserver){this._axisResize=new ResizeObserver(layout);for(const node of [chart,this.shadowRoot.querySelector('.card-header'),this.shadowRoot.querySelector('.legend'),...chart.querySelectorAll('.axis-unit'),chart.querySelector('.axis-y'),chart.querySelector('.axis-x')].filter(Boolean))this._axisResize.observe(node);}
+   const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(layout);globalThis.document?.fonts?.ready?.then(layout);
+  }
   this._graph?.restore(this);
   const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();this._bindInteractions();
   this._syncElf();const renderedChart=this.shadowRoot.querySelector('.chart'),restoreTooltip=()=>{if(this.shadowRoot.querySelector('.chart')===renderedChart){SharedGraph.restoreHover(this);if(this._cursor!=null)this._showTooltip(this._cursor,false);}};const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(restoreTooltip);else restoreTooltip();
@@ -4622,6 +4791,75 @@ class HistoryGraphCard extends HTMLElement {
   chart.querySelector('.sr-only').textContent=`${time(timestamp,this._lang,this._zone,true)}. ${rows.map(row=>`${row.name}: ${row.value}`).join('. ')}`;
   if(publish)SharedGraph.publishHover(this,timestamp);
  }
+  // History owns only this arrangement; the shared header still supplies every
+  // existing action and its semantics. Companion cards use it unchanged.
+ _historyHeader(options){
+  const label=options.language.startsWith('nl')?'Grafiekopties':'Graph tools';
+  const open=this.shadowRoot.querySelector('.history-tools')?.open;
+  const header=cardHeader({...options,periods:{},zoomState:{...options.zoomState,zoomed:options.zoomState.zoomed&&!options.periods.picker}});
+  return header.replace('<div class="header-actions">',`<details class="history-tools"${open?' open':''}><summary title="${label}" aria-label="${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="header-actions history-tools-panel">`).replace('</div></header>',`</div></details>${options.periods.picker?`<div class="header-actions history-timeframe"><div class="chart-controls" role="group" aria-label="${options.language.startsWith('nl')?'Tijdvak':'Timeframe'}">${options.periods.picker}${options.periods.navigation??''}</div></div>`:''}</header>`);
+ }
+ _layoutHistoryAxes(){
+  const chart=this.shadowRoot.querySelector('.chart');if(!chart?.getBoundingClientRect||!globalThis.getComputedStyle)return;
+  const labels=[...chart.querySelectorAll('[data-axis]')];if(!labels.length)return;
+  const edge=10,gap=8,width=chart.clientWidth,canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+  if(!ctx||width<=0)return;
+  const measure=node=>{ctx.font=getComputedStyle(node).font;return Math.ceil(ctx.measureText(node.textContent).width);};
+  const count=this._axes.length,scale=chart.getBoundingClientRect().width/width||1;
+  // Unit names may wrap; numeric ticks never truncate. Reserve actual glyph widths.
+  const columns=Array.from({length:count},(_,i)=>Math.max(0,...labels.filter(n=>Number(n.dataset.axis)===i).map(n=>n.classList.contains('axis-unit')?Math.min(measure(n),56):measure(n))));
+  const left=edge+columns[0]+gap,right=count>1?edge+columns.slice(1).reduce((a,b)=>a+b+gap,0):edge;
+  chart.style.setProperty('--history-plot-left',left+'px');chart.style.setProperty('--history-plot-right',right+'px');
+  const units=labels.filter(n=>n.classList.contains('axis-unit'));
+  for(const n of units){const i=Number(n.dataset.axis);n.style.width=columns[i]+'px';n.style.maxWidth='none';n.style.whiteSpace='normal';n.style.overflowWrap='anywhere';}
+  const unitHeight=Math.max(0,...units.map(n=>n.getBoundingClientRect().height/scale));
+  const tickHalf=Math.max(0,...labels.filter(n=>n.classList.contains('axis-y')).map(n=>parseFloat(getComputedStyle(n).lineHeight)/2));
+  const top=edge+unitHeight+tickHalf+8;
+  const ticks=[...chart.querySelectorAll('.axis-x')];
+  for(const n of ticks){const ratio=Number(n.dataset.tick)/3;n.style.display='block';n.style.width='max-content';n.style.setProperty('left',`calc(${ratio*100}% + ${left-ratio*(left+right)}px)`,'important');n.style.right='auto';n.style.transform=ratio===0?'none':ratio===1?'translateX(-100%)':'translateX(-50%)';n.style.setProperty('max-width',Math.max(40,(width-left-right-8)/2)+'px','important');n.style.whiteSpace='normal';n.style.textAlign=ratio===0?'left':ratio===1?'right':'center';}
+  // Decide density from real label boxes, not the browser viewport.
+  let previous=null;for(const n of ticks){const b=n.getBoundingClientRect(),last=ticks.at(-1).getBoundingClientRect();if(n!==ticks[0]&&n!==ticks.at(-1)&&((previous&&b.left<previous.right+8)||b.right+8>last.left)){n.style.display='none';continue;}previous=b;}
+  const bottom=edge+Math.max(0,...ticks.filter(n=>n.style.display!=='none').map(n=>n.getBoundingClientRect().height/scale))+tickHalf+8;
+  chart.style.minHeight=(top+bottom+80)+'px';
+  chart.style.setProperty('--history-plot-top',top+'px');chart.style.setProperty('--history-plot-bottom',bottom+'px');
+  for(const n of labels){const i=Number(n.dataset.axis),offset=edge+columns.slice(i+1).reduce((a,b)=>a+b+gap,0);n.style.left=i?'auto':edge+'px';n.style.right=i?offset+'px':'auto';n.style.width=columns[i]+'px';n.style.maxWidth='none';n.style.textAlign=i?'right':'left';if(n.classList.contains('axis-y')){n.style.display='block';n.style.top=`calc(${Number(n.dataset.ratio)*100}% + ${top-Number(n.dataset.ratio)*(top+bottom)}px)`;}else n.style.top=edge+'px';}
+  for(let i=0;i<count;i++){
+   const ys=labels.filter(n=>n.classList.contains('axis-y')&&Number(n.dataset.axis)===i);let previous=null;
+   for(const n of ys){const box=n.getBoundingClientRect(),last=ys.at(-1).getBoundingClientRect();if(n!==ys[0]&&n!==ys.at(-1)&&((previous&&box.top<previous.bottom+8)||box.bottom+8>last.top)){n.style.display='none';continue;}previous=box;}
+  }
+  // Fixed dashboard height is a minimum, not a licence to clip enlarged text.
+  const content=this.shadowRoot.querySelector('.card-content'),style=getComputedStyle(content),surface=getComputedStyle(this.shadowRoot.querySelector('ha-card'));
+  const px=value=>parseFloat(value)||0;
+  const intrinsic=[...content.children].reduce((height,node)=>{const css=getComputedStyle(node);return height+(node===chart?px(chart.style.minHeight):node.getBoundingClientRect().height/scale)+px(css.marginTop)+px(css.marginBottom);},px(style.paddingTop)+px(style.paddingBottom)+px(surface.borderTopWidth)+px(surface.borderBottomWidth));
+  this.style?.setProperty('--history-required-height',Math.ceil(intrinsic)+'px');
+ }
+ _historyStyles(){return `
+ :host{min-height:var(--history-required-height,0px)}
+ ha-card{height:100%;min-height:var(--history-required-height,0px)}
+ .card-header{display:flex;align-items:center;gap:4px 8px;margin:0 0 4px;position:relative}
+ .card-header h2{font-size:16px;line-height:1.3;font-weight:600;flex:1 1 0;margin:0}
+ .history-tools{margin-inline-start:auto;flex:none}
+ .history-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+ .history-tools summary::-webkit-details-marker{display:none}
+ .history-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
+ .history-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+ .history-tools-panel.header-actions{position:absolute;z-index:5;inset-inline-end:0;top:48px;width:max-content;max-width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color);box-shadow:var(--eleven-material-surface-shadow,var(--ha-card-box-shadow,none));gap:8px;justify-content:flex-start}
+ .history-tools:not([open])>.history-tools-panel{display:none}
+ .history-timeframe.header-actions{width:100%;flex:1 1 100%;margin:0;gap:0}
+ .history-timeframe .chart-controls{width:100%;flex:1 1 100%}
+ .history-timeframe .period-controls{min-width:0;flex:1 1 auto}
+ .history-timeframe .period-trigger{font-size:12px}
+ .plot{left:var(--history-plot-left,44px);right:var(--history-plot-right,12px);top:var(--history-plot-top,36px);bottom:var(--history-plot-bottom,36px)}
+ .guide{top:var(--history-plot-top,36px);bottom:var(--history-plot-bottom,36px)}
+ .axis-x{bottom:10px}
+ .axis-y{overflow:visible;text-overflow:clip}
+ .axis-unit{line-height:1.3;overflow:visible;text-overflow:clip}
+ .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0}
+ .legend-item{display:grid;grid-template-columns:15px minmax(0,1fr);gap:0 6px;align-content:center}
+ .legend-item strong{grid-column:2;font-size:var(--font-size-label);white-space:normal;overflow-wrap:anywhere}
+ .legend-item>span{overflow-wrap:anywhere}
+ .legend .unit{grid-column:1/-1;font-size:11px}
+ `;}
  _styles(){return `
  :host{display:block;height:100%;min-width:0;container-type:inline-size;--font-size-meta:11px;--font-size-label:12px;--font-size-title:18px;}
  ha-card{height:100%;display:flex;flex-direction:column;background:var(--ha-card-background,var(--card-background-color));color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
@@ -4660,6 +4898,48 @@ if(!window.customCards.some(card=>card.type==='eleven-history-graph-card'))windo
 
 ;
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -5605,14 +5885,45 @@ const TimelineView={
   chart.onkeydown=e=>{this._pointerFocusPending=null;if(e.key==='Escape'){drag=null;selection.hidden=true;this._hideTooltip();return;}if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const times=[...new Set([this._viewStart,...this._series.flatMap((s,i)=>this._isSeriesVisible(i)?s.map(v=>v.start):[]).filter(t=>t>this._viewStart&&t<this._viewEnd),this._viewEnd])].sort((a,b)=>a-b);let i=times.findIndex(t=>t>=(this._cursor??this._viewStart));if(i<0)i=times.length-1;i=e.key==='Home'?0:e.key==='End'?times.length-1:Math.max(0,Math.min(times.length-1,i+(e.key==='ArrowRight'?1:-1)));this._pinned=true;this._showTooltip(times[i]);};
   chart.onfocusout=e=>{if(!chart.contains(e.relatedTarget))this._hideTooltip();};this.shadowRoot.querySelectorAll('.segment').forEach(button=>{button.onfocus=()=>{const fromPointer=this._pointerFocusPending===button;this._pointerFocusPending=null;if(fromPointer&&this._cursor!=null)return;this._pinned=true;this._showTooltip(Number(button.dataset.time));};});
  },
+ _timelineHeader(options){
+  const label=options.language==='nl'?'Grafiekopties':'Graph tools',open=this.shadowRoot.querySelector('.chart-tools')?.open;
+  const header=cardHeader({...options,periods:{},zoomState:{...options.zoomState,zoomed:options.zoomState.zoomed&&!options.periods.picker}});
+  return header.replace('<div class="header-actions">',`<details class="chart-tools"${open?' open':''}><summary aria-label="${label}" title="${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="header-actions chart-tools-panel">`).replace('</div></header>',`</div></details>${options.periods.picker?`<div class="header-actions primary-timeframe"><div class="chart-controls" role="group" aria-label="${options.language==='nl'?'Tijdvak':'Timeframe'}">${options.periods.picker}${options.periods.navigation??''}</div></div>`:''}</header>`);
+ },
+ _layoutTimeline(){
+  // Measure complete captions, not clipped word fragments. Preserve accessible
+  // segment names and tooltip content even when the visible caption cannot fit.
+  for(const text of this.shadowRoot.querySelectorAll('.segment span')){
+   text.hidden=false;
+   const segment=text.parentElement,style=getComputedStyle(segment),range=document.createRange();range.selectNodeContents(text);
+   const track=segment.parentElement,scale=track.getBoundingClientRect().width/track.clientWidth||1;
+   text.hidden=range.getBoundingClientRect().width/scale+12>segment.clientWidth||parseFloat(style.lineHeight)>segment.clientHeight;
+  }
+  const axis=this.shadowRoot.querySelector('.axis');if(!axis?.getBoundingClientRect)return;
+  const ticks=[...axis.children],width=axis.clientWidth,scale=axis.getBoundingClientRect().width/width||1;
+  for(const [i,node]of ticks.entries()){const ratio=i/(ticks.length-1);node.hidden=false;node.style.left=ratio*100+'%';node.style.transform=ratio===0?'none':ratio===1?'translateX(-100%)':'translateX(-50%)';node.style.maxWidth=Math.max(40,(width-8)/2)+'px';node.style.textAlign=ratio===0?'left':ratio===1?'right':'center';}
+  let previous=null;for(const node of ticks){const box=node.getBoundingClientRect(),last=ticks.at(-1).getBoundingClientRect();if(node!==ticks[0]&&node!==ticks.at(-1)&&((previous&&box.left<previous.right+8*scale)||box.right+8*scale>last.left)){node.hidden=true;continue;}previous=box;}
+  axis.style.height=Math.max(0,...ticks.filter(n=>!n.hidden).map(n=>n.getBoundingClientRect().height/scale))+'px';
+ },
+ _bindTimelineTools(hadFocus){
+  const tools=this.shadowRoot.querySelector('.chart-tools');if(!tools)return;
+  tools.onkeydown=e=>{if(e.key==='Escape'&&!e.target.closest?.('[popover]')){e.preventDefault();tools.open=false;tools.querySelector('summary').focus();}};
+  this._chartToolsOutside??=e=>{const current=this.shadowRoot.querySelector('.chart-tools');if(current?.open&&!e.composedPath().includes(current)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))current.open=false;};globalThis.document?.addEventListener?.('pointerdown',this._chartToolsOutside);
+  if(hadFocus)tools.querySelector('summary').focus({preventScroll:true});
+ },
  _render(){
-  if(!this._config)return;if(this._touchPointer!=null){this._touchRenderPending=true;return;}this._touchRenderPending=false;if(this._hoverFrame!=null){cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;}captureChartInsights(this);const c=this._config,nl=this._nl(),esc=escapeTimeline;this._viewStart=this._viewport?.[0]??this._start;this._viewEnd=this._viewport?.[1]??this._end;const a=this._viewStart,b=this._viewEnd;let body='';const controls=cardHeader({title:c.title??(nl?'Statustijdlijn':'Status timeline'),showTitle:c.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:nl?'nl':'en',periods:periodControls(this,nl?'nl':'en'),zoomState:chartZoomState(this),information:chartDataInformation(this,nl?'nl':'en')});
+  if(!this._config)return;if(this._touchPointer!=null){this._touchRenderPending=true;return;}this._touchRenderPending=false;if(this._hoverFrame!=null){cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;}captureChartInsights(this);const c=this._config,nl=this._nl(),esc=escapeTimeline;this._viewStart=this._viewport?.[0]??this._start;this._viewEnd=this._viewport?.[1]??this._end;const a=this._viewStart,b=this._viewEnd;let body='';const toolsHadFocus=this.shadowRoot.activeElement?.matches?.('.chart-tools summary');const controls=this._timelineHeader({title:c.title??(nl?'Statustijdlijn':'Status timeline'),showTitle:c.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:nl?'nl':'en',periods:periodControls(this,nl?'nl':'en'),zoomState:chartZoomState(this),information:chartDataInformation(this,nl?'nl':'en')});
   if(this._status!=='ready')body=`<div class="message" role="status">${this._status==='error'?(nl?'Geschiedenis kon niet worden geladen.':'Unable to load history.'):(nl?'Geschiedenis laden…':'Loading history…')}${this._status==='error'?`<button class="retry">${nl?'Opnieuw proberen':'Retry'}</button>`:''}</div>`;
   else{
 
    const legend=new Map(),rows=c.entities.map((id,i)=>{if(!this._isSeriesVisible(i))return '';const name=this._name(id),label=`<button type="button" class="row-label" data-series="${esc(id)}">${esc(name)}</button>`;if(this._stateLimits?.[i])return `<div class="row">${label}<div class="state-limit" role="status">${esc(this._stateLimitMessage())}</div></div>`;const bars=(this._series[i]??[]).filter(s=>s.end>a&&s.start<b).map(s=>{const v=this._segmentAppearance(s,id);legend.set(v.label+'|'+v.color,v);const start=Math.max(a,s.start),end=Math.min(b,s.end),description=`${name}: ${v.label}, ${this._time(s.start)} – ${this._time(s.end)} · ${this._duration(s.end-s.start)}`;return `<button class="segment ${['unknown','unavailable'].includes(s.state)?'gap':''}" style="left:${(start-a)/(b-a)*100}%;width:${(end-start)/(b-a)*100}%;background-color:${v.color};color:${v.textColor??'inherit'}" aria-label="${esc(description)}" data-time="${start}">${c.show_state_labels?`<span>${esc(v.label)}</span>`:''}</button>`;}).join('');return `<div class="row">${c.show_labels?`${label}`:''}<div class="track">${bars}</div>${c.show_summary?`<div class="summary">${esc(this._summary(i))}</div>`:''}</div>`;}).join('');
    body=`<div class="chart" tabindex="0" role="group" aria-label="${nl?'Statustijdlijn':'Status timeline'}">${c.show_grid!==false?this._ticks().map(r=>`<div class="grid-line" style="left:${r*100}%"></div>`).join(''):''}${rows}<div class="guide" hidden></div><div class="zoom-selection" hidden></div><div class="tooltip" role="status" hidden></div></div>`;
-   if(c.show_axis)body+=`<div class="axis">${this._ticks().map(r=>`<span>${esc(this._time(a+(b-a)*r))}</span>`).join('')}</div>`;
+   if(c.show_axis){
+    const dates=new Intl.DateTimeFormat('en-CA',{timeZone:this._hass?.config?.time_zone,year:'numeric',month:'2-digit',day:'2-digit'});
+    const spansDates=dates.format(a)!==dates.format(b),ticks=this._ticks();
+    body+=`<div class="axis">${ticks.map((r,i)=>`<span>${esc(this._time(a+(b-a)*r,spansDates&&(i===0||i===ticks.length-1)))}</span>`).join('')}</div>`;
+   }
+   body='<div class="timeline-well">'+body+'</div>';
    if(c.show_legend)body+=`<div class="legend">${[...legend.values()].map(v=>`<span><i style="background:${v.color}"></i>${esc(v.label)}</span>`).join('')}</div>`;
   }
   this.shadowRoot.innerHTML=`<style>:host{display:block;container-type:inline-size;height:100%;min-width:0;min-height:0}ha-card{display:block;min-height:0;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font-family:inherit;height:100%}
@@ -5620,23 +5931,40 @@ const TimelineView={
 ${cardHeaderStyles()}
 ${periodControlsStyles()}
 ${chartInsightStyles()}
+.content>.card-header{display:flex;align-items:center;gap:4px 8px;margin:0 0 12px;position:relative}
+.content>.card-header h2{font-size:16px;line-height:1.3;font-weight:600;flex:1 1 0;margin:0}
+.chart-tools{margin-inline-start:auto;flex:none}
+.chart-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+.chart-tools summary::-webkit-details-marker{display:none}
+.chart-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
+.chart-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.chart-tools-panel.header-actions{position:absolute;z-index:5;inset-inline-end:0;top:48px;width:max-content;max-width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color);box-shadow:var(--eleven-material-surface-shadow,var(--ha-card-box-shadow,none));gap:8px;justify-content:flex-start}
+.chart-tools:not([open])>.chart-tools-panel{display:none}
+.primary-timeframe.header-actions{width:100%;flex:1 1 100%;margin:0;gap:0}
+.primary-timeframe .chart-controls{width:100%;flex:1 1 100%}
+.primary-timeframe .period-controls{min-width:0;flex:1 1 auto}
+.primary-timeframe .period-trigger{font-size:12px}
+.timeline-well{padding:10px;min-width:0}
+.axis{position:relative;display:block}
+.axis span{position:absolute;top:0;width:max-content;white-space:normal;overflow-wrap:anywhere}
 @container(max-width:480px){.content{padding:var(--eleven-card-padding,16px)}}
 .chart{position:relative;touch-action:pan-y;min-width:0}
 .grid-line{position:absolute;top:0;bottom:0;border-left:1px solid var(--divider-color,#ddd);opacity:.45;pointer-events:none}
 .row{position:relative}
-.row-label{position:relative;width:fit-content;background:var(--ha-card-background,var(--card-background-color,#fff))}
-.summary{margin-top:6px;font-size:11px;color:var(--secondary-text-color,#666);background:var(--ha-card-background,var(--card-background-color,#fff));position:relative;overflow-wrap:anywhere}
+.row-label{position:relative;background:transparent}
+.summary{margin-top:6px;font-size:11px;color:var(--secondary-text-color,#666);background:transparent;position:relative;overflow-wrap:anywhere}
 .row+.row{margin-top:${c.row_gap}px}
-.row-label{font-size:12px;color:var(--secondary-text-color,#666);margin-bottom:7px;overflow-wrap:anywhere}
-.row-label[data-series]{display:block;max-width:100%;padding:0;border:0;text-align:start;font-family:inherit;cursor:pointer}
+.row-label{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin-bottom:4px;overflow-wrap:anywhere}
+.row-label[data-series]{display:block;width:100%;min-height:24px;box-sizing:border-box;padding:3px 0;border:0;text-align:start;font-family:inherit;cursor:pointer}
 .row-label[data-series]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}
 .track{position:relative;height:${c.bar_height}px;border-radius:${c.border_radius}px;overflow:hidden;background:var(--divider-color,#ddd)}
-.segment{position:absolute;top:0;height:100%;padding:0;border:0;border-right:1px solid #ffffff24;box-sizing:border-box;cursor:pointer;color:white;min-width:0;overflow:hidden;font:11px inherit}
-.segment span{padding:0 6px;white-space:nowrap}
+.segment{position:absolute;top:0;height:100%;padding:0;border:0;border-right:1px solid #ffffff24;box-sizing:border-box;cursor:pointer;color:white;min-width:0;overflow:hidden;font-family:inherit;font-size:11px;line-height:14px}
+.segment span{display:inline-block;padding:0 6px;white-space:nowrap}
+.segment span[hidden]{display:none}
 .segment:focus-visible{outline:2px solid var(--primary-text-color,#222);outline-offset:-2px;z-index:1}
 .gap{background-image:repeating-linear-gradient(135deg,transparent,transparent 4px,#ffffff40 4px,#ffffff40 8px)}
-.axis{display:flex;justify-content:space-between;gap:8px;margin-top:10px;font-size:11px;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums}
-.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:16px;font-size:12px;color:var(--secondary-text-color,#666)}
+.axis{position:relative;display:block;margin-top:10px;font-size:11px;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:12px;padding-inline:10px;font-size:12px;color:var(--secondary-text-color,#666)}
 .legend span{display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
 .legend i,.tooltip i{width:9px;height:9px;border-radius:3px;flex-shrink:0}
 .guide{position:absolute;top:0;bottom:0;border-left:1px solid var(--primary-text-color,#20252b);opacity:.6;pointer-events:none;z-index:2}
@@ -5646,8 +5974,8 @@ ${SharedGraph.tooltipStyles()}
 .tooltip .tooltip-value{color:var(--primary-text-color,#20252b);font-style:normal}
 .state-limit{font-size:12px;color:var(--error-color,#db4437);overflow-wrap:anywhere;position:relative}
 .message{font-size:14px;color:var(--secondary-text-color,#666);min-height:60px}
-.retry{display:block;margin-top:12px;min-height:44px;background:transparent;color:inherit;border:1px solid var(--divider-color,#ddd);border-radius:6px;padding:8px 12px}[hidden]{display:none}</style><ha-card><div class="content">${controls}${body}</div></ha-card>`;
-  bindPeriodControls(this);bindChartInsights(this);
+.retry{display:block;margin-top:12px;min-height:44px;background:transparent;color:inherit;border:1px solid var(--divider-color,#ddd);border-radius:6px;padding:8px 12px}[hidden]{display:none}${cardThemeStyles({chartUI:true,plots:'.timeline-well',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}</style><ha-card><div class="content">${controls}${body}</div></ha-card>`;
+  bindPeriodControls(this);bindChartInsights(this);this._bindTimelineTools(toolsHadFocus);this._layoutTimeline();this._timelineResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._timelineResize=new ResizeObserver(()=>this._layoutTimeline());const well=this.shadowRoot.querySelector('.timeline-well');if(well)this._timelineResize.observe(well);}
   const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();this.shadowRoot.querySelectorAll('[data-zoom]').forEach(button=>button.onclick=()=>this._zoom({in:.5,out:2,reset:0}[button.dataset.zoom]));this._bindInteractions();const renderedChart=this.shadowRoot.querySelector('.chart'),restoreTooltip=()=>{if(this.shadowRoot.querySelector('.chart')===renderedChart){SharedGraph.restoreHover(this);if(this._cursor!=null)this._showTooltip(this._cursor,false);}};const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(restoreTooltip);else restoreTooltip();
  }
 };
@@ -5782,7 +6110,7 @@ class TimelineCard extends HTMLElement{
  }
  get hass(){return this._hass;}
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._outside??=e=>{if(!e.composedPath().includes(this)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip();};globalThis.document?.addEventListener('pointerdown',this._outside);if(typeof ResizeObserver!=='undefined'){this._resizeObserver??=new ResizeObserver(entries=>{const narrow=(entries[0]?.contentRect?.width??this.clientWidth)<400;if(this._axisNarrow!==undefined&&this._axisNarrow!==narrow&&this._config)this._render();this._axisNarrow=narrow;});this._resizeObserver.observe(this);}if(this._config&&this._hass)this._refresh();}
- disconnectedCallback(){this._touchPointer=null;this._touchRenderPending=false;disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);globalThis.document?.removeEventListener('pointerdown',this._outside);this._resizeObserver?.disconnect();if(this._hoverFrame!=null)cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;this._hideTooltip();this._connected=false;this._started=false;this._inFlight=false;this._generation++;clearTimeout(this._timer);}
+ disconnectedCallback(){this._timelineResize?.disconnect();globalThis.document?.removeEventListener?.('pointerdown',this._chartToolsOutside);this._touchPointer=null;this._touchRenderPending=false;disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);globalThis.document?.removeEventListener('pointerdown',this._outside);this._resizeObserver?.disconnect();if(this._hoverFrame!=null)cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;this._hideTooltip();this._connected=false;this._started=false;this._inFlight=false;this._generation++;clearTimeout(this._timer);}
  getCardSize(){return Math.ceil((90+(this._config?.entities.length??1)*((this._config?.bar_height??18)+(this._config?.row_gap??16)+24))/50);}
  getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(3,Math.ceil(this.getCardSize()*50/64)),min_rows:3};}
  _isSeriesVisible(index){return chartSeriesVisible(this,index);}
@@ -5834,6 +6162,48 @@ window.customCards??=[];if(!window.customCards.some(c=>c.type==='eleven-timeline
 ;
 // Eleven Overview (beta) 0.1.0 — self-contained standalone module
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
@@ -6032,6 +6402,7 @@ function normalizeConfig(input,{draft=false}={}){
 
 
 
+
 const esc=escapeHtml;
 const nl=h=>String(h?.locale?.language??h?.language??'en').startsWith('nl');
 const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],hover_sync_group:['Synchronisatiegroep','Synchronization group'],title:['Titel','Title'],hours_to_show:['Periode (uur)','Period (hours)'],columns:['Kolommen','Columns'],show_graph:['Trendlijnen tonen','Show sparklines'],show_delta:['Verandering tonen','Show change'],entity:['Sensor','Sensor'],name:['Naam','Name'],color:['Kleur','Color']};
@@ -6074,7 +6445,7 @@ class OverviewCard extends HTMLElement{
   if(this._connected&&!this._promise&&this._status==='loading')this._refresh();
  }get hass(){return this._hass;}
  connectedCallback(){this._connected=true;connectTimeframeSync(this);this._refresh();}
- disconnectedCallback(){disconnectTimeframeSync(this);this._stopAnimation();this._connected=false;this._generation++;this._promise=null;clearTimeout(this._timer);this._timer=null;}
+ disconnectedCallback(){this._layoutObserver?.disconnect();disconnectTimeframeSync(this);this._stopAnimation();this._connected=false;this._generation++;this._promise=null;clearTimeout(this._timer);this._timer=null;}
  getCardSize(){return 1+Math.ceil((this._config?.entities.length??1)/2)*2;}
  getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(2,Math.ceil(this.getCardSize()*50/64)),min_rows:2};}
  // Only the visual reading is interpolated; sensor values remain authoritative.
@@ -6117,8 +6488,43 @@ class OverviewCard extends HTMLElement{
    finally{clearTimeout(requestTimer);if(generation===this._generation&&this._connected){this._promise=null;this._render();this._timer=setTimeout(()=>this._refresh(),retryDelay(this._refreshFailures??0));}}
   })();this._promise=work;return work;
  }
+ // Fit the configured upper bound to atomic values and actual label fonts.
+ // Observe text too: text enlargement need not resize the outer card.
+ _observeLayout(){
+  if(typeof ResizeObserver!=='function')return;
+  this._layoutObserver??=new ResizeObserver(()=>this._fitColumns());
+  this._layoutObserver.disconnect();
+  const grid=this.shadowRoot.querySelector('.grid');if(!grid)return;
+  this._layoutObserver.observe(grid);
+  this.shadowRoot.querySelectorAll('.value,.label,.unit,.delta,h2,.period').forEach(node=>this._layoutObserver.observe(node));
+  this._fitColumns();
+ }
+ _fitColumns(){
+  const grid=this.shadowRoot.querySelector('.grid');if(!grid)return;
+  const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');if(!ctx)return;
+  const wordWidth=node=>{const style=getComputedStyle(node);ctx.font=style.font;return Math.max(0,...node.textContent.split(/[\s-]+/u).map(word=>ctx.measureText(word).width));};
+  const title=this.shadowRoot.querySelector('h2'),period=this.shadowRoot.querySelector('.period');
+  const titleMinimum=wordWidth(title);ctx.font=getComputedStyle(period).font;
+  this.shadowRoot.querySelector('header').classList.toggle('stacked',titleMinimum+12+ctx.measureText(period.textContent).width>grid.clientWidth);
+  let minimum=134;const values=[];
+  this.shadowRoot.querySelectorAll('.metric').forEach(metric=>{
+   const value=metric.querySelector('.value');value.style.removeProperty('font-size');
+   const range=document.createRange();range.selectNodeContents(value);
+   const scale=metric.getBoundingClientRect().width/metric.offsetWidth||1;
+   let width=range.getBoundingClientRect().width/scale;
+   values.push({node:value,width,font:parseFloat(getComputedStyle(value).fontSize)});
+   for(const node of metric.querySelectorAll('.name,.unit,.delta'))width=Math.max(width,wordWidth(node)+(node.matches('.name')?15:0));
+   minimum=Math.max(minimum,Math.ceil(width)+20);
+  });
+  const configured=this._config.columns==='auto'?2:Number(this._config.columns),columns=Math.max(1,Math.min(configured,this._config.entities.length,Math.floor((grid.clientWidth+16)/(minimum+16))));
+  grid.style.setProperty('--overview-columns',String(columns));
+  // Only a value wider than the full available reading needs smaller type.
+  // Never split or round the authoritative numeric text to make it fit.
+  const available=(grid.clientWidth-16*(columns-1))/columns-20;
+  for(const value of values)if(value.width>available&&available>0)value.node.style.fontSize=`${value.font*available/value.width}px`;
+ }
  _render(){
-  if(!this._config)return;const c=this._config,dutch=nl(this._hass),focus=this.shadowRoot.activeElement?.dataset.entity;
+  if(!this._config)return;const c=this._config,dutch=nl(this._hass),active=this.shadowRoot.activeElement,focus=active?.dataset.entity,retryFocus=active?.classList.contains('retry');
   const synced=!!this._sharedTimeframe,range=this._status==='ready'?{start:this._start,end:this._end}:graphPeriodRange(this),formatter=new Intl.DateTimeFormat(dutch?'nl-NL':'en-GB',{timeZone:this._hass?.config?.time_zone||'UTC',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const period=synced?formatter.formatRange(range.start,range.end):`${c.hours_to_show} ${dutch?'uur':'hours'}`,cells=c.entities.map((row,i)=>{
    const s=this._hass?.states?.[row.entity],unit=s?.attributes?.unit_of_measurement??'',history=this._status==='ready'&&this._units[row.entity]===unit?this._history[row.entity]:null,v=synced?(history?.points.at(-1)?.v??null):numeric(s?.state),name=row.name||s?.attributes?.friendly_name||row.entity,displayValue=this._reading(row.entity,v,unit);
@@ -6126,10 +6532,41 @@ class OverviewCard extends HTMLElement{
    const status=!s?(dutch?'Sensor niet gevonden':'Entity not found'):v==null?(synced&&this._status==='loading'?(dutch?'Geschiedenis laden…':'Loading history…'):synced?(dutch?'Geen historische waarde':'No historical value'):(dutch?'Niet beschikbaar':'Unavailable')):'';
    const graphStatus=this._status==='loading'?(dutch?'Geschiedenis laden…':'Loading history…'):this._status==='error'?(dutch?'Geen geschiedenis geladen':'History not loaded'):dutch?'Geen geschiedenis':'No history';
    const difference=change==null?(dutch?'Geen vergelijkingspunt':'No comparison point'):`${change>0?'+':''}${this._format(change)}${unit?' '+(unit==='%'?'pp':unit):''}`;
-   return `<button type="button" class="metric" data-entity="${esc(row.entity)}" aria-label="${esc(name+': '+(status||this._format(v)+' '+unit))}" style="--series-color:${color(row.color,PALETTE[i])}"><span class="label"><i></i>${esc(name)}</span><span class="reading"><span class="value">${v==null?'—':esc(this._format(displayValue,v))}</span>${v!=null&&unit?`<span class="unit">${esc(unit)}</span>`:''}</span>${status?`<span class="status">${status}</span>`:''}${c.show_graph?`<span class="spark">${path?`<svg viewBox="0 0 300 48" preserveAspectRatio="none" aria-hidden="true"><path d="${path}"/></svg>`:`<span>${graphStatus}</span>`}</span>`:''}${c.show_delta?`<span class="delta">${v==null?'—':esc(difference)}</span><span class="caption">${dutch?'sinds begin periode':'since period start'}</span>`:''}</button>`;
+   return `<button type="button" class="metric" data-entity="${esc(row.entity)}" aria-label="${esc(name+': '+(status||this._format(v)+' '+unit))}" style="--series-color:${color(row.color,PALETTE[i])}"><span class="label"><i></i><span class="name">${esc(name)}</span></span><span class="reading"><span class="value">${v==null?'—':esc(this._format(displayValue,v))}</span>${v!=null&&unit?`<span class="unit">${esc(unit)}</span>`:''}${status?`<span class="status">${status}</span>`:''}</span>${c.show_graph?`<span class="spark">${path?`<svg viewBox="0 0 300 48" preserveAspectRatio="none" aria-hidden="true"><path d="${path}"/></svg>`:`<span>${graphStatus}</span>`}</span>`:''}${c.show_delta?`<span class="delta">${v==null?'—':esc(difference)}</span><span class="caption">${dutch?'sinds begin periode':'since period start'}</span>`:''}</button>`;
   }).join('');
-  this.shadowRoot.innerHTML=`<style>:host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}ha-card{display:block;height:100%;font-family:inherit;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b)}.content{height:100%;min-height:0;overflow:auto;padding:var(--eleven-card-padding,16px);box-sizing:border-box;scrollbar-width:thin}header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:20px}h2{font-size:18px;font-weight:650;letter-spacing:-.01em;line-height:1.25;margin:0;overflow-wrap:anywhere}.period{font-size:12px;text-align:right;overflow-wrap:anywhere;color:var(--secondary-text-color,#666);}.grid{display:grid;grid-template-columns:repeat(${c.columns==='auto'?'2':c.columns},minmax(0,1fr));gap:20px 24px}.metric{appearance:none;font:inherit;color:inherit;background:none;border:0;border-radius:4px;text-align:left;min-width:0;min-height:44px;padding:0;cursor:pointer;display:flex;flex-direction:column;align-items:stretch}.metric:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:5px}.label{font-size:12px;color:var(--secondary-text-color,#666);line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:7px}.label i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--series-color);flex-shrink:0}.reading{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;margin-top:6px;font-variant-numeric:tabular-nums;min-width:0}.value{font-size:28px;font-weight:550;line-height:1.25;overflow-wrap:anywhere;letter-spacing:-.025em}.unit{font-size:13px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere}.spark{height:48px;display:flex;align-items:center;margin-top:8px;color:var(--secondary-text-color,#666);font-size:11px}.spark svg{width:100%;height:48px;overflow:visible}.spark path{fill:none;stroke:var(--series-color);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.delta{font-size:12px;font-variant-numeric:tabular-nums;margin-top:8px;overflow-wrap:anywhere}.caption{font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}.status{font-size:12px;color:var(--secondary-text-color,#666);margin-top:4px}.error{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;font-size:12px;color:var(--secondary-text-color,#666)}.retry{font:inherit;min-height:44px;flex-shrink:0;padding:8px 12px;border:1px solid var(--divider-color,#ddd);border-radius:6px;background:transparent;color:inherit;cursor:pointer}@container(max-width:340px){.grid{grid-template-columns:minmax(0,1fr)}header{margin-bottom:16px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}</style><ha-card><div class="content"><header><h2>${esc(c.title)}${/\(beta\)/i.test(c.title)?'':' <small>(beta)</small>'}</h2><span class="period">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span><button type="button" class="retry">${dutch?'Opnieuw':'Retry'}</button></div>`:''}</div></ha-card>`;
-  this.shadowRoot.querySelectorAll('.metric').forEach(b=>{b.onclick=()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:b.dataset.entity},bubbles:true,composed:true}));if(b.dataset.entity===focus)b.focus();});const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();
+  this.shadowRoot.innerHTML=`<style>
+:host{display:block;height:auto;min-width:0;min-height:0;container-type:inline-size}
+ha-card{display:block;min-height:100%;font-family:inherit;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b)}
+.content{padding:var(--eleven-card-padding,16px);box-sizing:border-box;min-width:0}
+header{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:16px}
+h2{flex:1 1 160px;font-size:16px;font-weight:600;letter-spacing:normal;line-height:1.4;margin:0;overflow-wrap:anywhere}
+header.stacked h2{flex-basis:100%}
+header.stacked .period{text-align:start}
+h2 small{font-size:.8em;font-weight:400;color:var(--secondary-text-color,#666);white-space:nowrap}
+.period{font-size:12px;line-height:1.4;text-align:end;white-space:nowrap;flex:0 0 auto;color:var(--secondary-text-color,#666)}
+.period.synced{flex:0 1 auto;white-space:normal;overflow-wrap:normal;max-width:100%;text-align:start}
+.grid{display:grid;grid-template-columns:repeat(var(--overview-columns,1),minmax(0,1fr));column-gap:16px;row-gap:0;align-items:stretch}
+.metric{appearance:none;font:inherit;color:inherit;background:var(--eleven-material-plot-background,transparent);border:0;border-radius:4px;text-align:start;min-width:0;min-height:44px;padding:10px;cursor:pointer;display:grid;grid-template-rows:subgrid;grid-row:span ${2+(c.show_graph?1:0)+(c.show_delta?2:0)};align-content:start;margin-bottom:20px}
+.metric:focus-visible,.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+.label{font-size:12px;color:var(--secondary-text-color,#666);line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:7px;min-width:0}
+.label i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--series-color);flex-shrink:0}
+.name{min-width:0}
+.reading{display:flex;align-items:baseline;align-content:start;flex-wrap:wrap;gap:4px 6px;margin-top:6px;font-variant-numeric:tabular-nums;min-width:0}
+.value{font-size:28px;font-weight:550;line-height:1.25;white-space:nowrap;flex:0 0 auto;letter-spacing:-.025em}
+.unit{font-size:13px;line-height:1.4;color:var(--secondary-text-color,#666);overflow-wrap:anywhere;min-width:0}
+.spark{height:48px;box-sizing:border-box;display:flex;align-items:center;margin-top:8px;padding:2px;color:var(--secondary-text-color,#666);font-size:11px;line-height:1.4;min-width:0}
+.spark svg{width:100%;height:44px;overflow:visible}
+.spark path{fill:none;stroke:var(--series-color);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.delta{font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums;margin-top:8px;overflow-wrap:normal;min-width:0}
+.caption{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px;overflow-wrap:normal}
+.status{font-size:12px;line-height:1.4;color:var(--secondary-text-color,#666);flex-basis:100%}
+.error{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:16px;font-size:12px;color:var(--secondary-text-color,#666)}
+.error>span{flex:1 1 140px}
+.retry{font:inherit;min-height:44px;flex-shrink:0;padding:8px 12px;border:1px solid var(--divider-color,#ddd);border-radius:6px;background:transparent;color:inherit;cursor:pointer}
+.grid{margin-bottom:-20px}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+${cardThemeStyles({wells:'.metric',controls:'.retry'})}</style><ha-card><div class="content"><header><h2>${esc(c.title)}${/\(beta\)/i.test(c.title)?'':' <small>(beta)</small>'}</h2><span class="period${synced?' synced':''}">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span><button type="button" class="retry">${dutch?'Opnieuw':'Retry'}</button></div>`:''}</div></ha-card>`;
+  this.shadowRoot.querySelectorAll('.metric').forEach(b=>{b.onclick=()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:b.dataset.entity},bubbles:true,composed:true}));if(b.dataset.entity===focus)b.focus();});const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();if(retryFocus)(retry??this.shadowRoot.querySelector('.metric'))?.focus();this._observeLayout();
  }
 }
 
@@ -6142,6 +6579,49 @@ if(!window.customCards.some(c=>c.type==='eleven-overview-card'))window.customCar
 /* Eleven Bar Chart — standalone, based on Eleven History. */
 (()=>{
 "use strict";
+
+// ../../shared/card-theme.js
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
 
 // ../../shared/graph.js
 // Domain-neutral SVG renderer. Adapters own data, geometry, colors and annotations.
@@ -7662,7 +8142,7 @@ class HistoryGraphCard extends HTMLElement {
   if(!customElements.get('eleven-history-graph-editor'))customElements.define('eleven-history-graph-editor',HistoryGraphEditor);
   return document.createElement('eleven-history-graph-editor');
  }
- constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._timer=null;this._connected=false;this._status='loading';this._series=[];this._outside=e=>{const chart=this.shadowRoot.querySelector('.chart');if(chart&&!e.composedPath().includes(chart)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip?.();};}
+ constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._timer=null;this._connected=false;this._status='loading';this._series=[];this._outside=e=>{const tools=this.shadowRoot.querySelector('.history-tools');if(tools?.open&&!e.composedPath().includes(tools)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))tools.open=false;const chart=this.shadowRoot.querySelector('.chart');if(chart&&!e.composedPath().includes(chart)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip?.();};}
  static _formContract(schema){
   return {schema,computeLabel:function(item){return text(item?.name==='title'?'titleField':item?.name??'',language(this?.hass??frontendHass()));},computeHelper:function(item){const key=`${item?.name}Helper`,value=text(key,language(this?.hass??frontendHass()));return value===key?undefined:value;}};
  }
@@ -7817,7 +8297,7 @@ class HistoryGraphCard extends HTMLElement {
   if(this._connected){this._elfTimer=setTimeout(()=>this._syncElf(),Math.min(60000-now%60000,this._elfPreviewUntil>now?this._elfPreviewUntil-now:60000));this._elfTimer.unref?.();}
  }
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._elfPreview??=()=>{this._elfPreviewUntil=Date.now()+ELF_FLIGHT_MS;this.shadowRoot.querySelector('.eleven-elf')?.remove();this._syncElf();};registerElfPreview(this._elfPreview);document.addEventListener('pointerdown',this._outside);this._syncElf();if(this._config&&this._hass)this._refresh();}
- disconnectedCallback(){this._touchPointer=null;this._touchRenderPending=false;this._hideTooltip();disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);this._connected=false;unregisterElfPreview(this._elfPreview);this._elfPreviewUntil=0;this._generation++;this._inFlight=false;this._started=false;clearTimeout(this._timer);this._timer=null;clearTimeout(this._elfTimer);this._elfTimer=null;document.removeEventListener('pointerdown',this._outside);}
+ disconnectedCallback(){this._axisResize?.disconnect();this._touchPointer=null;this._touchRenderPending=false;this._hideTooltip();disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);this._connected=false;unregisterElfPreview(this._elfPreview);this._elfPreviewUntil=0;this._generation++;this._inFlight=false;this._started=false;clearTimeout(this._timer);this._timer=null;clearTimeout(this._elfTimer);this._elfTimer=null;document.removeEventListener('pointerdown',this._outside);}
  _sumDataContext(hass){return this._config.series_options.some(s=>s.sum_entities?.length)?JSON.stringify([hass.config?.time_zone,historyEntityIds(this._config).map(id=>{const s=hass.states?.[id];return [id,!!s,s?.attributes?.unit_of_measurement??''];})]):null;}
  async _refresh(){
   if(!this._connected||!this._config||!this._hass||this._inFlight)return;
@@ -7879,10 +8359,12 @@ class HistoryGraphCard extends HTMLElement {
    const x=t=>(t-this._viewStart)/(this._viewEnd-this._viewStart)*1000,y=v=>(max-v)/(max-min)*300;
    const axes=this._axes.map((axis,index)=>{
     const position=index?`left:auto;right:calc(12px + ${index-1} * var(--axis-column));width:var(--axis-column);max-width:var(--axis-column);text-align:right;`:'';
-    const unit=mixed?`<span class="axis-unit" style="${position}">${escapeHtml(axis.unit||'—')}</span>`:'';
-    return unit+[...axis.ticks].reverse().map(value=>{const ratio=(axis.max-value)/(axis.max-axis.min);return `<span class="axis-y" style="top:calc(${ratio*100}% + ${22-ratio*52}px);${position}">${escapeHtml(number(value,lang,true))}</span>`;}).join('');
+    const unit=mixed?`<span class="axis-unit" data-axis="${index}" title="${escapeHtml(axis.unit||'—')}" style="${position}">${escapeHtml(axis.unit||'—')}</span>`:'';
+    return unit+[...axis.ticks].reverse().map(value=>{const ratio=(axis.max-value)/(axis.max-axis.min);return `<span class="axis-y" style="top:calc(${ratio*100}% + ${22-ratio*52}px);${position}" data-axis="${index}" data-ratio="${ratio}">${escapeHtml(number(value,lang,true))}</span>`;}).join('');
    }).join('');
-   const times=Array.from({length:4},(_,i)=>`<span class="axis-x" data-tick="${i}" style="left:calc(${i/3*100}% + ${44-i/3*56}px - ${i/3} * var(--axes-right,0px))">${escapeHtml(time(this._timeAtPlotPosition(i/3),lang,this._zone,(this._viewEnd-this._viewStart)>86400000))}</span>`).join('');
+   const dateFormat=new Intl.DateTimeFormat('en-CA',{timeZone:this._zone,year:'numeric',month:'2-digit',day:'2-digit'});
+   const spansDates=dateFormat.format(this._viewStart)!==dateFormat.format(this._viewEnd);
+   const times=Array.from({length:4},(_,i)=>`<span class="axis-x" data-tick="${i}" style="left:calc(${i/3*100}% + ${44-i/3*56}px - ${i/3} * var(--axes-right,0px))">${escapeHtml(time(this._timeAtPlotPosition(i/3),lang,this._zone,spansDates))}</span>`).join('');
 
    const display=this._plotSeries.map((s,i)=>({...s,points:this._displayPoints(s.points,i)}));
    const seriesY=i=>{const a=this._axes[this._seriesAxes[i]];return v=>(a.max-v)/(a.max-a.min)*300;};
@@ -7897,13 +8379,25 @@ class HistoryGraphCard extends HTMLElement {
    const missing=meta.items.filter((_,i)=>visible[i]&&!this._series[i].points.some(p=>p.v!==null)).map(s=>s.name);
    content=`${this._config.show_legend?legend:`<div class="data-status">${escapeHtml(mixed?'':meta.unit)}</div>`}${missing.length?`<div class="data-status">${text('partial',lang)} ${escapeHtml(missing.join(', '))}</div>`:''}<div class="chart" style="--axis-column:min(48px, calc((100% - 124px) / ${Math.max(1,extra)}));--axes-right:calc(${extra} * var(--axis-column))" tabindex="0" role="group" aria-label="${text('chart',lang)}">${anyVisible?axes+times:`<div class="empty-visibility" role="status">${escapeHtml(text('no_visible',lang))}</div>`}<div class="plot">${graph}<div class="zoom-selection" hidden></div></div>${this._config.show_hover_line?'<div class="guide" hidden></div>':''}<div class="markers"></div><div class="tooltip" hidden></div><div class="sr-only" aria-live="polite"></div></div>`;
   }
-  const controls=cardHeader({title,showTitle:this._config.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:lang,periods:periodControls(this,lang),zoomState:chartZoomState(this),information:chartDataInformation(this,lang)});
+  const headerOptions={title,showTitle:this._config.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:lang,periods:periodControls(this,lang),zoomState:chartZoomState(this),information:chartDataInformation(this,lang)};
+  const controls=this._calmChartLayout?this._historyHeader(headerOptions):cardHeader(headerOptions);
   // DOM replacement blurs a focused old chart before disconnecting it. This is
   // teardown, not a user dismissal; the new chart gets its own blur handler.
   const previousChart=this.shadowRoot.querySelector('.chart');if(previousChart)previousChart.onblur=null;
-  this.shadowRoot.innerHTML=`<style>${this._styles()}</style><ha-card lang="${lang}"><div class="card-content">${controls}${content}</div></ha-card>`;
+  const toolsHadFocus=this.shadowRoot.activeElement?.matches?.('.history-tools summary');
+  this.shadowRoot.innerHTML=`<style>${this._styles()}${cardThemeStyles({chartUI:true,plots:'.chart',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}${this._calmChartLayout?this._historyStyles():''}</style><ha-card lang="${lang}"><div class="card-content">${controls}${content}</div></ha-card>`;
   this._updateGraphTheme();bindPeriodControls(this);bindChartInsights(this);
+  const tools=this.shadowRoot.querySelector('.history-tools');if(tools)tools.onkeydown=e=>{if(e.key==='Escape'&&!e.target.closest?.('[popover]')){e.preventDefault();tools.open=false;tools.querySelector('summary').focus();}};
+  if(toolsHadFocus)tools?.querySelector('summary').focus({preventScroll:true});
   this.shadowRoot.querySelectorAll?.('[data-zoom]').forEach(button=>button.onclick=()=>this._zoom({in:0.5,out:2,reset:0}[button.dataset.zoom]));
+  this._axisResize?.disconnect();
+  if(this._calmChartLayout){
+   this.style?.removeProperty('--history-required-height');
+   const chart=this.shadowRoot.querySelector('.chart'),layout=()=>{if(this.shadowRoot.querySelector('.chart')===chart)this._layoutHistoryAxes();};
+   this._layoutHistoryAxes();
+   if(chart&&globalThis.ResizeObserver){this._axisResize=new ResizeObserver(layout);for(const node of [chart,this.shadowRoot.querySelector('.card-header'),this.shadowRoot.querySelector('.legend'),...chart.querySelectorAll('.axis-unit'),chart.querySelector('.axis-y'),chart.querySelector('.axis-x')].filter(Boolean))this._axisResize.observe(node);}
+   const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(layout);globalThis.document?.fonts?.ready?.then(layout);
+  }
   this._graph?.restore(this);
   const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();this._bindInteractions();
   this._syncElf();const renderedChart=this.shadowRoot.querySelector('.chart'),restoreTooltip=()=>{if(this.shadowRoot.querySelector('.chart')===renderedChart){SharedGraph.restoreHover(this);if(this._cursor!=null)this._showTooltip(this._cursor,false);}};const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(restoreTooltip);else restoreTooltip();
@@ -7984,6 +8478,76 @@ class HistoryGraphCard extends HTMLElement {
   chart.querySelector('.sr-only').textContent=`${time(timestamp,this._lang,this._zone,true)}. ${rows.map(row=>`${row.name}: ${row.value}`).join('. ')}`;
   if(publish)SharedGraph.publishHover(this,timestamp);
  }
+  // The shared header still supplies every existing action and its semantics.
+  // Bar explicitly opts into this arrangement; other companions remain unchanged.
+ get _calmChartLayout(){return this.constructor===HistoryGraphCard;}
+ _historyHeader(options){
+  const label=options.language.startsWith('nl')?'Grafiekopties':'Graph tools';
+  const open=this.shadowRoot.querySelector('.history-tools')?.open;
+  const header=cardHeader({...options,periods:{},zoomState:{...options.zoomState,zoomed:options.zoomState.zoomed&&!options.periods.picker}});
+  return header.replace('<div class="header-actions">',`<details class="history-tools"${open?' open':''}><summary title="${label}" aria-label="${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="header-actions history-tools-panel">`).replace('</div></header>',`</div></details>${options.periods.picker?`<div class="header-actions history-timeframe"><div class="chart-controls" role="group" aria-label="${options.language.startsWith('nl')?'Tijdvak':'Timeframe'}">${options.periods.picker}${options.periods.navigation??''}</div></div>`:''}</header>`);
+ }
+ _layoutHistoryAxes(){
+  const chart=this.shadowRoot.querySelector('.chart');if(!chart?.getBoundingClientRect||!globalThis.getComputedStyle)return;
+  const labels=[...chart.querySelectorAll('[data-axis]')];if(!labels.length)return;
+  const edge=10,gap=8,width=chart.clientWidth,canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+  if(!ctx||width<=0)return;
+  const measure=node=>{ctx.font=getComputedStyle(node).font;return Math.ceil(ctx.measureText(node.textContent).width);};
+  const count=this._axes.length,scale=chart.getBoundingClientRect().width/width||1;
+  // Unit names may wrap; numeric ticks never truncate. Reserve actual glyph widths.
+  const columns=Array.from({length:count},(_,i)=>Math.max(0,...labels.filter(n=>Number(n.dataset.axis)===i).map(n=>n.classList.contains('axis-unit')?Math.min(measure(n),56):measure(n))));
+  const left=edge+columns[0]+gap,right=count>1?edge+columns.slice(1).reduce((a,b)=>a+b+gap,0):edge;
+  chart.style.setProperty('--history-plot-left',left+'px');chart.style.setProperty('--history-plot-right',right+'px');
+  const units=labels.filter(n=>n.classList.contains('axis-unit'));
+  for(const n of units){const i=Number(n.dataset.axis);n.style.width=columns[i]+'px';n.style.maxWidth='none';n.style.whiteSpace='normal';n.style.overflowWrap='anywhere';}
+  const unitHeight=Math.max(0,...units.map(n=>n.getBoundingClientRect().height/scale));
+  const tickHalf=Math.max(0,...labels.filter(n=>n.classList.contains('axis-y')).map(n=>parseFloat(getComputedStyle(n).lineHeight)/2));
+  const top=edge+unitHeight+tickHalf+8;
+  const ticks=[...chart.querySelectorAll('.axis-x')];
+  for(const n of ticks){const ratio=Number(n.dataset.tick)/3;n.style.display='block';n.style.width='max-content';n.style.setProperty('left',`calc(${ratio*100}% + ${left-ratio*(left+right)}px)`,'important');n.style.right='auto';n.style.transform=ratio===0?'none':ratio===1?'translateX(-100%)':'translateX(-50%)';n.style.setProperty('max-width',Math.max(40,(width-left-right-8)/2)+'px','important');n.style.whiteSpace='normal';n.style.textAlign=ratio===0?'left':ratio===1?'right':'center';}
+  // Decide density from real label boxes, not the browser viewport.
+  let previous=null;for(const n of ticks){const b=n.getBoundingClientRect(),last=ticks.at(-1).getBoundingClientRect();if(n!==ticks[0]&&n!==ticks.at(-1)&&((previous&&b.left<previous.right+8)||b.right+8>last.left)){n.style.display='none';continue;}previous=b;}
+  const bottom=edge+Math.max(0,...ticks.filter(n=>n.style.display!=='none').map(n=>n.getBoundingClientRect().height/scale))+tickHalf+8;
+  chart.style.minHeight=(top+bottom+80)+'px';
+  chart.style.setProperty('--history-plot-top',top+'px');chart.style.setProperty('--history-plot-bottom',bottom+'px');
+  for(const n of labels){const i=Number(n.dataset.axis),offset=edge+columns.slice(i+1).reduce((a,b)=>a+b+gap,0);n.style.left=i?'auto':edge+'px';n.style.right=i?offset+'px':'auto';n.style.width=columns[i]+'px';n.style.maxWidth='none';n.style.textAlign=i?'right':'left';if(n.classList.contains('axis-y')){n.style.display='block';n.style.top=`calc(${Number(n.dataset.ratio)*100}% + ${top-Number(n.dataset.ratio)*(top+bottom)}px)`;}else n.style.top=edge+'px';}
+  for(let i=0;i<count;i++){
+   const ys=labels.filter(n=>n.classList.contains('axis-y')&&Number(n.dataset.axis)===i);let previous=null;
+   for(const n of ys){const box=n.getBoundingClientRect(),last=ys.at(-1).getBoundingClientRect();if(n!==ys[0]&&n!==ys.at(-1)&&((previous&&box.top<previous.bottom+8)||box.bottom+8>last.top)){n.style.display='none';continue;}previous=box;}
+  }
+  // Fixed dashboard height is a minimum, not a licence to clip enlarged text.
+  const content=this.shadowRoot.querySelector('.card-content'),style=getComputedStyle(content),surface=getComputedStyle(this.shadowRoot.querySelector('ha-card'));
+  const px=value=>parseFloat(value)||0;
+  const intrinsic=[...content.children].reduce((height,node)=>{const css=getComputedStyle(node);return height+(node===chart?px(chart.style.minHeight):node.getBoundingClientRect().height/scale)+px(css.marginTop)+px(css.marginBottom);},px(style.paddingTop)+px(style.paddingBottom)+px(surface.borderTopWidth)+px(surface.borderBottomWidth));
+  this.style?.setProperty('--history-required-height',Math.ceil(intrinsic)+'px');
+ }
+ _historyStyles(){return `
+ :host{min-height:var(--history-required-height,0px)}
+ ha-card{height:100%;min-height:var(--history-required-height,0px)}
+ .card-header{display:flex;align-items:center;gap:4px 8px;margin:0 0 4px;position:relative}
+ .card-header h2{font-size:16px;line-height:1.3;font-weight:600;flex:1 1 0;margin:0}
+ .history-tools{margin-inline-start:auto;flex:none}
+ .history-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+ .history-tools summary::-webkit-details-marker{display:none}
+ .history-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
+ .history-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+ .history-tools-panel.header-actions{position:absolute;z-index:5;inset-inline-end:0;top:48px;width:max-content;max-width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color);box-shadow:var(--eleven-material-surface-shadow,var(--ha-card-box-shadow,none));gap:8px;justify-content:flex-start}
+ .history-tools:not([open])>.history-tools-panel{display:none}
+ .history-timeframe.header-actions{width:100%;flex:1 1 100%;margin:0;gap:0}
+ .history-timeframe .chart-controls{width:100%;flex:1 1 100%}
+ .history-timeframe .period-controls{min-width:0;flex:1 1 auto}
+ .history-timeframe .period-trigger{font-size:12px}
+ .plot{left:var(--history-plot-left,44px);right:var(--history-plot-right,12px);top:var(--history-plot-top,36px);bottom:var(--history-plot-bottom,36px)}
+ .guide{top:var(--history-plot-top,36px);bottom:var(--history-plot-bottom,36px)}
+ .axis-x{bottom:10px}
+ .axis-y{overflow:visible;text-overflow:clip}
+ .axis-unit{line-height:1.3;overflow:visible;text-overflow:clip}
+ .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0}
+ .legend-item{display:grid;grid-template-columns:15px minmax(0,1fr);gap:0 6px;align-content:center}
+ .legend-item strong{grid-column:2;font-size:var(--font-size-label);white-space:normal;overflow-wrap:anywhere}
+ .legend-item>span{overflow-wrap:anywhere}
+ .legend .unit{grid-column:1/-1;font-size:11px}
+ `;}
  _styles(){return `
  :host{display:block;height:100%;min-width:0;container-type:inline-size;--font-size-meta:11px;--font-size-label:12px;--font-size-title:18px;}
  ha-card{height:100%;display:flex;flex-direction:column;background:var(--ha-card-background,var(--card-background-color));color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
@@ -8049,6 +8613,7 @@ class BarChartEditor extends HistoryGraphEditor {
  _emit(){this._render();super._emit();}
 }
 class BarChartCard extends HistoryGraphCard {
+ get _calmChartLayout(){return true;}
  constructor(){super();this._graph=new BarGraph();}
  static async getConfigElement(){
   await super.getConfigElement();
@@ -8228,6 +8793,7 @@ class BarChartCard extends HistoryGraphCard {
   if(publish)SharedGraph.publishHover(this,(interval.start+interval.end)/2);
  }
  _defaultTitle(lang){return lang==='nl'?'Staafdiagram':'Bar chart';}
+ _historyStyles(){return super._historyStyles()+`.legend:has(>.unit){display:flex;align-items:end;gap:4px 8px}.legend>.unit{margin:0 0 4px}`;}
  _styles(){
   const paints=this._config?.entities.map((id,i)=>`.series-bar[data-entity="${id}"]{fill:${this._appearance(i).stroke};stroke:none}`).join('')??'';
   return super._styles()+`\n${paints}\n.series-bar{stroke:none}.legend i{height:12px;width:8px;border:0!important;border-radius:2px;background:var(--series-color)}
@@ -8243,6 +8809,48 @@ if(!window.customCards.some(c=>c.type==='eleven-bar-chart'))window.customCards.p
 ;
 // Eleven Heatmap (beta) 0.3.0 — self-contained standalone module
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
@@ -9414,6 +10022,7 @@ function summarizeHeatmap(rows, mode) {
 
 
 
+
 const esc=escapeHtml;
 const isDutch=hass=>String(hass?.locale?.language ?? hass?.language ?? 'en').startsWith('nl');
 const dataContext=(hass,config)=>JSON.stringify([hass?.config?.time_zone,isDutch(hass),[config?.entity,...(config?.sum_entities??[])].map(id=>{
@@ -9428,7 +10037,7 @@ const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],
   scale_min:['Minimum kleurschaal','Color scale minimum'],scale_max:['Maximum kleurschaal','Color scale maximum'],
   low_color:['Kleur lage waarden','Low value color'],high_color:['Kleur hoge waarden','High value color'],
   color_mode:['Kleurmodus','Color mode'],gradient_mode:['Kleurovergang','Color transitions'],gradient_stops:['Kleurovergangen','Color stops'],
-  cell_width:['Minimale vakbreedte','Minimum cell width'],cell_height:['Vakhoogte','Cell height'],cell_gap:['Tussenruimte','Cell gap'],border_radius:['Hoekafronding','Border radius'],max_height:['Maximale rasterhoogte','Maximum grid height']
+  cell_width:['Voorkeursbreedte vak','Preferred cell width'],cell_height:['Vakhoogte','Cell height'],cell_gap:['Tussenruimte','Cell gap'],border_radius:['Hoekafronding','Border radius'],max_height:['Oude rasterhoogte (compatibiliteit)','Legacy grid height (compatibility)']
 };
 const helpers={sync_timeframe:['Deelt tijdvakkeuze en vorige/volgende/Nu met ingeschakelde kaarten in dezelfde groep.','Shares timeframe selection and previous/next/Now with enabled cards in the same group.'],hover_sync_group:['Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.','Cards with the same group share hover and timeframe when the corresponding synchronization is enabled. Empty uses the default group.'],
   sum_entities:['Tel maximaal 7 extra sensoren bij de hoofdsensor op (maximaal 8 totaal). Dezelfde eenheid is vereist; ontbrekende waarden zijn geen nul. Sensornaam benoemt het totaal.','Add up to 7 additional sensors to the primary sensor (8 total). The same unit is required; missing values are not zero. Sensor name labels the total.'],
@@ -9439,8 +10048,8 @@ const helpers={sync_timeframe:['Deelt tijdvakkeuze en vorige/volgende/Nu met ing
   scale_max:['Optioneel, in de sensoreenheid. Moet hoger zijn dan het minimum.','Optional, in the sensor unit. Must exceed the minimum.'],
   color_mode:['De kleurschaal volgt het waardenbereik. Kleurovergangen gebruiken vaste sensorwaarden en blijven tussen perioden vergelijkbaar.','The color scale follows the value range. Color stops use fixed sensor values and remain comparable across periods.'],
   gradient_stops:['Stel 2–32 unieke waarden in de sensoreenheid in, geen percentages. Pas de beginwaarden aan je sensor aan.','Set 2–32 distinct values in the sensor unit, not percentages. Adjust the initial values to your sensor.'],
-  cell_width:['Minimale breedte in pixels. Kleinere vakken en minder tussenruimte passen meer kolommen op smalle kaarten.','Minimum width in pixels. Smaller cells and gaps fit more columns on narrow cards.'],
-  max_height:['Grotere rasters scrollen binnen de kaart.','Larger grids scroll within the card.']
+  cell_width:['Voorkeursbreedte in pixels. Alle kolommen delen de beschikbare breedte; op smalle kaarten worden vakken smaller en kolomlabels schaarser.','Preferred width in pixels. All columns share the available width; narrow cards use smaller cells and fewer column captions.'],
+  max_height:['Bewaard voor bestaande configuraties; begrenst het raster niet meer. De kaart groeit met alle rijen, zonder intern scrollen.','Retained for existing configurations; no longer caps the grid. The card grows with all rows, without internal scrolling.']
 };
 
 class HeatmapEditor extends HTMLElement {
@@ -9553,11 +10162,12 @@ class HeatmapCard extends HTMLElement {
   }
   get hass(){return this._hass;}
   connectedCallback(){this._connected=true;connectTimeframeSync(this);this._refresh();}
-  disconnectedCallback(){disconnectTimeframeSync(this);this._connected=false;this._generation++;this._promise=null;clearTimeout(this._timer);this._timer=null;disconnectPeriodControls(this);disconnectChartInsights(this);this._disconnectTooltip();this._hideTooltip();}
+  disconnectedCallback(){globalThis.document?.removeEventListener?.('pointerdown',this._chartToolsOutside);disconnectTimeframeSync(this);this._connected=false;this._generation++;this._promise=null;clearTimeout(this._timer);this._timer=null;disconnectPeriodControls(this);disconnectChartInsights(this);this._disconnectTooltip();this._hideTooltip();}
   getCardSize(){
     const c=this._config??{},hours=c.hours_to_show??672,period=c.aggregation_period??'hour';
     const rows=this._rows.length || Math.ceil(hours/({hour:24,day:168,week:8760,month:8760}[period]))+(period==='hour'||period==='day'?1:2);
-    return Math.ceil((90+Math.min(c.max_height??800,(rows+(c.show_labels!==false?1:0))*((c.cell_height??24)+(c.cell_gap??2))))/50);
+    const estimate=150+(rows+(c.show_labels!==false?1:0))*((this._matrixRowHeight??c.cell_height??24)+(c.cell_gap??2));
+    return Math.ceil(Math.max(estimate,this.shadowRoot.querySelector('.content')?.offsetHeight??0)/50);
   }
   getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(3,Math.ceil(this.getCardSize()*50/64)),min_rows:3};}
   _invalidate(){this._hideTooltip();this._insightOpen=null;this._insightPending=null;this._generation++;this._promise=null;this._data=null;this._rows=[];this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);this._timer=null;}
@@ -9636,8 +10246,8 @@ class HeatmapCard extends HTMLElement {
     const tooltip=root.querySelector('.tooltip'),chart=root.querySelector('.chart'),scroll=root.querySelector('.matrix-scroll');
     if(!cell || !button || !tooltip || !chart || !scroll){this._hideTooltip();return;}
     const box=chart.getBoundingClientRect(),target=button.getBoundingClientRect(),grid=scroll.getBoundingClientRect();
-    const left=Math.max(box.left,8),right=Math.min(box.right,window.innerWidth-8),top=Math.max(box.top,8),bottom=Math.min(box.bottom,window.innerHeight-8);
-    if(target.right<=Math.max(grid.left+(this._config.show_labels?82+this._config.cell_gap:0),left) || target.left>=Math.min(grid.right,right) || target.bottom<=Math.max(grid.top,top) || target.top>=Math.min(grid.bottom,bottom)) {this._hideTooltip();return;}
+    const left=Math.max(box.left,8),right=Math.min(box.right,window.innerWidth-8),top=8,bottom=window.innerHeight-8;
+    if(target.right<=Math.max(grid.left,left) || target.left>=Math.min(grid.right,right) || target.bottom<=top || target.top>=bottom) {this._hideTooltip();return;}
     this._tooltipKey=key;
     const dutch=isDutch(this._hass),name=this._sensorName();
     const value=cell.value==null?(dutch?'Geen gegevens':'No data'):`${this._number(cell.value)} ${this._data.unit}`;
@@ -9662,6 +10272,9 @@ class HeatmapCard extends HTMLElement {
     const viewportChange=()=>this._hideTooltip();
     listen(window,'resize',viewportChange);
     const scroll=root.querySelector('.matrix-scroll');let scrollLeft=scroll?.scrollLeft ?? 0,scrollTop=scroll?.scrollTop ?? 0;
+    const updateHint=()=>this._layoutMatrixLabels();
+    updateHint();
+    if(scroll&&typeof ResizeObserver!=='undefined'){const observer=new ResizeObserver(updateHint);observer.observe(scroll);cleanups.push(()=>observer.disconnect());}
     const targets=new Set([window,root]);for(let node=this;node;){const tree=node.getRootNode?.();if(!tree || targets.has(tree))break;targets.add(tree);node=tree.host;}
     for(const target of targets)listen(target,'scroll',event=>{
       if(event.composedPath().includes(root.querySelector('.tooltip')))return;
@@ -9673,7 +10286,7 @@ class HeatmapCard extends HTMLElement {
       viewportChange();
     },true);
     listen(document,'pointerdown',event=>{if(!event.composedPath().includes(chart))this._hideTooltip();},true);
-    listen(root,'keydown',event=>{if(event.key==='Escape' && this._tooltipKey){event.preventDefault();this._hideTooltip();}});
+    listen(document,'keydown',event=>{if(event.key==='Escape' && this._tooltipKey){event.preventDefault();this._hideTooltip();}});
     chart.onpointerleave=()=>this._hideTooltip();
   }
   _matrixRow(row,index){
@@ -9681,19 +10294,46 @@ class HeatmapCard extends HTMLElement {
     const fmt=this._rowFormatter??=new Intl.DateTimeFormat(locale,{timeZone:this._zone||this._hass?.config?.time_zone||'UTC',weekday:'short',day:'numeric',month:'short'});
     return `<div class="matrix-row" role="row" aria-rowindex="${index+2}"><span class="day" role="rowheader">${esc(['week','month'].includes(c.aggregation_period)?row.key:fmt.format(row.timestamp))}</span>${row.cells.map(cell=>`<div role="cell" data-cell="${cell.key}" aria-label="${esc(this._label(cell))}" class="cell ${cell.value==null?'missing':''} ${!cell.intervals.length?'outside':''} ${cell.partial?'partial':''}"${cell.value!=null?` style="background-color:${scale.color(cell.value)}"`:''}></div>`).join('')}</div>`;
   }
-  _matrixWindow(scrollTop,height){
-    const step=this._config.cell_height+this._config.cell_gap,offset=this._config.show_labels?step:0,first=Math.min(Math.max(0,this._rows.length-1),Math.max(0,Math.floor((scrollTop-offset)/step)-8));
-    return [first,Math.min(this._rows.length,first+Math.ceil(Math.max(height||0,200)/step)+17)];
+  _heatmapHeader(options){
+    const label=options.language==='nl'?'Grafiekopties':'Graph tools',open=this.shadowRoot.querySelector('.chart-tools')?.open;
+    return cardHeader({...options,periods:{}}).replace('<div class="header-actions">',`<details class="chart-tools"${open?' open':''}><summary aria-label="${label}" title="${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="header-actions chart-tools-panel">`).replace('</div></header>',`</div></details>${options.periods.picker?`<div class="header-actions primary-timeframe"><div class="chart-controls" role="group" aria-label="${options.language==='nl'?'Tijdvak':'Timeframe'}">${options.periods.picker}${options.periods.navigation??''}</div></div>`:''}</header>`);
   }
-  _updateMatrixWindow(){
-    if(!this._virtualRows)return;
-    const scroll=this.shadowRoot.querySelector('.matrix-scroll'),body=this.shadowRoot.querySelector('.matrix-body');if(!scroll||!body)return;
-    const [first,last]=this._matrixWindow(scroll.scrollTop,scroll.clientHeight);
-    if(this._windowRange?.[0]===first&&this._windowRange?.[1]===last)return;
-    this._hideTooltip();this._windowRange=[first,last];const step=this._config.cell_height+this._config.cell_gap;
-    this._cells=new Map(this._rows.slice(first,last).flatMap(row=>row.cells).map(cell=>[cell.key,cell]));
-    body.innerHTML=this._rows.slice(first,last).map((row,index)=>`<div class="virtual-row" style="top:${(first+index)*step}px">${this._matrixRow(row,first+index)}</div>`).join('');
-    this._cellElements=new Map([...body.querySelectorAll('[data-cell]')].map(element=>[element.dataset.cell,element]));
+  _layoutMatrixLabels(){
+    const root=this.shadowRoot,scroll=root.querySelector('.matrix-scroll');if(!scroll||!globalThis.getComputedStyle)return;
+    const ctx=document.createElement('canvas').getContext('2d');if(!ctx)return;
+    const legend=root.querySelector('.legend');if(legend){let width=76;for(const value of legend.querySelectorAll('.legend-value')){ctx.font=getComputedStyle(value).font;width+=ctx.measureText(value.textContent).width;}legend.classList.toggle('wide-values',width>legend.clientWidth);}
+    const labels=[...root.querySelectorAll('.day,.hours span')];let rowHeight=this._config.cell_height;
+    for(const node of labels)rowHeight=Math.max(rowHeight,Math.ceil(parseFloat(getComputedStyle(node).fontSize)*1.4));
+    const measure=node=>{ctx.font=getComputedStyle(node).font;return Math.ceil(ctx.measureText(node.dataset.visualCaption??node.dataset.caption??node.textContent).width);};
+    let column=Math.max(82,...labels.filter(n=>n.classList.contains('day')).map(n=>measure(n)+16));
+    const reference=root.querySelector('.day');if(reference){ctx.font=getComputedStyle(reference).font;for(const row of this._rows)column=Math.max(column,Math.ceil(ctx.measureText(['week','month'].includes(this._config.aggregation_period)?row.key:this._rowFormatter.format(row.timestamp)).width)+16);}
+    const captions=[...root.querySelectorAll('.hours span')].slice(1),count=captions.length;
+    captions.forEach((node,i)=>{
+      node.dataset.caption??=node.textContent;
+      // The corner already identifies weeks; numeric captions preserve both
+      // range endpoints even with enlarged text in a narrow dashboard column.
+      node.dataset.visualCaption=this._config.aggregation_period==='week'?String(i+1):node.dataset.caption;
+      node.setAttribute('aria-label',node.dataset.caption);
+    });
+    const available=scroll.clientWidth-(this._config.show_labels?column:0);
+    // Saved gaps remain preferred, but never consume the complete data width.
+    const gap=Math.min(this._config.cell_gap,Math.max(0,available/(count*3)));
+    scroll.style.setProperty('--heatmap-label-width',column+'px');scroll.style.setProperty('--heatmap-gap',gap+'px');scroll.style.setProperty('--heatmap-row-height',rowHeight+'px');this._matrixLabelWidth=column;this._matrixRowHeight=rowHeight;
+    const width=Math.max(0,(available-gap*(count-(this._config.show_labels?0:1)))/count);
+    // Omit only visual captions. Column names and all cells stay accessible.
+    // Keep boundary captions aligned inward; greedily retain legible intermediates.
+    let edge=-Infinity;
+    const lastWidth=captions.length?measure(captions.at(-1)):0;
+    const end=available-gap-(this._config.show_labels?gap:0);
+    captions.forEach((node,i)=>{
+
+      const ink=measure(node),center=(i+.5)*(width+gap),start=i===0?0:i===count-1?end-ink:center-ink/2;
+      const fits=i===0 || (start>=edge+8 && (i===count-1 || start+ink+8<=end-lastWidth));
+      node.textContent=fits?node.dataset.visualCaption:'';
+      node.style.justifySelf=i===0?'start':i===count-1?'end':'center';
+      node.style.width='max-content';
+      if(fits)edge=start+ink;
+    });
   }
   _render(){
     if(!this._config){
@@ -9701,8 +10341,9 @@ class HeatmapCard extends HTMLElement {
       return;
     }
     const c=this._config,dutch=isDutch(this._hass),text=(en,nl)=>dutch?nl:en,language=dutch?'nl':'en';
-    const scroll=this.shadowRoot.querySelector('.matrix-scroll');
-    const scrollLeft=scroll?.scrollLeft ?? 0,scrollTop=scroll?.scrollTop ?? 0,tooltipKey=this._tooltipKey;
+    const toolsHadFocus=this.shadowRoot.activeElement?.matches?.('.chart-tools summary');
+    const header=this._heatmapHeader;
+    const tooltipKey=this._tooltipKey;
     captureChartInsights(this);
     const periods=periodControls(this,language),range=this._data?{start:this._start,end:this._end}:graphPeriodRange(this);
     const historyUrl=`/history?entity_id=${encodeURIComponent([c.entity,...(c.sum_entities??[])].join(','))}&start_date=${encodeURIComponent(new Date(range.start).toISOString())}&end_date=${encodeURIComponent(new Date(range.end).toISOString())}`;
@@ -9715,45 +10356,60 @@ class HeatmapCard extends HTMLElement {
     const fmt=new Intl.DateTimeFormat(locale,{timeZone:zone,weekday:'short',day:'numeric',month:'short'});this._rowFormatter=fmt;
     const fullDate=new Intl.DateTimeFormat(locale,{timeZone:zone,weekday:'short',day:'numeric',month:'short',year:'numeric'});
     this._dateLabels=new Map(this._rows.map(row=>[row.key,fullDate.format(row.timestamp)]));
-    this._virtualRows=this._rows.length>80;const step=c.cell_height+c.cell_gap;
-    const [first,last]=this._virtualRows?this._matrixWindow(scrollTop,scroll?.clientHeight||Math.min(c.max_height,600)):[0,this._rows.length];
-    this._windowRange=[first,last];
-    this._cells=new Map(this._rows.slice(first,last).flatMap(row=>row.cells).map(cell=>[cell.key,cell]));
-    const matrix=this._virtualRows?`<div class="matrix-body" role="rowgroup" style="height:${Math.max(0,this._rows.length*step-c.cell_gap)}px">${this._rows.slice(first,last).map((row,index)=>`<div class="virtual-row" style="top:${(first+index)*step}px">${this._matrixRow(row,first+index)}</div>`).join('')}</div>`:this._rows.map((row,index)=>this._matrixRow(row,index)).join('');
+    this._virtualRows=false;
+    this._cells=new Map(this._rows.flatMap(row=>row.cells).map(cell=>[cell.key,cell]));
+    const matrix=this._rows.map((row,index)=>this._matrixRow(row,index)).join('');
     const sumErrors={sum_entity_missing:text('A selected sensor does not exist.','Een geselecteerde sensor bestaat niet.'),sum_unit_mismatch:text('All added sensors must have the same exact unit.','Alle opgetelde sensoren moeten exact dezelfde eenheid hebben.')};
     const status=this._status==='error'?(sumErrors[this._error]??(this._error==='consumption_statistics_required'?text('No counter statistics for one or more selected sensors.','Geen tellerstatistieken voor één of meer geselecteerde sensoren.'):text('Could not load data.','Laden mislukt.'))):text('Loading…','Laden…');
     const hasValues=this._rows.some(row=>row.cells.some(cell=>cell.value!=null)),information=this._information(language);
     disconnectPeriodControls(this,true);disconnectChartInsights(this,true);this._disconnectTooltip();
     this.shadowRoot.innerHTML=`<style>${cardHeaderStyles()}${periodControlsStyles()}${chartInsightStyles()}${SharedGraph.tooltipStyles()}
-      :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
-      ha-card{display:block;height:100%;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-family:inherit}
-      .content{display:flex;flex-direction:column;height:100%;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box}.content>.card-header,.content>.legend,.content>.status{flex-shrink:0}.chart{position:relative;display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
-      .matrix-scroll{flex:1;min-height:0;overflow:auto;max-height:${c.max_height}px;box-sizing:border-box;padding-bottom:6px}
-      .matrix{min-width:${(c.show_labels?82+c.cell_gap:0)+columnCount*c.cell_width+(columnCount-1)*c.cell_gap}px;display:grid;gap:${c.cell_gap}px}.matrix-row{display:grid;grid-template-columns:${c.show_labels?'82px ':''}repeat(${columnCount},minmax(${c.cell_width}px,1fr));gap:${c.cell_gap}px}.matrix-row:not(.hours){content-visibility:auto;contain-intrinsic-size:auto ${c.cell_height}px}.matrix-body{position:relative;min-width:100%}.virtual-row{position:absolute;left:0;right:0;height:${c.cell_height}px}
-      .hours{${c.show_labels?'':'display:none;'}position:sticky;top:0;z-index:3;background:var(--ha-card-background,var(--card-background-color,#fff))}
-      .hours span{font-size:10px;text-align:center;color:var(--secondary-text-color,#666);line-height:${c.cell_height}px}
-      .day{${c.show_labels?'':'display:none;'}position:sticky;left:0;z-index:2;background:var(--ha-card-background,var(--card-background-color,#fff));font-size:11px;line-height:${c.cell_height}px;white-space:nowrap;color:var(--secondary-text-color,#666)}
-      .cell{appearance:none;position:relative;border:0;border-radius:${c.border_radius}px;min-width:${c.cell_width}px;height:${c.cell_height}px;padding:0;cursor:default}
+      :host{display:block;height:auto!important;min-width:0;min-height:0;container-type:inline-size}
+      ha-card{display:block;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-family:inherit}
+      .content{display:flex;flex-direction:column;padding:var(--eleven-card-padding,16px);min-width:0;box-sizing:border-box}.content>.card-header,.content>.legend,.content>.status{flex-shrink:0}.chart{position:relative;display:flex;flex-direction:column;min-width:0}
+
+      .matrix-well{display:flex;flex-direction:column;min-width:0;box-sizing:border-box;padding:10px}
+      .matrix-scroll{min-width:0;overflow:visible;box-sizing:border-box;padding:0}
+      .matrix{min-width:0;width:100%;display:grid;gap:var(--heatmap-gap,${c.cell_gap}px)}.matrix-row{display:grid;min-width:0;grid-template-columns:${c.show_labels?'var(--heatmap-label-width,82px) ':''}repeat(${columnCount},minmax(0,1fr));gap:var(--heatmap-gap,${c.cell_gap}px)}
+      .hours{${c.show_labels?'':'display:none;'}margin-bottom:4px}
+      .hours span{min-width:0;font-size:11px;text-align:center;color:var(--secondary-text-color,#666);line-height:var(--heatmap-row-height,${c.cell_height}px);white-space:nowrap}.hours span:first-child{text-align:start;padding-inline:0 8px;box-sizing:border-box;white-space:normal}.hours span:not(:first-child){align-self:end}
+      .day{${c.show_labels?'':'display:none;'}font-size:11px;line-height:var(--heatmap-row-height,${c.cell_height}px);white-space:nowrap;color:var(--secondary-text-color,#666);padding-inline:0 8px;box-sizing:border-box}
+      .cell{appearance:none;position:relative;border:0;border-radius:${c.border_radius}px;min-width:0;height:var(--heatmap-row-height,${c.cell_height}px);padding:0;cursor:default}
       .cell:hover{box-shadow:inset 0 0 0 2px var(--primary-text-color,#20252b)}
       .missing{background:repeating-linear-gradient(135deg,transparent,transparent 3px,var(--divider-color,#ddd) 3px,var(--divider-color,#ddd) 5px);box-shadow:inset 0 0 0 1px var(--divider-color,#ddd)}.outside{opacity:.35}
-      .partial:after{content:'';position:absolute;right:2px;bottom:2px;width:4px;height:4px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #20252b}
-      .legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--secondary-text-color,#666);margin:0 0 10px;font-variant-numeric:tabular-nums}
+      .partial:after{content:'';position:absolute;right:0;bottom:2px;width:min(4px,100%);height:4px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1px #20252b}
+      .legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--secondary-text-color,#666);margin:8px 0 12px;font-variant-numeric:tabular-nums}
       .ramp{width:100px;height:10px;border-radius:3px;flex-shrink:1;background:${scale.gradient}}
-      .legend-value{overflow-wrap:anywhere;min-width:0}
+      .legend-value{min-width:min-content;max-width:100%}.scale-number{display:inline-block;white-space:nowrap}.scale-unit{overflow-wrap:anywhere}.legend.wide-values{flex-wrap:wrap}.legend.wide-values .ramp{order:3;flex-basis:100%}.legend-value:last-child{margin-inline-start:auto}
       .tooltip{pointer-events:auto}.tooltip .tooltip-label{color:var(--secondary-text-color,#666)}.tooltip .tooltip-value{color:var(--primary-text-color,#20252b);font-style:normal}
       .status{font-size:12px;line-height:1.5;margin:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-      .retry{font:inherit;color:inherit;background:transparent;border:1px solid var(--divider-color,#ddd);border-radius:5px;min-height:32px;padding:4px 10px;cursor:pointer}.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3)}
+      .retry{font:inherit;color:inherit;background:transparent;border:1px solid var(--divider-color,#ddd);border-radius:5px;min-height:44px;min-width:44px;padding:4px 10px;cursor:pointer}.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3)}
       @media(forced-colors:active){.cell{border:1px solid CanvasText}.missing{border-style:dashed}}
-    </style><ha-card><div class="content">${cardHeader({title:c.title,showTitle:c.show_title,historyUrl,language,periods,information})}
+    ${cardThemeStyles({chartUI:true,plots:'.matrix-well',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup],[data-ui-detail-surface]'})}
+.content>.card-header{display:flex;align-items:center;gap:4px 8px;margin:0 0 4px;position:relative}
+.content>.card-header h2{font-size:16px;line-height:1.3;font-weight:600;flex:1 1 0;margin:0}
+.chart-tools{margin-inline-start:auto;flex:none}
+.chart-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+.chart-tools summary::-webkit-details-marker{display:none}
+.chart-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
+.chart-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.chart-tools-panel.header-actions{position:absolute;z-index:5;inset-inline-end:0;top:48px;width:max-content;max-width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color);box-shadow:var(--eleven-material-surface-shadow,var(--ha-card-box-shadow,none));gap:8px;justify-content:flex-start}
+.chart-tools:not([open])>.chart-tools-panel{display:none}
+.primary-timeframe.header-actions{width:100%;flex:1 1 100%;margin:0;gap:0}
+.primary-timeframe .chart-controls{width:100%;flex:1 1 100%}
+.primary-timeframe .period-controls{min-width:0;flex:1 1 auto}
+.primary-timeframe .period-trigger{font-size:12px}
+</style><ha-card><div class="content">${header.call(this,{title:c.title,showTitle:c.show_title,historyUrl,language,periods,information})}
     ${this._status!=='ready'?`<div class="status" role="status"><span>${esc(status)}${this._data?' '+text('Previous data shown.','Vorige gegevens worden getoond.'):''}</span>${this._status==='error'?`<button class="retry" type="button">${text('Retry','Opnieuw')}</button>`:''}</div>`:''}
-    ${this._data?`${!hasValues?`<p class="status" role="status">${text('No data','Geen gegevens')}</p>`:''}${c.show_legend?`<div class="legend" aria-label="${text('Color scale','Kleurschaal')}"><span class="legend-value">${this._number(scale.min)} ${esc(this._data.unit)}</span><span class="ramp" aria-hidden="true"></span><span class="legend-value">${this._number(scale.max)} ${esc(this._data.unit)}</span></div>`:''}<div class="chart"><div class="matrix-scroll"><div class="matrix" role="table" aria-label="${esc(name)}" aria-rowcount="${this._rows.length+(c.show_labels?1:0)}" aria-colcount="${columnCount+(c.show_labels?1:0)}"><div class="matrix-row hours" role="row"><span role="columnheader">${corner}</span>${columns.map(label=>`<span role="columnheader">${esc(label)}</span>`).join('')}</div>${matrix}</div></div><div class="tooltip" id="heatmap-tooltip" role="tooltip" hidden></div></div>`:''}</div></ha-card>`;
-    bindPeriodControls(this);bindChartInsights(this);
+    ${this._data?`${!hasValues?`<p class="status" role="status">${text('No data','Geen gegevens')}</p>`:''}${c.show_legend?`<div class="legend" aria-label="${text('Color scale','Kleurschaal')}"><span class="legend-value"><span class="scale-number">${this._number(scale.min)}</span> <span class="scale-unit">${esc(this._data.unit)}</span></span><span class="ramp" aria-hidden="true"></span><span class="legend-value"><span class="scale-number">${this._number(scale.max)}</span> <span class="scale-unit">${esc(this._data.unit)}</span></span></div>`:''}<div class="chart"><div class="matrix-well"><div class="matrix-scroll" role="region" aria-label="${esc(name)}"><div class="matrix" role="table" aria-label="${esc(name)}" aria-rowcount="${this._rows.length+(c.show_labels?1:0)}" aria-colcount="${columnCount+(c.show_labels?1:0)}"><div class="matrix-row hours" role="row"><span role="columnheader">${corner}</span>${columns.map(label=>`<span role="columnheader">${esc(label)}</span>`).join('')}</div>${matrix}</div></div></div><div class="tooltip" id="heatmap-tooltip" role="tooltip" hidden></div></div>`:''}</div></ha-card>`;
+    bindPeriodControls(this);bindChartInsights(this);this._layoutMatrixLabels();
+    const tools=this.shadowRoot.querySelector('.chart-tools');if(tools){tools.onkeydown=e=>{if(e.key==='Escape'&&!e.target.closest?.('[popover]')){e.preventDefault();tools.open=false;tools.querySelector('summary').focus();}};this._chartToolsOutside??=e=>{const current=this.shadowRoot.querySelector('.chart-tools');if(current?.open&&!e.composedPath().includes(current)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))current.open=false;};globalThis.document?.addEventListener?.('pointerdown',this._chartToolsOutside);if(toolsHadFocus)tools.querySelector('summary').focus({preventScroll:true});}
     const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();
-    const container=this.shadowRoot.querySelector('.matrix-scroll');if(container){container.scrollLeft=scrollLeft;container.scrollTop=scrollTop;container.onscroll=()=>this._updateMatrixWindow();}
+
     this._bindTooltip();
     const grid=this.shadowRoot.querySelector('.matrix');
     if(grid){
-      this._cellElements=new Map([...grid.querySelectorAll('[data-cell]')].map(element=>[element.dataset.cell,element]));this._updateMatrixWindow();
+      this._cellElements=new Map([...grid.querySelectorAll('[data-cell]')].map(element=>[element.dataset.cell,element]));
       const target=e=>e.target.closest('[data-cell]');
       grid.onpointerover=e=>{const cell=target(e);if(cell && e.pointerType!=='touch')this._showTooltip(cell.dataset.cell);};
       const cell=this._cellElements.get(tooltipKey);
@@ -9770,6 +10426,48 @@ if(!window.customCards.some(c=>c.type==='eleven-heatmap-card'))window.customCard
 ;
 // Eleven Calendar (beta) — self-contained standalone module
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
@@ -10246,6 +10944,7 @@ function nextCalendarEvent(events,now=Date.now()){
 
 
 
+
 function calendarCardStyles(){return uiDetailSurfaceStyles()+uiSurfaceStyles('.navigation,.info-button')+`
 :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
 ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
@@ -10316,6 +11015,58 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .calendar-info .insight-sensor-heading{display:flex;align-items:center;gap:8px;min-width:0}.calendar-info .insight-sensor-heading strong{flex:1;min-width:0;overflow-wrap:anywhere}
 .calendar-info .insight-states{font-size:10px;color:var(--secondary-text-color,#666);margin-top:4px}
 @container(max-width:420px){.content{padding:var(--eleven-card-padding,16px)}.header{align-items:flex-start}.header-actions{gap:5px}.navigation .range{font-size:10px;padding:0 6px}.navigation [data-nav=now]{padding:0 6px}.list-event{grid-template-columns:50px minmax(0,1fr);gap:8px}.weather{font-size:10px}}
+.header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}.legend-item{min-height:44px;min-width:44px}
+/* Calendar-local calm agenda anatomy; paint remains theme-owned. */
+:host,ha-card,.content{height:auto;min-height:100%}
+.calendar-body{flex:none;overflow:visible;min-width:0}
+.header,.compact .header{gap:12px;margin-bottom:12px;align-items:center;flex-wrap:nowrap}
+.header h2{font-size:16px;font-weight:600;line-height:1.4;min-width:0;overflow-wrap:anywhere}
+.header svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.header{position:relative}
+.calendar-tools{margin-inline-start:auto;flex:none}
+.calendar-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+.calendar-tools summary::-webkit-details-marker{display:none}
+.calendar-tools summary svg{width:22px;height:22px;stroke-width:3}
+.calendar-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.calendar-tools-panel{position:absolute;z-index:5;inset-inline-end:0;top:48px;width:max-content;max-width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color);box-shadow:var(--eleven-material-surface-shadow,var(--ha-card-box-shadow,none))}
+.calendar-tools:not([open])>.calendar-tools-panel{display:none}
+.calendar-tools-panel .info-button{display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;min-height:44px;padding:8px 10px;font-size:13px;white-space:normal;text-align:start}
+.calendar-tools-panel .info-button span{min-width:0;overflow-wrap:anywhere}
+.calendar-tools-panel .info-button svg{flex:none}
+.header-actions{width:100%;margin:0 0 12px;flex-shrink:0}
+.header-actions:empty{display:none}
+.navigation{width:100%;gap:0;background:var(--secondary-background-color,#eee);box-shadow:none;border-radius:8px;flex-wrap:wrap}
+.navigation-actions{display:flex;align-items:center;gap:0;flex:none;margin-inline-start:auto}
+.navigation .range{flex:1 1 6em;min-width:0;white-space:normal;overflow-wrap:anywhere;border:0;padding:8px;font-size:13px;line-height:1.4;color:var(--primary-text-color);font-variant-numeric:tabular-nums}
+.navigation [data-nav=now]{padding:8px;min-width:44px;font-size:13px}
+.navigation [data-nav]{flex:none}
+.legend,.compact .legend{gap:8px;margin-bottom:16px;font-size:12px}
+.legend-item{padding:8px 10px;gap:7px;line-height:1.4;box-sizing:border-box;min-width:44px;min-height:44px}
+.legend-item[aria-pressed=false]{opacity:1;color:var(--secondary-text-color)}
+.legend-item[aria-pressed=false] .dot{opacity:.45}
+.legend-item[aria-pressed=true]{color:var(--eleven-material-selection-color,color-mix(in srgb,var(--accent-color,var(--primary-color)) 40%,var(--primary-text-color)));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);transform:translateY(1px)}
+.legend-item[aria-pressed=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.list-day+.list-day,.compact .list-day+.list-day{margin-top:12px;padding-top:12px}
+.day-heading,.compact .day-heading{margin-bottom:8px;flex-wrap:wrap;gap:6px 10px}
+.day-title{font-size:13px;line-height:1.4}.day-title time,.weather{font-size:12px}
+.list-event,.compact .list-event{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px}
+.list-event>.event-time,.compact .list-event>.event-time{flex:0 1 5.8em;min-width:min-content;font-size:12px;line-height:1.5;padding-top:7px;overflow-wrap:normal}
+.list-event .event-button,.compact .list-event .event-button{flex:1 1 12em;font-size:13px;min-height:44px!important;padding:6px 4px 6px 10px!important}
+.event-button .event-title,.column .event-title{font-size:13px;line-height:1.45;white-space:normal;overflow:visible;text-overflow:clip}
+.compact .list-event .event-title{white-space:normal;overflow:visible;text-overflow:clip}
+.event-button .event-meta,.column .event-meta{font-size:12px;line-height:1.45;margin-top:3px}
+.column .event-time{font-size:12px;color:var(--secondary-text-color)}
+.event-button,.compact .column .event-button{min-height:44px!important}
+.empty-day{font-size:12px;line-height:1.5;padding:8px 0}
+.month-chip,.compact .month-chip{min-height:44px!important;padding:7px!important;font-size:12px;line-height:1.45;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.month-more,.compact .month-more,.status button,.popup-more summary{min-height:44px;min-width:44px;box-sizing:border-box}
+.popup-calendar{overflow-wrap:anywhere;font-size:12px}.popup-calendar .dot{flex:none}
+.popup-date time,.popup-date-range time{min-width:0;overflow-wrap:anywhere}
+.content [data-ui-popup] [data-ui-button]{min-height:44px;min-width:44px;box-sizing:border-box}
+.popup-field-label{font-size:12px}.popup-location,.popup-description{font-size:13px;line-height:1.5}
+${cardThemeStyles({controls:'.navigation,.info-button,.legend-item',selected:'.legend-item[aria-pressed=true]',surfaces:'[data-ui-popup],.tooltip,[data-ui-detail-surface]'})}
+/* Selection must win over ordinary theme control faces. */
+.legend-item[aria-pressed=true],.legend-item[aria-pressed=true]:not(:disabled):hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none)}
 `;}
 
 
@@ -10586,10 +11337,13 @@ class CalendarCard extends HTMLElement{
   const content=`<div class="calendar-info"><div class="insight-sensors">${rows}</div></div>`;
   return uiPopup({id:'calendar-info',className:'insight-popup',title:dutch?'Gegevens':'Data information',closeLabel:label('close',dutch),content});
  }
- _cleanupUI(){for(const controller of this._popupControllers){controller.close();controller.disconnect();}this._popupControllers=[];}
+ _cleanupUI(){globalThis.document?.removeEventListener?.('pointerdown',this._toolsOutside);for(const controller of this._popupControllers){controller.close();controller.disconnect();}this._popupControllers=[];}
  _render(){
   if(!this._config)return;
   const dutch=isDutch(this._hass),range=this._range(),renderKey=`${this._view}/${range.startKey}/${range.endKey}`,sameRange=this._renderKey===renderKey,scroll=sameRange?this.shadowRoot.querySelector('.horizontal')?.scrollLeft??0:0,scrollTop=sameRange?this.shadowRoot.querySelector('.calendar-body')?.scrollTop??0:0,focusedNav=this.shadowRoot.activeElement?.dataset?.nav;
+  const active=this.shadowRoot.activeElement,focusCalendar=active?.dataset?.calendar,focusEvent=active?.dataset?.calendarEvent,focusInfo=active?.hasAttribute?.('data-info'),focusRetry=active?.hasAttribute?.('data-retry');
+  const toolsOpen=Boolean(this.shadowRoot.querySelector('.calendar-tools')?.open),focusTools=active?.matches?.('.calendar-tools summary');
+  const openInfo=this.shadowRoot.querySelector('#calendar-info:popover-open,#calendar-info[data-fallback-open]'),infoPopupFocus=Boolean(openInfo?.contains(active));
   this._renderKey=renderKey;
   this._cleanupUI();
   if(this._emptyConfig){this._displayEvents=[];this._updateNextEvent();this.shadowRoot.innerHTML=`<style>${calendarCardStyles()}</style><ha-card><div class="content"><div class="status">${label('select',dutch)}</div></div></ha-card>`;return;}
@@ -10602,17 +11356,26 @@ class CalendarCard extends HTMLElement{
   const loadingOnly=Object.values(this._statuses).length>0&&Object.values(this._statuses).every(status=>status==='loading')&&!Object.values(this._events).some(events=>events.length);
   const body=!visibleEntities.length?`<p class="status" role="status">${label('allHidden',dutch)}</p>`:loadingOnly?'':this._view==='columns'?this._columns(visibleDays,forecast):this._view==='month'?this._month(visibleDays,range,forecast):this._list(visibleDays,forecast);
   const button=(action,content,name)=>uiButton({content,label:name,title:name,attrs:{'data-nav':action}});
-  const navigation=this._config.show_navigation?`<div class="navigation"><span class="range">${escapeCalendarHtml(this._rangeLabel(range))}</span>${button('previous',cardHeaderIcon('previous'),label('previous',dutch))}${button('now',label('now',dutch),this._view==='month'?label('today',dutch):label('now',dutch))}${button('next',cardHeaderIcon('next'),label('next',dutch))}</div>`:'';
-  const info=uiButton({content:cardHeaderIcon('info'),className:'info-button',label:label('info',dutch),attrs:{'data-info':'','aria-controls':'calendar-info','aria-haspopup':'dialog'}});
+  const navigation=this._config.show_navigation?`<div class="navigation" role="group" aria-label="${dutch?'Datumnavigatie':'Date navigation'}"><span class="range">${escapeCalendarHtml(this._rangeLabel(range))}</span><div class="navigation-actions">${button('previous',cardHeaderIcon('previous'),label('previous',dutch))}${button('now',label('now',dutch),this._view==='month'?label('today',dutch):label('now',dutch))}${button('next',cardHeaderIcon('next'),label('next',dutch))}</div></div>`:'';
+  const info=uiButton({content:cardHeaderIcon('info')+`<span>${label('info',dutch)}</span>`,className:'info-button',label:label('info',dutch),attrs:{'data-info':'','aria-controls':'calendar-info','aria-haspopup':'dialog'}});
+  const toolsLabel=dutch?'Agendaopties':'Calendar tools',tools=`<details class="calendar-tools"${toolsOpen?' open':''}><summary aria-label="${toolsLabel}" title="${toolsLabel}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="calendar-tools-panel">${info}</div></details>`;
   const legend=this._config.show_legend?uiLegend({items:this._config.entities.map(row=>{const name=this._calendarName(row.entity),visible=!this._hiddenCalendars.has(row.entity),failed=this._calendarFailed(row.entity),failure=failed?label('calendarUnavailable',dutch):'';return {id:row.entity,visible,title:label(visible?'hideCalendar':'showCalendar',dutch)+' '+name+'.'+(failure?' '+failure+'.':''),attrs:{'data-calendar':row.entity,'data-calendar-error':failed?'':null,'aria-label':failure?name+'. '+failure:null,style:`--event-color:${this._eventColor(row.entity)}`},content:`<i class="dot"></i><span>${escapeCalendarHtml(name)}</span>${failed?'<b class="legend-error" aria-hidden="true">!</b>':''}`};})}):'';
-  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiPopupStyles()}${calendarCardStyles()}</style><ha-card class="${this._config.density==='compact'?'compact':''}"><div class="content"><header class="header">${this._config.show_title?`<h2>${escapeCalendarHtml(this._config.title||label('title',dutch))}</h2>`:''}<div class="header-actions">${navigation}${info}</div></header>${legend}${this._status()}<div class="calendar-body">${body}</div>${this._infoPopup(dutch,range,days)}${this._popupMarkup.join('')}</div></ha-card>`;
+  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiPopupStyles()}${calendarCardStyles()}</style><ha-card class="${this._config.density==='compact'?'compact':''}"><div class="content"><header class="header">${this._config.show_title?`<h2>${escapeCalendarHtml(this._config.title||label('title',dutch))}</h2>`:''}${tools}</header><div class="header-actions">${navigation}</div>${legend}${this._status()}<div class="calendar-body">${body}</div>${this._infoPopup(dutch,range,days)}${this._popupMarkup.join('')}</div></ha-card>`;
   const horizontal=this.shadowRoot.querySelector('.horizontal');if(horizontal)horizontal.scrollLeft=scroll;
   const calendarBody=this.shadowRoot.querySelector('.calendar-body');if(calendarBody)calendarBody.scrollTop=scrollTop;
   this._updateNextEvent();
   bindUILegend(this,{selector:'[data-calendar]',getId:button=>button.dataset.calendar,hint:label('soloHint',dutch),toggle:id=>this._toggleCalendar(id),isolate:id=>this._toggleCalendarIsolation(id)});
   for(const action of this.shadowRoot.querySelectorAll('[data-nav]'))action.onclick=()=>{const kind=action.dataset.nav;this._offset=kind==='now'?0:this._offset+(kind==='previous'?-1:1);this._startCalendars();this._render();this.shadowRoot.querySelector(`[data-nav="${kind}"]`)?.focus({preventScroll:true});};
+  if(focusCalendar)this._focusLegend(focusCalendar);
+  else if(focusEvent){const target=[...this.shadowRoot.querySelectorAll('[data-calendar-event]')].find(e=>e.dataset.calendarEvent===focusEvent);(target??this.shadowRoot.querySelector('.calendar-tools summary'))?.focus({preventScroll:true});}
+  else if(focusInfo||focusRetry||focusTools)this.shadowRoot.querySelector(focusInfo&&toolsOpen?'[data-info]':'.calendar-tools summary')?.focus({preventScroll:true});
   if(focusedNav)this.shadowRoot.querySelector(`[data-nav="${focusedNav}"]`)?.focus({preventScroll:true});
-  const makePopup=(trigger,popup)=>{let control;control=bindUIPopup({trigger,popup,container:this.shadowRoot.querySelector('ha-card'),beforeOpen:()=>this._popupControllers.forEach(item=>{if(item!==control)item.close();})});this._popupControllers.push(control);};
+  const toolsEl=this.shadowRoot.querySelector('.calendar-tools'),summary=toolsEl.querySelector('summary');
+  const closeTools=()=>{if(toolsEl.contains(this.shadowRoot.activeElement))summary.focus({preventScroll:true});toolsEl.open=false;};
+  toolsEl.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeTools();}};
+  this._toolsOutside=e=>{if(toolsEl.open&&!e.composedPath().includes(toolsEl)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))closeTools();};
+  globalThis.document?.addEventListener?.('pointerdown',this._toolsOutside);
+  const makePopup=(trigger,popup)=>{let control;control=bindUIPopup({trigger,popup,container:this.shadowRoot.querySelector('ha-card'),beforeOpen:()=>this._popupControllers.forEach(item=>{if(item!==control)item.close();})});this._popupControllers.push(control);if(openInfo&&popup.id==='calendar-info'){control.open(false);if(infoPopupFocus)popup.querySelector('[data-ui-popup-close]')?.focus({preventScroll:true});}};
   makePopup(this.shadowRoot.querySelector('[data-info]'),this.shadowRoot.querySelector('#calendar-info'));
   for(const trigger of this.shadowRoot.querySelectorAll('[data-event-popup-id]'))makePopup(trigger,this.shadowRoot.getElementById(trigger.dataset.eventPopupId));
   this.shadowRoot.querySelector('[data-retry]')?.addEventListener('click',()=>{this._calendarRetryFailures=0;this._startCalendars();this._render();});
@@ -10627,6 +11390,48 @@ if(!window.customCards.some(card=>card.type==='eleven-calendar-card'))window.cus
 ;
 // Eleven Weather (beta) — self-contained module
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -11079,11 +11884,15 @@ const weatherStyledIconStyles=`
 ﻿// Layered vector illustrations with CSS motion; unique paint IDs per instance.
 
 let weatherArtId=0;
-function weatherArt(kind,style='classic',iconKind=kind) {
+function weatherArt(kind,style='classic',iconKind=kind,hero=true) {
  if(style==='glass'||style==='neon')return weatherStyledArt(iconKind,style);
  const id=`wx-${++weatherArtId}`,paint=name=>`url(#${id}-${name})`;
- const sun=`<g class="wx-sun"><circle class="wx-corona" cx="70" cy="55" r="32" fill="${paint('glow')}"/><g class="wx-rays" stroke="#f8cd70" stroke-width="3.5" stroke-linecap="round"><path d="M70 14v-6m0 94v-6M29 55h-6m94 0h-6M41 26l-5-5m68 68-5-5M41 84l-5 5m68-68-5 5"/></g><circle cx="70" cy="55" r="25" fill="${paint('sun')}" stroke="#ffe5a3" stroke-width="1.5"/><path d="M51 53a20 20 0 0 1 25-17" stroke="#fff6d6" stroke-width="3" stroke-linecap="round" opacity=".8"/></g>`;
- const cloud=`<g class="wx-cloud"><path d="M43 101a23 23 0 0 1 1-46 32 32 0 0 1 60-10 27 27 0 0 1 8 54H43z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/><path d="M47 62a26 26 0 0 1 49-11" stroke="#fff" stroke-opacity=".8" stroke-width="2.5" stroke-linecap="round"/><path d="M29 87c21 10 59 14 91 0" stroke="#65829f" stroke-opacity=".16" stroke-width="4" stroke-linecap="round"/></g>`;
+ const clippedRays=hero&&kind==='partly';
+ const sun=`<g class="wx-sun">${clippedRays?`<g clip-path="${paint('partly-rays')}">`:''}<g class="wx-rays" stroke="#f8cd70" stroke-width="3.5" stroke-linecap="round"><path d="M70 14v-6m0 94v-6M29 55h-6m94 0h-6M41 26l-5-5m68 68-5-5M41 84l-5 5m68-68-5 5"/></g>${clippedRays?'</g>':''}<circle cx="70" cy="55" r="25" fill="${paint('sun')}" stroke="#ffe5a3" stroke-width="1.5"/><path d="M51 53a20 20 0 0 1 25-17" stroke="#fff6d6" stroke-width="3" stroke-linecap="round" opacity=".8"/></g>`;
+ // A single continuous outline: soft side lobes, a taller main dome and a calm base.
+ const cloud=hero?`<g class="wx-cloud"><path d="M46 101C32 101 22 91 22 78C22 65 32 55 45 55C48 39 61 28 77 29C93 29 105 40 108 55C123 52 138 64 138 79C138 92 128 101 114 101Z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/></g>`:`<g class="wx-cloud"><path d="M43 101a23 23 0 0 1 1-46 32 32 0 0 1 60-10 27 27 0 0 1 8 54H43z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/><path d="M47 62a26 26 0 0 1 49-11" stroke="#fff" stroke-opacity=".8" stroke-width="2.5" stroke-linecap="round"/><path d="M29 87c21 10 59 14 91 0" stroke="#65829f" stroke-opacity=".16" stroke-width="4" stroke-linecap="round"/></g>`;
+ // Offset/scale outside wx-rays so its CSS rotation retains the local 70/55 origin.
+ const partlySun=`<g class="wx-partly-sun" transform="translate(54.6 -3.1) scale(.82)">${sun}</g>`;
  const rain='<g class="wx-rain" stroke="#8dcfff" stroke-width="5" stroke-linecap="round"><path class="wx-drop wx-drop-one" d="m54 109-6 12"/><path class="wx-drop wx-drop-two" d="m80 109-6 12"/><path class="wx-drop wx-drop-three" d="m106 109-6 12"/></g>';
  const snow='<g class="wx-snow" fill="#e0f7ff" stroke="#d0efff" stroke-width="1.5"><path class="wx-flake wx-drop-one" d="M52 108v12m-6-6h12m-10-4 8 8m-8 0 8-8"/><path class="wx-flake wx-drop-two" d="M80 116v12m-6-6h12m-10-4 8 8m-8 0 8-8"/><path class="wx-flake wx-drop-three" d="M108 106v12m-6-6h12m-10-4 8 8m-8 0 8-8"/></g>';
  const night=`<g class="wx-moon"><path d="M102 91a39 39 0 0 1-38-64 40 40 0 1 0 38 64" fill="${paint('moon')}" stroke="#dce4ff" stroke-width="1.5"/><path d="M43 49a33 33 0 0 0 7 40" stroke="#f5f4ff" stroke-width="2.5" stroke-linecap="round" opacity=".6"/></g><g fill="#e6e6ff"><path class="wx-star wx-star-one" d="m114 24 2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/><path class="wx-star wx-star-two" d="m128 64 1.5 4.5L134 70l-4.5 1.5L128 76l-1.5-4.5L122 70l4.5-1.5z"/><circle class="wx-star wx-star-three" cx="93" cy="17" r="2"/></g>`;
@@ -11091,8 +11900,8 @@ function weatherArt(kind,style='classic',iconKind=kind) {
  const fog='<g class="wx-fog" stroke="#c6dbe9" stroke-width="5" stroke-linecap="round"><path d="M30 110h100"/><path d="M43 122h74"/><path d="M52 134h63"/></g>';
  const lightning=`<path class="wx-lightning" d="m84 94-20 27h15l-6 20 27-31H84l8-16z" fill="${paint('sun')}" stroke="#ffe9b1" stroke-width="1"/>`;
  const unknown='<circle cx="80" cy="70" r="34" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 8"/><path d="M70 58c0-16 25-16 25 0 0 11-15 9-15 20m0 10v3" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
- const body=kind==='sun'?sun:kind==='night'?night:kind==='wind'?wind:kind==='unknown'?unknown:(kind==='partly'?sun:'')+cloud+(kind==='rain'?rain:kind==='snow'?snow:kind==='storm'?rain+lightning:kind==='fog'?fog:'');
- return `<svg class="weather-icon" viewBox="0 0 160 150" fill="none" aria-hidden="true" focusable="false"><defs><radialGradient id="${id}-glow"><stop stop-color="#ffd775" stop-opacity=".3"/><stop offset="1" stop-color="#ffd775" stop-opacity="0"/></radialGradient><linearGradient id="${id}-sun" x2=".3" y2="1"><stop stop-color="#fff0b4"/><stop offset=".5" stop-color="#f6ce6d"/><stop offset="1" stop-color="#eda743"/></linearGradient><linearGradient id="${id}-cloud" x2=".2" y2="1"><stop stop-color="#f8fbff"/><stop offset=".5" stop-color="#c8d9ea"/><stop offset="1" stop-color="#91aac2"/></linearGradient><linearGradient id="${id}-moon" x2=".6" y2="1"><stop stop-color="#f0edff"/><stop offset="1" stop-color="#9aadee"/></linearGradient><linearGradient id="${id}-wind"><stop stop-color="#88b1cb" stop-opacity=".6"/><stop offset="1" stop-color="#d4efff"/></linearGradient></defs>${body}</svg>`;
+ const body=kind==='sun'?sun:kind==='night'?night:kind==='wind'?wind:kind==='unknown'?unknown:(kind==='partly'?(hero?partlySun:sun):'')+cloud+(kind==='rain'?rain:kind==='snow'?snow:kind==='storm'?rain+lightning:kind==='fog'?fog:'');
+ return `<svg class="weather-icon" viewBox="0 0 160 150" fill="none" aria-hidden="true" focusable="false"><defs>${clippedRays?`<clipPath id="${id}-partly-rays"><path d="M0 0H160V58H0Z"/></clipPath>`:''}<linearGradient id="${id}-sun" x2=".3" y2="1"><stop stop-color="#fff0b4"/><stop offset=".5" stop-color="#f6ce6d"/><stop offset="1" stop-color="#eda743"/></linearGradient><linearGradient id="${id}-cloud" x2=".2" y2="1"><stop stop-color="#f8fbff"/><stop offset=".5" stop-color="#c8d9ea"/><stop offset="1" stop-color="#91aac2"/></linearGradient><linearGradient id="${id}-moon" x2=".6" y2="1"><stop stop-color="#f0edff"/><stop offset="1" stop-color="#9aadee"/></linearGradient><linearGradient id="${id}-wind"><stop stop-color="#88b1cb" stop-opacity=".6"/><stop offset="1" stop-color="#d4efff"/></linearGradient></defs>${body}</svg>`;
 }
 
 
@@ -11107,19 +11916,20 @@ const weatherAtmosphereStyles=headerAtmosphereStyles;
 const weatherStyles=`
 :host{display:block;min-width:0;container-type:inline-size;font:inherit}
 *{box-sizing:border-box}ha-card{display:block;overflow:hidden;border-radius:var(--ha-card-border-radius,12px);background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit}
-.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--tone:#536b82}.content[data-dark=true]{--tone:#a8c9eb}
-.content[data-kind=sun],.content[data-kind=partly]{--tone:#946800}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--tone:#f2c451}
-.content[data-kind=rain]{--tone:#427fac}.content[data-dark=true][data-kind=rain]{--tone:#82b8e8}
-.content[data-kind=night],.content[data-kind=storm]{--tone:#6553a3}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--tone:#aca3f1}
-.content[data-kind=snow]{--tone:#45858c}.content[data-dark=true][data-kind=snow]{--tone:#a2dce6}
+/* Supplemental semantic glyphs have fresh paint; readable text is a separate theme role. */
+.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--weather-icon-tone:#6599bb;--weather-text-tone:var(--secondary-text-color,#666);--tone:var(--weather-icon-tone)}.content[data-dark=true]{--weather-icon-tone:#add6ef}
+.content[data-kind=sun],.content[data-kind=partly]{--weather-icon-tone:#f3b51b}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--weather-icon-tone:#ffd45c}
+.content[data-kind=rain]{--weather-icon-tone:#269ad5}.content[data-dark=true][data-kind=rain]{--weather-icon-tone:#76cafa}
+.content[data-kind=night],.content[data-kind=storm]{--weather-icon-tone:#8873dc}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--weather-icon-tone:#b8a7ff}
+.content[data-kind=snow]{--weather-icon-tone:#32a9bb}.content[data-dark=true][data-kind=snow]{--weather-icon-tone:#8bdeec}
 .scene{position:relative;isolation:isolate;margin:-16px -16px 0;padding:16px 16px 16px;overflow:visible}
 .hero{min-height:160px;position:relative;display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:12px;align-content:start;padding-top:6px}
 .temperature{font-size:76px;font-weight:500;line-height:1.15;letter-spacing:-.065em;font-variant-numeric:tabular-nums;margin-top:-20px}.temperature .unit{font-size:.53em;letter-spacing:-.03em;margin-left:2px}
-header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:color-mix(in srgb,var(--tone) 88%,#fff);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
-.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:drop-shadow(0 8px 14px color-mix(in srgb,var(--tone) 25%,transparent))}
+header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:var(--primary-text-color,#20252b);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
+.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:none}
 button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(--secondary-background-color,#eee);border-radius:7px;padding:12px}.status{display:flex;gap:12px;align-items:center;width:100%;text-align:left;border:0;min-height:0;margin:16px 0 0}.status-icon{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:10px;color:var(--tone);background:color-mix(in srgb,var(--tone) 13%,transparent)}.status-icon svg{width:30px;height:30px}.status strong{font-size:13px;line-height:1.4;font-weight:600}.status small{display:block;font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}
 .metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0}.metrics:has(.metric:only-child){grid-template-columns:minmax(0,1fr)}.metric{min-width:0;display:grid;grid-template-rows:auto auto;gap:2px;align-content:start}.metric dt{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin:0;overflow-wrap:anywhere}.metric dd{font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:0;overflow-wrap:anywhere}
-.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--tone)}
+.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--weather-text-tone)}
 .notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.retry{background:transparent;color:var(--primary-color,#2196f3);border:0;min-height:32px;padding:4px 0}.status:focus-visible,.retry:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
 @container(max-width:320px){.hero{min-height:150px}.temperature{font-size:65px;margin-top:-17px}header{margin-top:-17px;padding-top:14px}.art svg{height:100px}.forecast-list{grid-auto-columns:minmax(46px,1fr)}}
 @supports(grid-template-rows:subgrid){.metrics{grid-template-rows:auto auto;row-gap:2px}.metric{grid-row:span 2;grid-template-rows:subgrid}}
@@ -11130,7 +11940,7 @@ button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(
 .content[data-compact=true] .temperature{font-size:64px;margin-top:-16px}
 .content[data-compact=true] header{padding-top:14px;margin-top:-16px}
 .content[data-compact=true] .art{inset:38px 0 0}
-.content[data-compact=true] .art svg{height:74px;width:100px;filter:drop-shadow(0 5px 10px color-mix(in srgb,var(--tone) 20%,transparent))}
+.content[data-compact=true] .art svg{height:74px;width:100px}
 .content[data-compact=true] .scene{padding-bottom:12px}
 .content:not(:has(.weather-metrics)) .scene{padding-bottom:0}
 .content[data-compact=true] .status{padding:10px;gap:10px;margin-top:12px}
@@ -11147,10 +11957,10 @@ button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(
 .forecast-extra{font-size:11px;line-height:1.4;margin-top:5px;color:var(--primary-text-color)}.forecast-label{display:block;overflow-wrap:anywhere;font-size:10px;color:var(--secondary-text-color)}
 ${weatherBackgroundStyles}
 
-.wx-rays{transform-origin:70px 55px}.wx-corona{transform-origin:70px 55px}
+.wx-rays{transform-origin:70px 55px}
 @media(prefers-reduced-motion:no-preference){
  .content[data-animated=true] .wx-rays{animation:wx-rotate 24s linear infinite}
- .content[data-animated=true] .wx-corona{animation:wx-glow 5s ease-in-out infinite}
+
  .content[data-animated=true] .wx-cloud{animation:wx-float 6s ease-in-out infinite}
  .content[data-animated=true] .wx-drop{animation:wx-rain 1.5s linear infinite}
  .content[data-animated=true] .wx-flake{animation:wx-snow 4s ease-in-out infinite}
@@ -11167,7 +11977,7 @@ ${weatherBackgroundStyles}
  .content[data-animated=true] .wx-lightning{animation:wx-lightning 5s ease-in-out infinite}
 }
 @keyframes wx-rotate{to{transform:rotate(360deg)}}
-@keyframes wx-glow{50%{transform:scale(1.12);opacity:.6}}
+
 @keyframes wx-float{50%{transform:translate(3px,-2px)}}
 @keyframes wx-rain{0%{transform:translate(2px,-3px);opacity:0}15%,75%{opacity:1}100%{transform:translate(-4px,12px);opacity:0}}
 @keyframes wx-snow{0%{transform:translate(-2px,-2px);opacity:0}20%,70%{opacity:1}100%{transform:translate(4px,9px);opacity:0}}
@@ -11178,6 +11988,44 @@ ${weatherBackgroundStyles}
 ${weatherAtmosphereStyles}
 ${weatherStyledIconStyles}
 ${headerSceneStyles}
+`;
+
+// Weather-specific anatomy and neutral role mapping; theme paint stays owned upstream.
+const weatherCalmStyles=`
+/* Theme-owned readings; condition color belongs to icons, not a decorative wash. */
+[data-ui-metric]{background:var(--secondary-background-color,transparent)}
+.content .hero{min-height:124px}
+.content[data-compact=true] .hero{min-height:100px}
+.hero .temperature .primary-value{font-size:48px;flex-wrap:nowrap;white-space:nowrap;overflow-wrap:normal;gap:5px}
+.content[data-compact=true] .hero .temperature .primary-value{font-size:40px}
+.hero .primary-number{overflow-wrap:normal;word-break:normal;max-width:none}
+.hero .primary-value small{margin-top:6px;white-space:nowrap}
+.hero .temperature .primary-label{border:0;padding:0;font-size:12px;overflow-wrap:normal;word-break:normal}
+.content .hero[data-wide-reading=true]{padding-bottom:116px;min-height:0}
+.content .hero[data-wide-reading=true] .temperature{max-width:100%}
+.content[data-icon-style] .hero[data-wide-reading=true]>.art{top:auto;bottom:0;height:110px}
+.content[data-compact=true] .hero[data-wide-reading=true]{padding-bottom:86px}
+.content[data-compact=true][data-icon-style] .hero[data-wide-reading=true]>.art{height:80px}
+.weather-metrics{grid-template-columns:repeat(var(--weather-reading-columns,1),minmax(0,1fr));column-gap:12px;row-gap:12px}
+.weather-metrics>[data-ui-metric]{padding:12px;min-height:44px}
+[data-ui-metric] .ui-metric-title,[data-ui-metric] .ui-metric-info{font-size:12px;overflow-wrap:normal;word-break:normal}
+[data-ui-metric] .ui-metric-icon{transform:none;width:20px;height:20px}
+[data-ui-metric] .ui-metric-value{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.weather-status[data-condition=true] .ui-metric-value{white-space:normal;overflow-wrap:normal;word-break:normal;font-size:22px;font-weight:600}
+.weather-status[data-condition=true] .ui-metric-title{padding-bottom:2px}
+.weather-status{min-height:44px}
+.ui-metric-unit{font-size:12px;white-space:nowrap}
+[data-ui-tabs]{gap:8px;align-items:stretch;flex-wrap:wrap}
+[data-ui-tabs] [role=tab]{min-height:44px;min-width:88px;padding:10px 12px;border-radius:var(--eleven-material-control-radius,12px);font-size:13px;font-weight:500;line-height:1.4;white-space:normal;overflow-wrap:normal;text-decoration:none}
+[data-ui-tabs] [role=tab][aria-selected=true]:hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+[data-ui-tabs] [role=tab]:focus-visible,.retry:focus-visible,button[data-ui-metric]:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.forecast-list{grid-auto-columns:minmax(max-content,1fr);gap:8px;padding-bottom:4px}
+.forecast-list li{min-width:max-content}
+.forecast-list time{font-size:12px;white-space:nowrap}
+.forecast-atomic{display:inline-block;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.forecast-label{font-size:11px;white-space:normal;overflow-wrap:normal;word-break:normal}
+.forecast-low,.rain-chance,.forecast-extra{font-size:12px}
+.retry{min-height:44px;padding:8px 12px;border-radius:var(--eleven-material-control-radius,12px);color:var(--accent-color,var(--primary-color));background:var(--secondary-background-color);font-size:13px}
 `;
 
 // Retain live nodes, focus, scroll offsets and running SVG animations on telemetry updates.
@@ -11335,6 +12183,7 @@ class WeatherEditor extends HTMLElement{
 
 
 
+
 class WeatherCard extends HTMLElement {
  constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._forecast=[];this._iconCache=new Map();}
  static async getConfigElement(){if(!customElements.get('eleven-weather-editor'))customElements.define('eleven-weather-editor',WeatherEditor);return document.createElement('eleven-weather-editor');}
@@ -11347,7 +12196,7 @@ class WeatherCard extends HTMLElement {
  set hass(hass){this._hass=hass;this._syncForecast();this._render();}
  get hass(){return this._hass;}
  connectedCallback(){this._attached=true;this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>{this._ensureForecastClock();this._render();});this._syncForecast();this._ensureForecastClock();this._render();}
- disconnectedCallback(){this._attached=false;this._motionCleanup?.();this._motionCleanup=null;clearInterval(this._forecastClock);this._forecastClock=null;this._stopForecast();this._tabs?.disconnect();this._key=null;}
+ disconnectedCallback(){this._attached=false;this._readingObserver?.disconnect();if(this._readingFrame!=null)globalThis.cancelAnimationFrame?.(this._readingFrame);this._motionCleanup?.();this._motionCleanup=null;clearInterval(this._forecastClock);this._forecastClock=null;this._stopForecast();this._tabs?.disconnect();this._key=null;}
  _ensureForecastClock(){
   const active=this._attached&&!!this._config?.entity&&this._forecastEnabled()&&(typeof document==='undefined'||!document.hidden);
   if(!active){clearInterval(this._forecastClock);this._forecastClock=null;return;}
@@ -11356,7 +12205,7 @@ class WeatherCard extends HTMLElement {
  _weatherArt(kind,style,iconKind,slot){
   const signature=kind+'|'+style+'|'+iconKind,cached=this._iconCache.get(slot);
   if(cached?.signature===signature)return cached.markup;
-  const markup=weatherArt(kind,style,iconKind);this._iconCache.set(slot,{signature,markup});
+  const markup=weatherArt(kind,style,iconKind,slot==='hero');this._iconCache.set(slot,{signature,markup});
   if(this._iconCache.size>32)this._iconCache.delete(this._iconCache.keys().next().value);
   return markup;
  }
@@ -11372,7 +12221,7 @@ class WeatherCard extends HTMLElement {
   const plain=weatherField({...this._config,metric_status_show_unit:false},'metric_status',attributes,this._hass,available),split=metric.value.startsWith(plain.value);
   const value=plain.value==='\u2014'?null:split?plain.value:metric.value,unit=split?metric.value.slice(plain.value.length).trim():'';
   const icon=this._config.metric_status_icon?`<ha-icon icon="${uiEscape(this._config.metric_status_icon)}"></ha-icon>`:this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'status');
-  return uiMetric({title:label||metric.label,value,unit,iconContent:icon,compact:this._config.compact,action:!!id,info:this._offline()?(nl?'Geen verbinding · laatst ontvangen gegevens':'Offline · last received readings'):'',attrs:{class:'weather-status', 'data-status-entity':id||'', 'aria-label':(label?label+': ':'')+metric.value}});
+  return uiMetric({title:label||metric.label,value,unit,iconContent:icon,compact:this._config.compact,action:!!id,info:this._offline()?(nl?'Geen verbinding · laatst ontvangen gegevens':'Offline · last received readings'):'',attrs:{class:'weather-status','data-condition':String(condition), 'data-status-entity':id||'', 'aria-label':(label?label+': ':'')+metric.value}});
  }
  _metricsMarkup(attributes,available){
   const icons={wind_speed:'mdi:weather-windy',humidity:'mdi:water-percent',pressure:'mdi:gauge',visibility:'mdi:eye-outline',uv_index:'mdi:sun-wireless-outline',cloud_coverage:'mdi:weather-cloudy',wind_gust_speed:'mdi:weather-windy',dew_point:'mdi:thermometer-water',temperature:'mdi:thermometer'};
@@ -11423,13 +12272,43 @@ class WeatherCard extends HTMLElement {
     const units={temperature:attributes.temperature_unit||'°C',templow:attributes.temperature_unit||'°C',precipitation_probability:'%',precipitation:attributes.precipitation_unit||'',wind_speed:attributes.wind_speed_unit||'',wind_gust_speed:attributes.wind_speed_unit||'',humidity:'%',uv_index:''};
     const label=WEATHER_FORECAST_FIELDS[key][nl?0:1],value=weatherNumber(row[key],this._hass,units[key],this._config['forecast_'+this._forecastType+'_'+key+'_decimals']??(['precipitation','wind_speed','wind_gust_speed','uv_index'].includes(key)?1:0));
     const className=key==='temperature'?'forecast-value':key==='templow'?'forecast-low':key==='precipitation_probability'?'rain-chance':'forecast-extra';
-    return '<div class="'+className+'" data-forecast-field="'+key+'" aria-label="'+uiEscape(label)+'" title="'+uiEscape(label)+'">'+(!['temperature','templow','precipitation_probability'].includes(key)?'<span class="forecast-label">'+uiEscape(label)+'</span>':'')+uiEscape(value)+'</div>';
+    return '<div class="'+className+'" data-forecast-field="'+key+'" aria-label="'+uiEscape(label)+'" title="'+uiEscape(label)+'">'+(!['temperature','templow','precipitation_probability'].includes(key)?'<span class="forecast-label">'+uiEscape(label)+'</span>':'')+ '<span class="forecast-atomic">'+uiEscape(value)+'</span></div>';
    }).join('');
    return '<li data-weather-key="'+uiEscape(row.datetime)+'"><time datetime="'+uiEscape(row.datetime)+'">'+uiEscape(when)+'</time>'+fields+'</li>';
   }).join('')}</ol>`;
   if(weatherVisibleTabs(this._config).length===1)return `<section class="forecast" aria-label="${heading}">${body}</section>`;
   const items=[{value:'hourly',label:nl?'Per uur':'Hourly'},{value:'daily',label:nl?'Per dag':'Daily'}].filter(item=>weatherVisibleTabs(this._config).includes(item.value)).map(item=>({...item,content:item.value===this._forecastType?body:''}));
   return `<section class="forecast" aria-label="${nl?'Weersverwachting':'Weather forecast'}">${uiTabs({id:'weather-forecast',label:nl?'Weersverwachting':'Weather forecast',items,selected:this._forecastType,panelClassName:'forecast-panel'})}</section>`;
+ }
+ _fitReadings(){
+  const root=this.shadowRoot,grid=root.querySelector('.weather-metrics'),hero=root.querySelector('.hero');
+  if(!hero||!hero.clientWidth)return;
+  const inkWidth=node=>{const range=document.createRange();range.selectNodeContents(node);return range.getBoundingClientRect().width;};
+  // Measure with unscaled atomic text. Reflow before fitting a genuinely extreme value.
+  const primary=root.querySelector('.primary-value');
+  for(const node of root.querySelectorAll('.ui-metric-value,.primary-value'))node.style.removeProperty('zoom');
+  if(grid){
+   grid.style.setProperty('--weather-reading-columns','1');
+   const readings=[...grid.querySelectorAll('[data-weather-field]')];
+   const available=(grid.clientWidth-12)/2;
+   const natural=readings.map(node=>{
+    const value=node.querySelector('.ui-metric-value'),title=node.querySelector('.ui-metric-title'),font=getComputedStyle(title),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+    ctx.font=`${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;ctx.letterSpacing=font.letterSpacing;
+    const word=Math.max(0,...title.textContent.split(/\s+/).map(text=>ctx.measureText(text).width));
+    return Math.max(inkWidth(value)+24,word+24+28);
+   });
+   if(readings.length>1&&natural.every(width=>width<=available))grid.style.setProperty('--weather-reading-columns','2');
+  }
+  const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+  const textWidth=(node,text=node.textContent)=>{const font=getComputedStyle(node);ctx.font=`${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;ctx.letterSpacing=font.letterSpacing;return ctx.measureText(text).width;};
+  const primaryWidth=()=>[...primary.children].reduce((width,node)=>width+textWidth(node),0)+parseFloat(getComputedStyle(primary).gap||0);
+  hero.dataset.wideReading=String(primaryWidth()>hero.clientWidth/2);
+  // Values remain complete: only full-card extremes scale, never break or round digits.
+  for(const node of root.querySelectorAll('.ui-metric-value,.primary-value')){
+   const condition=node.closest('.weather-status')&&this._config.metric_status==='condition';
+   const width=condition?Math.max(...node.textContent.split(/\s+/).map(word=>textWidth(node,word))):node===primary?primaryWidth():inkWidth(node),available=node.clientWidth;
+   if(width>available&&available>0)node.style.zoom=String(Math.max(.1,available/width));
+  }
  }
  _render(){
   if(!this._config)return;
@@ -11442,8 +12321,23 @@ class WeatherCard extends HTMLElement {
   const number=(value,unit='',digits=0)=>weatherNumber(available?value:null,hass,unit,digits);
   const unit=attributes.temperature_unit||'°C';
   patchWeatherDOM(this.shadowRoot,`<style>${uiButtonStyles()}${uiTabsStyles()}${weatherStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}
-.weather-status{margin-top:16px}.weather-metrics{margin:0}.header-region{--ui-metric-tone:var(--tone)}.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}.content[data-compact=true] .weather-status{margin-top:12px}.hero{padding-top:0;grid-template-columns:minmax(0,1fr)}.hero .temperature{max-width:50%;position:relative;z-index:1}.content[data-icon-style] .hero>.art{inset:0 auto 0 50%;width:50%;transform:translate(calc(-50% + var(--weather-icon-x,0px)),var(--weather-icon-y,0px)) scale(var(--weather-icon-scale,1));transform-origin:center;min-width:0}.hero .art svg{max-width:100%}.hero .temperature{margin-top:0;font-size:inherit;letter-spacing:inherit}.content[data-compact=true] .hero .temperature{margin-top:0}
-</style><ha-card aria-label="${uiEscape(this._config.title||(nl?'Het weer':'Weather'))}"><div class="content" style="--header-background-opacity:${this._config.background_strength/100};--weather-icon-scale:${this._config.icon_scale/100};--weather-icon-x:${this._config.icon_offset_x}px;--weather-icon-y:${this._config.icon_offset_y}px" data-background="${this._config.background}" data-icon-style="${this._config.icon_style}" data-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_icons&&!this._offline()}" data-background-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_background&&!this._offline()}" data-compact="${this._config.compact}" data-kind="${state.kind}" data-dark="${!!hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${weatherAtmosphere(this._config.background)}</div><div class="scene"><div class="hero">${uiPrimaryValue({value:available?number(attributes.temperature):null,unit,subtitle:attributes.apparent_temperature!=null&&available?(nl?'Voelt als ':'Feels like ')+number(attributes.apparent_temperature,unit):'',compact:this._config.compact,attrs:{class:'temperature'}})}<div class="art">${this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'hero')}</div></div>${this._statusMarkup(attributes,available,state,nl)}</div>${this._metricsMarkup(attributes,available)}</div>${!this._config.entity?`<p class="notice">${nl?'Kies een weerentiteit in de configuratie.':'Choose a weather entity in the editor.'}</p>`:`${this._forecastMarkup(nl,attributes)}`}</div></ha-card>`);
+.weather-status{margin-top:16px}.weather-metrics{margin:0}.header-region{--ui-metric-tone:var(--weather-icon-tone)}.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}.content[data-compact=true] .weather-status{margin-top:12px}.hero{padding-top:0;grid-template-columns:minmax(0,1fr)}.hero .temperature{max-width:50%;position:relative;z-index:1}.content[data-icon-style] .hero>.art{inset:0 auto 0 50%;width:50%;transform:translate(calc(-50% + var(--weather-icon-x,0px)),var(--weather-icon-y,0px)) scale(var(--weather-icon-scale,1));transform-origin:center;min-width:0}.hero .art svg{max-width:100%}.hero .temperature{margin-top:0;font-size:inherit;letter-spacing:inherit}.content[data-compact=true] .hero .temperature{margin-top:0}
+/* Reserve the icon for the label row; keep readings and their units together. */
+[data-ui-metric] .ui-metric-icon{grid-row:1}
+[data-ui-metric] .ui-metric-value{grid-column:1/-1;overflow-wrap:normal;word-break:normal}
+.weather-metrics .ui-metric-value{white-space:nowrap}
+[data-ui-metric] .ui-metric-title{overflow-wrap:normal;word-break:normal}
+@container(max-width:340px){.weather-metrics{grid-template-columns:minmax(0,1fr);row-gap:12px}}
+[data-ui-tabs]{border-bottom:0}
+[data-ui-tabs] [role=tab]{min-height:44px;border-bottom:0;text-decoration:none}
+[data-ui-tabs] [role=tab][aria-selected=true]{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
+${cardThemeStyles({wells:'[data-ui-metric],.status',controls:'[data-ui-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}${weatherCalmStyles}</style><ha-card aria-label="${uiEscape(this._config.title||(nl?'Het weer':'Weather'))}"><div class="content" style="--header-background-opacity:${this._config.background_strength/100};--weather-icon-scale:${this._config.icon_scale/100};--weather-icon-x:${this._config.icon_offset_x}px;--weather-icon-y:${this._config.icon_offset_y}px" data-background="${this._config.background}" data-icon-style="${this._config.icon_style}" data-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_icons&&!this._offline()}" data-background-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_background&&!this._offline()}" data-compact="${this._config.compact}" data-kind="${state.kind}" data-dark="${!!hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${weatherAtmosphere(this._config.background)}</div><div class="scene"><div class="hero">${uiPrimaryValue({value:available?number(attributes.temperature):null,unit,subtitle:attributes.apparent_temperature!=null&&available?(nl?'Voelt als ':'Feels like ')+number(attributes.apparent_temperature,unit):'',compact:this._config.compact,attrs:{class:'temperature'}})}<div class="art">${this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'hero')}</div></div>${this._statusMarkup(attributes,available,state,nl)}</div>${this._metricsMarkup(attributes,available)}</div>${!this._config.entity?`<p class="notice">${nl?'Kies een weerentiteit in de configuratie.':'Choose a weather entity in the editor.'}</p>`:`${this._forecastMarkup(nl,attributes)}`}</div></ha-card>`);
+  this._fitReadings();
+  if(this._attached&&typeof ResizeObserver!=='undefined'){
+   this._readingObserver??=new ResizeObserver(()=>{cancelAnimationFrame(this._readingFrame);this._readingFrame=requestAnimationFrame(()=>this._fitReadings());});
+   this._readingObserver.disconnect();
+   for(const node of this.shadowRoot.querySelectorAll('.content,.ui-metric-title,.ui-metric-value,.primary-value'))this._readingObserver.observe(node);
+  }
   this._tabs?.disconnect();
   this._tabs=bindUITabs({tabs:this.shadowRoot.querySelectorAll('[data-ui-tab]'),panels:this.shadowRoot.querySelectorAll('[data-ui-tab-panel]'),onSelect:value=>{
    this._forecastSelection=value;this._syncForecast();this._render();
@@ -11472,6 +12366,48 @@ if(!window.customCards.some(card=>card.type==='eleven-weather-card'))window.cust
 ;
 // Eleven Car (beta) - self-contained standalone module
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -12614,7 +13550,77 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .header-region .ui-metric-value button{font:inherit;line-height:inherit;letter-spacing:inherit;min-height:0}.header-region .ui-metric-info button{font:inherit;line-height:inherit;min-height:0;vertical-align:baseline}
 .hero{padding-top:0}.battery-track,.battery-fill{border-radius:var(--ui-metric-radius,8px)}
 .battery-row [data-ui-primary-value]{max-width:160px}
+/* Vehicle media follows the complete summary in both Auto and EVCC. */
+.car-stage{grid-template-columns:minmax(0,1fr);min-height:0}
+.car-stage .picture{position:relative;grid-column:1;grid-row:2;inset:auto;width:100%;height:145px;margin-top:12px}
+[data-ui-metric] .ui-metric-icon{grid-row:1}
+[data-ui-metric] .ui-metric-value{grid-column:1/-1;overflow-wrap:normal;word-break:normal;white-space:nowrap}
+[data-ui-metric] .ui-metric-title{overflow-wrap:normal;word-break:normal}
+[data-ui-metric] .ui-metric-value button{overflow-wrap:normal;word-break:normal;white-space:inherit}
+.car-status .ui-metric-value,.charging-status .ui-metric-value{white-space:normal}
+@container(max-width:340px){.car-readings,.charging-readings{grid-template-columns:minmax(0,1fr);row-gap:12px}}
+.content[data-density=compact] .car-stage{min-height:0}
+.content[data-density=compact] .car-stage .picture{height:108px}
+/* Opt in locally; shared tab defaults remain protected for House. */
+[data-ui-tabs]{border-bottom:0}
+[data-ui-tabs] [role=tab],.mode-options [data-ui-button]{min-height:44px;border-bottom:0;text-decoration:none}
+[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true],.mode-options button[aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
+/* EVCC-only refinement: regular Auto keeps its approved renderer and paint. */
+.content[data-evcc]{--ui-primary-size:44px;--ui-primary-size-compact:44px}
+.content[data-evcc] h2{font-size:16px;font-weight:600}
+.content[data-evcc] .gallery-top{margin:0 0 12px;padding:0;background:none}
+.content[data-evcc] .hero{padding:0;margin:0}
+.content[data-evcc] .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:12px;min-height:0;padding:0}
+.content[data-evcc] .car-stage::before,.content[data-evcc] .car-stage::after{content:none}
+.content[data-evcc] .car-stage .battery-row{grid-column:1;grid-row:1;min-width:0;margin:0;z-index:1}
+.content[data-evcc] .battery-row [data-ui-primary-value]{max-width:100%;width:100%}
+.content[data-evcc] [data-ui-primary-value] .primary-value{font-size:44px;white-space:nowrap;flex-wrap:nowrap;letter-spacing:-.035em}
+.content[data-evcc] .primary-number{white-space:nowrap;display:inline-block}
+.content[data-evcc] .primary-label{overflow-wrap:normal;word-break:normal}
+.content[data-evcc] .car-stage .picture{position:relative;grid-column:2;grid-row:1;width:100%;height:112px;min-height:0;margin:0;inset:auto;overflow:hidden;z-index:0}
+.content[data-evcc] .picture img{position:absolute;width:100%;height:100%;left:calc(50% + var(--evcc-image-offset-x,0px));bottom:calc(-1 * var(--evcc-image-offset-y,0px));max-width:none;margin:0;object-fit:contain;filter:none;transform:translateX(-50%) scale(var(--evcc-image-scale,1));transform-origin:center center}
+.content[data-evcc] .picture ha-icon{--mdc-icon-size:64px}
+.content[data-evcc] .battery-meta{display:none}
+.content[data-evcc] .hero>.battery-track{margin:8px 0 0;height:8px;border-radius:999px;background:var(--secondary-background-color);box-shadow:var(--eleven-material-well,none)}
+.content[data-evcc][data-battery-style=line] .hero>.battery-track{height:4px}
+.content[data-evcc] .battery-fill,.content[data-evcc][data-battery-style=soft] .battery-fill{background:var(--accent-color,var(--primary-color));border-radius:inherit;box-shadow:none}
+.content[data-evcc] .target-marker{top:-2px;height:calc(100% + 4px);width:1px}
+/* EVCC breathing accent: solid fill, no stripes, sweep, glow or moving edge. */
+.content[data-evcc][data-battery-style] .battery-fill::before{content:none;inset:0;width:100%;filter:none;opacity:0;transform:none;box-shadow:none;background:var(--primary-text-color);animation:none}
+@media(prefers-reduced-motion:no-preference){
+ .content[data-evcc][data-battery-style]:is([data-tone=charging],[data-tone=planned]) .battery-fill::before{content:'';animation:evcc-accent-breathe 2.4s ease-in-out infinite;animation-play-state:var(--power-motion,paused);animation-delay:var(--power-delay,0s)}
+}
+.content[data-evcc][data-theme=dark][data-battery-style] .battery-fill::before{background:var(--secondary-background-color);--evcc-breathe-peak:.42}
+@keyframes evcc-accent-breathe{0%,100%{opacity:0}50%{opacity:var(--evcc-breathe-peak,.26)}}
+.content[data-evcc] .charging-status{margin-top:0}
+.content[data-evcc] [data-ui-metric]{background:var(--secondary-background-color);--ui-metric-tone:var(--secondary-text-color)}
+.content[data-evcc] .charging-status .ui-metric-icon{color:var(--status-accent)}
+.content[data-evcc] [data-ui-metric] .ui-metric-value::before{content:none}
+.content[data-evcc] .charging-readings{column-gap:12px;grid-template-columns:repeat(var(--evcc-reading-columns,2),minmax(0,1fr))}
+.content[data-evcc] .ui-metric-title,.content[data-evcc] .ui-metric-info{overflow-wrap:normal;word-break:normal}
+.content[data-evcc] .evcc-panel{padding-top:12px}
+.content[data-evcc] .evcc-tabs{margin-top:16px}
+.content[data-evcc] .mode-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,64px),1fr));gap:8px}
+.content[data-evcc] [data-ui-tabs]{gap:8px;flex-wrap:wrap}
+.content[data-evcc] [data-ui-tabs] [role=tab]{flex:1 1 72px;min-width:0;white-space:normal;overflow-wrap:normal;padding:8px}
+.content[data-evcc] button:focus-visible,.content[data-evcc] input:focus-visible,.content[data-evcc] .plot:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.content[data-evcc] .mode-options [data-ui-button]{padding:8px 4px;font-size:13px}
+.content[data-evcc] [data-ui-tabs] [role=tab][aria-selected=true],.content[data-evcc] [data-ui-tabs] [role=tab][aria-selected=true]:hover,.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true],.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));border-bottom:0;text-decoration:none;box-shadow:var(--eleven-material-selection-well,none)}
+.content[data-evcc] input[data-solar-share]{min-height:44px;accent-color:var(--accent-color,var(--primary-color))}
+.content[data-evcc] input[data-solar-share]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(var(--accent-color,var(--primary-color)),var(--accent-color,var(--primary-color))) left/var(--solar-position) 100% no-repeat,var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}
+.content[data-evcc] input[data-solar-share]::-moz-range-track{height:8px;border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}
+.content[data-evcc] input[data-solar-share]::-moz-range-progress{height:8px;border-radius:999px;background:var(--accent-color,var(--primary-color))}
+.content[data-evcc] input[data-solar-share]::-webkit-slider-thumb{margin-top:-7px;background:var(--ha-card-background,var(--card-background-color,#fff));border-color:var(--accent-color,var(--primary-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.content[data-evcc] input[data-solar-share]::-moz-range-thumb{background:var(--ha-card-background,var(--card-background-color,#fff));border-color:var(--accent-color,var(--primary-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.content[data-evcc] .evcc-number{display:inline-block;white-space:nowrap}
+.content[data-evcc] .ui-metric-icon{grid-row:1}
+.content[data-evcc] [data-ui-metric] .ui-metric-value{grid-column:1/-1}
+.content[data-evcc] [data-ui-tabs][data-ui-card-tabs]{overflow:visible}
+.content[data-evcc] [data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 1 88px;min-width:min-content;max-width:100%;overflow:visible;text-overflow:clip}
+.content[data-evcc] .car-stage[data-hero-stacked]{grid-template-columns:minmax(0,1fr)}
+.content[data-evcc] .car-stage[data-hero-stacked] .picture{grid-column:1;grid-row:2}
 `; }
+
 
 
 
@@ -12668,7 +13674,7 @@ class EvccCard extends HTMLElement {
   this._render();
  }
  get hass() { return this._hass; }
- disconnectedCallback() { this._motionCleanup?.(); this._motionCleanup=null; this._cancelMode(); this._cancelSolar(); this._tabController?.disconnect(); clearInterval(this._clockTimer); this._clockTimer = null; this._resetHistory(); this._signature = null; }
+ disconnectedCallback() { this._evccLayoutObserver?.disconnect(); this._motionCleanup?.(); this._motionCleanup=null; this._cancelMode(); this._cancelSolar(); this._tabController?.disconnect(); clearInterval(this._clockTimer); this._clockTimer = null; this._resetHistory(); this._signature = null; }
  _cancelMode() { clearTimeout(this._modeTimer); this._pendingMode = null; this._actionVersion++; }
  getCardSize() { return this._config?.compact ? 8 : 12; }
  getGridOptions() { return {columns: 12, min_columns: 6, rows: this._config?.compact ? 10 : 12, min_rows: 3}; }
@@ -12684,9 +13690,10 @@ class EvccCard extends HTMLElement {
   const unit=field==='power'&&sourceUnit==='W'?'kW':sourceUnit;
   let markup=uiEscape(value??'\u2014');
   if(value!=null&&['remaining_duration','charge_duration'].includes(field)&&evccDuration(entity,dutch?'nl':'en')){
-   markup=markup.replace(/(\d+) (u|h|min)\b/g,'$1 <span class="ui-metric-unit">$2</span>');
+   markup=markup.replace(/(\d+) (u|h|min)\b/g,'<span class="evcc-number">$1</span> <span class="ui-metric-unit">$2</span>');
   }else if(value!=null&&evccNumber(entity)!=null&&unit&&value.endsWith(' '+unit)){
-   markup=uiEscape(value.slice(0,-unit.length).trimEnd())+' <span class="ui-metric-unit">'+uiEscape(unit)+'</span>';
+   markup='<span class="evcc-number">'+uiEscape(value.slice(0,-unit.length).trimEnd())+'</span> <span class="ui-metric-unit">'+uiEscape(unit)+'</span>';
+  }else if(value!=null&&evccNumber(entity)!=null){markup='<span class="evcc-number">'+uiEscape(value)+'</span>';
   }
   if(!interactive)return id?markup:'\u2014';
   return id ? `<button type="button" data-entity="${uiEscape(id)}" title="${uiEscape(id)}" aria-label="${uiEscape(evccLabel(field, dutch) + ': ' + (value ?? unavailable))}">${markup}${value == null ? `<span class="sr-only"> ${unavailable}</span>` : ''}</button>` : '—';
@@ -12752,9 +13759,28 @@ class EvccCard extends HTMLElement {
   return '<div class="charging-readings" data-ui-metric-grid>'+uiMetric({title:evccLabel('power',dutch),valueContent:this._reading('power',dutch,technical.length>0),action:!technical.length&&!!this._entities.power,attrs:!technical.length?{'data-entity':this._entities.power||''}:{},infoContent:technical.join(' &middot; '),icon:'mdi:lightning-bolt-outline',compact:this._config.compact})+uiMetric({title:view.kind==='done'?(dutch?'Laaddoel':'Charge target'):evccLabel('remaining_duration',dutch),valueContent:time,action:charging&&!!this._entities.remaining_duration,attrs:charging?{'data-entity':this._entities.remaining_duration||''}:{},info:this._config.compact?'':hint,icon:'mdi:timer-outline',compact:this._config.compact})+'</div>';
  }
 
+ _fitEvccLayout() {
+  this._evccLayoutObserver?.disconnect();
+  if (!this.isConnected || !this._config.evcc_enabled) return;
+  const root=this.shadowRoot,stage=root.querySelector('.car-stage'),primary=root.querySelector('.primary-value'),grid=root.querySelector('.charging-readings');
+  if(!stage||!primary)return;
+  const ctx=document.createElement('canvas').getContext('2d');
+  const width=(node,text=node.textContent)=>{const s=getComputedStyle(node);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;return ctx.measureText(text).width+Math.max(0,text.length-1)*(parseFloat(s.letterSpacing)||0);};
+  const fit=()=>{
+   if(!this.isConnected||!this._config.evcc_enabled||!stage.isConnected){this._evccLayoutObserver?.disconnect();return;}
+   const number=primary.querySelector('.primary-number'),unit=primary.querySelector('small'),s=getComputedStyle(primary),base=parseFloat(s.fontSize),slot=(stage.clientWidth-12)/3,reserve=(unit?.getBoundingClientRect().width||0)+(parseFloat(s.columnGap)||0),natural=width(primary,number?.textContent||'');
+   const stacked=base>48&&natural+reserve>slot;stage.toggleAttribute('data-hero-stacked',stacked);
+   if(number){const size=Math.floor(base*Math.min(1,Math.max(20,(stacked?stage.clientWidth:slot)-reserve)/Math.max(1,natural))*100)/100+'px';if(number.style.fontSize!==size)number.style.fontSize=size;}
+   const textWidth=node=>node.classList?.contains('evcc-number')?width(node.closest('.ui-metric-value,dd'),node.textContent):[...node.childNodes].reduce((total,child)=>total+(child.nodeType===3?width(node,child.textContent):textWidth(child)+(parseFloat(getComputedStyle(child).marginInlineStart)||0)),0);
+   if(grid){const minimum=Math.max(...[...grid.children].map(tile=>{const value=tile.querySelector('.ui-metric-value'),label=tile.querySelector('.ui-metric-title');return Math.max(textWidth(value),...label.textContent.split(/\s+/).map(word=>width(label,word)+34))+24;}));const columns=minimum*2+12<=grid.clientWidth?'2':'1';if(grid.style.getPropertyValue('--evcc-reading-columns')!==columns)grid.style.setProperty('--evcc-reading-columns',columns);}
+   for(const span of root.querySelectorAll('.evcc-number')){const parent=span.closest('.ui-metric-value,dd');if(!parent||!parent.clientWidth)continue;const base=parseFloat(getComputedStyle(parent).fontSize),size=Math.floor(base*Math.min(1,parent.clientWidth/Math.max(1,width(parent,span.textContent)))*100)/100+'px';if(span.style.fontSize!==size)span.style.fontSize=size;}
+  };
+  fit();this._evccLayoutObserver=new ResizeObserver(fit);
+  for(const el of [stage,primary,primary.querySelector('small'),grid,...root.querySelectorAll('.ui-metric-value,.ui-metric-title')])if(el)this._evccLayoutObserver.observe(el);
+ }
  _render() {
   if (!this._config) return;
-  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
+  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
   const hass = this._hass, states = hass.states ?? {}, dutch = evccDutch(hass), config = this._config;
   this._ensureClock();
   const previousSolar = this._entities?.solar_share, previousPower = this._entities?.power;
@@ -12779,7 +13805,7 @@ class EvccCard extends HTMLElement {
   const soc = evccPercent(states[this._entities.soc]), target = evccPercent(states[this._entities.target_soc]);
   const image = this._vehicleImage ? this._vehicleImage() : evccImageUrl(states[config.image_entity], hass);
   const imageWarning = dutch ? 'Autoafbeelding niet beschikbaar' : 'Vehicle image unavailable';
-  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
+  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-evcc data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
    <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene"><div class="gallery-top">${!configured ? `<header><h2>${uiEscape(this._title(dutch))}</h2></header>` : ''}
    ${offline ? `<p class="notice warning" role="status">${dutch ? 'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.' : 'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>` : ''}
    ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${(this._hasVehicleImage?.()??config.image_entity) ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? `<div class="battery-track" role="progressbar" aria-label="${dutch ? 'Accuniveau' : 'Battery level'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${soc}"><div class="battery-fill" style="width:${soc}%"></div>${target != null ? `<span class="target-marker" style="left:${target}%"></span>` : ''}</div>` : ''}</div>
@@ -12812,6 +13838,7 @@ class EvccCard extends HTMLElement {
   else if (focusedEntity) [...this.shadowRoot.querySelectorAll('[data-entity]')].find(button => button.dataset.entity === focusedEntity)?.focus({preventScroll: true});
   else if (focusedMode) [...this.shadowRoot.querySelectorAll('[data-mode]')].find(button => button.dataset.mode === focusedMode)?.focus({preventScroll: true});
   else if (focusedTab) ([...this.shadowRoot.querySelectorAll('[data-ui-tab]')].find(tab => tab.dataset.uiTab === focusedTab) ?? this.shadowRoot.querySelector('[role="tab"][aria-selected="true"]'))?.focus({preventScroll: true});
+  this._fitEvccLayout();
   this._syncHistory();
  }
 }
@@ -13075,11 +14102,12 @@ class CarEditor extends customTabsEditor(EvccEditor) {
 
 
 
+
 const carDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
 
 class CarCard extends EvccCard {
  constructor(){super();this._mediaImage=new CarMediaImage(()=>{this._signature=null;this._render();});}
- disconnectedCallback(){this._mediaImage.reset();super.disconnectedCallback();}
+ disconnectedCallback(){this._carLayoutObserver?.disconnect();this._mediaImage.reset();super.disconnectedCallback();}
  _hasVehicleImage(){return this._config.image_source==='media'?!!this._config.image_media?.media_content_id:!!this._config.image_entity;}
  _vehicleImage(){return this._config.image_source==='media'?this._mediaImage.url:carImageUrl(this._hass?.states?.[this._config.image_entity],this._hass);}
  static async getConfigElement(){
@@ -13146,31 +14174,104 @@ class CarCard extends EvccCard {
   const label=config['field_'+i+'_label']||entity?.attributes?.friendly_name||id||(nl?'Gegevensveld '+i:'Data field '+i);
   const value=carFieldReading(entity,this._hass,config,i);
   const plain=carFieldReading(entity,this._hass,{...config,['field_'+i+'_show_unit']:false},i),split=value.startsWith(plain);
-  return uiMetric({title:label,value:plain==='\u2014'?null:split?plain:value,unit:split?value.slice(plain.length).trim():'',icon:config['field_'+i+'_icon']||(i===2?'mdi:map-marker-distance':'mdi:counter'),compact:config.compact,action:!!id,attrs:{class:i===1?'car-status':'car-field','data-entity':id||'','data-car-field':String(i)}});
+  const numeric=plain!=='\u2014'&&Number.isFinite(Number(config['field_'+i+'_attribute']?entity?.attributes?.[config['field_'+i+'_attribute']]:entity?.state));
+  return uiMetric({title:label,value:plain==='\u2014'?null:split?plain:value,valueContent:plain==='\u2014'?'':`<span class="${numeric?'car-number':'car-text'}">${uiEscape(split?plain:value)}</span>`,unit:split?value.slice(plain.length).trim():'',icon:config['field_'+i+'_icon']||(i===2?'mdi:map-marker-distance':'mdi:counter'),compact:config.compact,action:!!id,attrs:{class:i===1?'car-status':'car-field','data-entity':id||'','data-car-field':String(i)}});
+ }
+ _fitCarReadings(){
+  this._carLayoutObserver?.disconnect();
+  if(this._config.evcc_enabled||!this.isConnected)return;
+  const root=this.shadowRoot,grid=root.querySelector('.car-readings'),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+
+  const fit=()=>{
+   const stage=root.querySelector('.car-stage'),primary=root.querySelector('.primary-value'),number=primary?.querySelector('.primary-number');
+   if(stage&&number){
+    // Keep ordinary hero tracks 1:2; enlarged text may use the full row.
+    // Measure from the stable parent font so fitting cannot compound itself.
+    const s=getComputedStyle(primary),base=parseFloat(s.fontSize),unit=primary.querySelector('small');
+    ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+    const natural=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0);
+    const reserve=unit?unit.getBoundingClientRect().width+(parseFloat(s.columnGap)||0):0;
+    const slot=(stage.clientWidth-12)/3,normal=parseFloat(getComputedStyle(root.querySelector('.content')).getPropertyValue('--ui-primary-size'));
+    const stacked=base>normal*1.1&&natural+reserve>slot;
+    stage.toggleAttribute('data-hero-stacked',stacked);
+    const available=stacked?stage.clientWidth:slot,size=Math.floor(base*Math.min(1,Math.max(44,available-reserve)/Math.max(1,natural))*100)/100+'px';
+    if(number.style.fontSize!==size)number.style.fontSize=size;
+   }
+   if(grid){const fields=[...grid.children],available=grid.clientWidth;
+    const needed=Math.max(0,...fields.map(field=>{const number=field.querySelector('.car-number'),value=field.querySelector('.ui-metric-value'),label=field.querySelector('.ui-metric-title');let n=0;
+     if(number){const s=getComputedStyle(value);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;n=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0);}
+     const s=getComputedStyle(label);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;const word=Math.max(0,...label.textContent.split(/\s+/).map(w=>ctx.measureText(w).width));return Math.max(n,word+34)+24;}));
+    const columns=fields.length>1&&needed*fields.length+12*(fields.length-1)<=available?fields.length:1;
+    if(grid.style.getPropertyValue('--ui-metric-columns')!==String(columns))grid.style.setProperty('--ui-metric-columns',String(columns));
+   }
+   for(const number of root.querySelectorAll('.car-number')){const value=number.parentElement,s=getComputedStyle(value),base=parseFloat(s.fontSize);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;const natural=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0),size=base*Math.min(1,value.clientWidth/Math.max(1,natural));const px=Math.floor(size*100)/100+'px';if(number.style.fontSize!==px)number.style.fontSize=px;}
+  };
+  fit();this._carLayoutObserver=new ResizeObserver(fit);
+  for(const node of [root.querySelector('.content'),...root.querySelectorAll('.primary-value,.primary-value small,.ui-metric-value,.ui-metric-title')])if(node)this._carLayoutObserver.observe(node);
  }
  _render(){
   if(!this._config)return;
   if(this.isConnected)this._mediaImage.update(this._hass,this._config.image_source==='media'?this._config.image_media:null);
-  if(this._config.evcc_enabled){super._render();this._applyPresentation();return;}
+  if(this._config.evcc_enabled){this._carLayoutObserver?.disconnect();super._render();this._applyPresentation();return;}
   const config=this._config,hass=this._hass,states=hass?.states??{},nl=carDutch(hass),percent=carPercentage(config,states);
   const offline=hass?.connected===false||hass?.connection?.connected===false;
   const signature=JSON.stringify([config,hass?.themes?.darkMode,hass?.locale,hass?.language,offline,...[config.percentage_entity,config.range_entity,config.image_entity,config.field_1_entity,config.field_2_entity,config.field_3_entity].map(id=>states[id]),this._extraSignature()]);
   if(signature===this._signature)return;this._signature=signature;
   const scroll=this.shadowRoot.querySelector('.content')?.scrollTop??0,focused=this.shadowRoot.activeElement?.dataset.entity,focusedTab=this.shadowRoot.activeElement?.dataset.uiTab;
   const title=config.title||(nl?'Mijn auto':'My car'),image=this._vehicleImage(),percentage=percent==null?'\u2014':carReading({state:String(percent),attributes:{unit_of_measurement:'%'}},hass);
-  const fields=[2,3].filter(i=>config['show_field_'+i]);
+  const fields=[1,2,3].filter(i=>config['show_field_'+i]);
   this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${evccCardStyles()}${this._extraStyles()}
-   .car-status{margin-top:16px}.car-readings{margin:0}.content{--ui-metric-tone:var(--tone)}
-   .content[data-density=compact] .car-status{margin-top:12px}
-   .content .header-scene[data-no-readings]{padding-bottom:0}
-   .range-value{font-size:12px;font-weight:600;color:var(--primary-text-color,#20252b)}
-  </style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
-   <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
+   /* Regular Auto only: EVCC keeps its independent presentation. */
+   :host,ha-card{height:auto;min-height:0}.content{height:auto;overflow:visible}
+   .car-heading{margin:0 0 16px;font-size:16px;font-weight:600;line-height:1.4;overflow-wrap:break-word}
+   .gallery-top{margin:0;padding:0;background:none}.hero{margin:0;padding:0}
+   .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;padding:0;min-height:0}
+   .car-stage .battery-row{grid-column:1;grid-row:1;align-items:stretch}
+   .content .hero>.battery-track{width:100%;box-sizing:border-box;margin:10px 0 0;height:12px;border-radius:999px;overflow:hidden;background:var(--secondary-background-color);box-shadow:var(--eleven-material-well,none)}
+   .content[data-battery-style=slim] .hero>.battery-track,.content[data-battery-style=soft] .hero>.battery-track{height:10px}
+   .content[data-battery-style=line] .hero>.battery-track{height:4px}
+   .content .hero>.battery-track .battery-fill{border-radius:inherit;background:var(--accent-color,var(--primary-color));box-shadow:none}
+   .content .hero>.battery-track .battery-fill::before{content:none;animation:none}
+   .car-stage::before,.car-stage::after{content:none}
+   .battery-row [data-ui-primary-value]{max-width:100%}
+   .content{--ui-primary-size:44px;--ui-primary-unit-size:16px}
+   .content[data-density=compact]{--ui-primary-size:36px;--ui-primary-unit-size:14px}
+   [data-ui-primary-value] .primary-value{overflow-wrap:normal;flex-wrap:nowrap;align-items:baseline}
+   .primary-value .primary-number{overflow-wrap:normal;white-space:nowrap;min-height:44px;min-width:44px}
+   .primary-value small{margin:0}.battery-value .primary-label{border:0;padding:0;margin-top:0;font-size:12px;line-height:1.4;overflow-wrap:break-word;min-height:44px;display:flex;align-items:center}
+   .car-stage .picture{position:relative;inset:auto;grid-column:2;grid-row:1;width:100%;height:auto;aspect-ratio:3.05;min-height:0;margin:0;overflow:hidden}
+   .car-stage .picture img{position:absolute;inset:0;left:var(--evcc-image-offset-x,0px);bottom:auto;top:var(--evcc-image-offset-y,0px);width:100%;height:100%;max-width:none;margin:0;object-fit:contain;transform:scale(var(--evcc-image-scale,1));transform-origin:center;filter:none}
+   .car-stage[data-hero-stacked]{grid-template-columns:minmax(0,1fr)}
+   .car-stage[data-hero-stacked] .picture{grid-column:1;grid-row:2}
+   .content[data-density=compact] .car-stage .picture{height:auto;aspect-ratio:3.5}
+   .car-stage .picture:has(ha-icon),.car-stage .picture:has(img[hidden]){min-height:88px;aspect-ratio:auto}
+   .picture small{font-size:12px;line-height:1.4;overflow-wrap:break-word}.picture:has(img[hidden]) small{padding:12px}
+   .content .battery-fill,.content[data-battery-style=soft] .battery-fill{box-shadow:none}
+   .content[data-tone] .battery-fill::before{content:none;animation:none}
+   .car-status,.content[data-density=compact] .car-status{margin-top:0}
+   .car-readings{margin-top:12px;row-gap:12px;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr))}
+   [data-ui-metric]{background:var(--secondary-background-color);padding:12px;min-height:44px;row-gap:4px}
+   [data-ui-metric] .ui-metric-title{font-size:12px;overflow-wrap:break-word;line-height:1.4}
+   [data-ui-metric] .ui-metric-value{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;white-space:normal;overflow-wrap:break-word;word-break:normal;line-height:1.3}
+   [data-ui-metric] .car-text{min-width:0;max-width:100%;overflow-wrap:break-word}
+   [data-ui-metric] .car-number{display:inline-block;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+   [data-ui-metric] .ui-metric-unit{font-size:12px;line-height:1.4;margin:0;white-space:normal;overflow-wrap:break-word}
+   [data-ui-metric] .ui-metric-icon{color:var(--secondary-text-color);transform:none;width:22px;height:22px}
+   .car-status .ui-metric-value{font-size:18px;font-weight:600}
+   .content[data-density=compact] [data-ui-metric]{padding:10px}
+   .content[data-density=compact] .car-status .ui-metric-value{font-size:18px}
+   .content .header-scene{padding-bottom:0}.car-readings:empty{display:none}
+   .content button[data-entity],.metrics button{min-height:44px}
+   .content button:focus-visible{outline-color:var(--accent-color,var(--primary-color))}
+   .metrics{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}.metrics dt{font-size:12px;overflow-wrap:break-word}.metrics dd{overflow-wrap:break-word}.metrics button{overflow-wrap:break-word}
+  ${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}</style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
+   <h2 class="car-heading">${uiEscape(title)}</h2><div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
     ${offline?`<p class="notice warning" role="status">${nl?'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.':'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>`:''}
-    <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}</div>
+    <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}
+    </div>
      <div class="picture">${image?`<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:`<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>${this._hasVehicleImage()?`<small>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:''}`}</div>
     </div><div class="battery-track" ${percent==null?`aria-label="${nl?'Percentage niet beschikbaar':'Percentage unavailable'}"`:`role="progressbar" aria-label="Percentage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"`}><div class="battery-fill" style="width:${percent??0}%"></div></div></div>
-   </div>${config.show_field_1?`${this._field(1,nl)}`:''}</div>
+   </div></div>
    ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:${fields.length}">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;
   const content=this.shadowRoot.querySelector('.content');content.style.setProperty('--evcc-image-scale',String(config.image_scale/100));content.style.setProperty('--evcc-image-offset-y',config.image_offset_y+'px');content.scrollTop=scroll;
   for(const button of this.shadowRoot.querySelectorAll('[data-entity]'))button.addEventListener('click',()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:button.dataset.entity},bubbles:true,composed:true})));
@@ -13179,6 +14280,7 @@ class CarCard extends EvccCard {
   this._tabController=bindUITabs({tabs:this.shadowRoot.querySelectorAll('[data-ui-tab]'),panels:this.shadowRoot.querySelectorAll('[data-ui-tab-panel]'),onSelect:value=>{this._activeTab=value;}});
   if(focusedTab)(Array.from(this.shadowRoot.querySelectorAll('[data-ui-tab]')).find(tab=>tab.dataset.uiTab===focusedTab)??this.shadowRoot.querySelector('[role=tab][aria-selected=true]'))?.focus({preventScroll:true});
   this._applyPresentation();
+  this._fitCarReadings();
   const img=this.shadowRoot.querySelector('img');if(img)img.addEventListener('error',()=>{img.hidden=true;const hint=this.shadowRoot.querySelector('.picture small');if(hint)hint.hidden=false;},{once:true});
  }
 }
@@ -13197,6 +14299,48 @@ if(!window.customCards.some(card=>card.type==='eleven-car-card'))window.customCa
 function energyFlowSelectedPrice(host,direction){
  const id=host._config?.[direction==='import'?'price_entity':'export_price_entity'];
  return id?{configured:true,price:energyFlowCurrentPrice({priceEntity:id},host._hass)}:{configured:false,price:null};
+}
+
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
 }
 
 // One recipe for raised information surfaces across all cards.
@@ -14646,6 +15790,9 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .flow-arrow{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.flow-route[data-active=false] .flow-arrow{opacity:.24}
 .header-region>[data-ui-metric]{grid-column:1/-1;grid-row:3}
 .flow-secondary{margin-top:12px}
+.content .flow-secondary .ui-metric-title{overflow-wrap:normal;word-break:normal}
+.toolbar .view-period>[data-view-button]{min-height:44px}
+@container(max-width:340px){.content .flow-secondary{grid-template-columns:minmax(0,1fr)}}
 .content[data-animated=false] .flow-dot,.content[data-view=history] .flow-dot{display:none}
 :host([data-motion-paused]) .flow-dot{animation-play-state:paused}
 .content[data-compact=true] .header-region{row-gap:12px}
@@ -14783,6 +15930,7 @@ class EnergyFlowEditor extends customTabsEditor(HTMLElement){
   this._form.computeHelper=item=>['price_entity','export_price_entity'].includes(item.name)?text('Toont de huidige sensorwaarde in Net · Actueel. Gebruik een prijs per kWh, Wh of MWh. Leeg gebruikt de prijs uit Energy.','Shows the current sensor value in Grid · Live. Use a price per kWh, Wh or MWh. Empty uses the Energy tariff.'):previousHelper(item);
  }
 }
+
 
 
 
@@ -14968,7 +16116,7 @@ class EnergyFlowCard extends HTMLElement{
   const toolbar=`<div class="toolbar"><div class="header-actions"><div class="chart-controls" role="group" aria-label="${text('Weergave en tijdvak','View and timeframe')}"><div class="view-period">${switchButton}${history?period.picker:''}</div>${history?period.navigation:''}</div></div></div>`;
   let notice=offline?text('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'):this._error?text('Energy-gegevens laden mislukt. Controleer de Energy-configuratie en Recorder.','Could not load Energy data. Check Energy configuration and Recorder.'):!this._prefs?text('Energy-configuratie laden…','Loading Energy configuration…'):!configured?text('Stel elektriciteitsbronnen in via het Home Assistant Energy-dashboard.','Configure electricity sources in the Home Assistant Energy dashboard.'):this._loading&&history&&!this._statistics?text('Energiestatistieken laden…','Loading energy statistics…'):Object.values({solar:data.solar,import:data.import,export:data.export,home:data.home}).some(value=>value==null)?history?text('Niet alle energiestatistieken zijn beschikbaar voor deze periode.','Some energy statistics are unavailable for this period.'):text('Actueel vermogen ontbreekt. Stel vermogenssensoren in bij Energy of kies ze in de kaartconfiguratie.','Live power is missing. Configure power sensors in Energy or select them in the card editor.'):'';
   if(data.battery)notice+=(notice?' ':'')+text('Thuisbatterij meegerekend in woningverbruik.','Home consumption includes the battery balance.');
-  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div>${toolbar}<div class="energy-heading">${uiPrimaryValue({value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
+  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}${cardThemeStyles({wells:'.content [data-ui-metric],.circle-node[data-ui-metric]',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'[data-ui-detail-surface],[data-ui-popup]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div>${toolbar}<div class="energy-heading">${uiPrimaryValue({value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
   if(!this._bound){this._bound=true;this.shadowRoot.addEventListener('click',event=>{
    const entity=event.target.closest?.('[data-entity]');
    if(entity){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:entity.dataset.entity},bubbles:true,composed:true}));return;}
@@ -15002,10 +16150,68 @@ if(!window.customCards.some(card=>card.type==='eleven-energy-flow-card'))window.
 
 ;
 /* Eleven Shopping Card — standalone; generated by scripts/build.mjs */
+(()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 (() => {
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${({plus:'M12 5v14M5 12h14',done:'m5 12 4 4L19 6',reorder:'M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1',edit:'m16 4 4 4-12 12H4v-4Z',saving:'M20 12a8 8 0 1 1-8-8M12 8v4l3 2',warning:'m12 3 10 18H2ZM12 9v4M12 17h.01',up:'m6 14 6-6 6 6',down:'m6 10 6 6 6-6'})[name]||'M5 12h14'}"/></svg>`;
-const styles=`:host{display:block;color:var(--primary-text-color,#202124);font-family:var(--paper-font-body1_-_font-family,inherit)}*{box-sizing:border-box}ha-card{display:block;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px)}:host{container-type:inline-size}.move-actions{display:flex;flex:none}@container(max-width:340px){.row.reordering{flex-wrap:wrap}.row.reordering .summary{flex-basis:calc(100% - 48px)}.move-actions{flex-basis:100%;justify-content:flex-end}}.content{padding:16px}header{display:flex;align-items:center;gap:8px;margin-bottom:12px}h2{margin:0;font-size:18px;font-weight:650;line-height:1.25;letter-spacing:-.01em;flex:1;overflow-wrap:anywhere}button,input,textarea,select{font:inherit;color:inherit}input::placeholder,textarea::placeholder{color:var(--secondary-text-color,#666);opacity:1}button{border:0;border-radius:8px;background:transparent;min-height:44px;min-width:44px;cursor:pointer;padding:8px}button:hover{background:var(--secondary-background-color,#f1f2f4)}button:disabled{opacity:.45;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--primary-color,#1976d2);outline-offset:1px}svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}.add{display:flex;gap:4px;border-bottom:1px solid var(--divider-color,#ddd);margin-bottom:8px}.add input{border:0;background:transparent;min-width:0;flex:1;min-height:44px;font-size:14px}.row{display:flex;align-items:center;min-height:48px;gap:4px;font-size:14px}.check{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}.check input{width:18px;height:18px;accent-color:var(--primary-color,#1976d2);cursor:pointer}.summary{flex:1;min-width:0;text-align:start;overflow-wrap:anywhere;line-height:1.45}.metadata{display:block;font-size:12px;line-height:1.45;color:var(--secondary-text-color,#666);margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere}.add-job .summary{padding:8px}.add-job .check{color:var(--secondary-text-color,#666)}.add-job .check svg{width:18px;height:18px}.add-job.failed .check{color:var(--error-color,#b71c1c)}.add-job .retry-add{flex:none;font-size:12px;color:var(--primary-color,#1976d2)}.done{color:var(--secondary-text-color,#666);text-decoration:line-through}.feedback{font-size:13px;line-height:1.5;color:var(--error-color,#b71c1c);overflow-wrap:anywhere}.feedback:empty{display:none}.completed{border-top:1px solid var(--divider-color,#ddd);margin-top:12px;padding-top:8px}.section-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.section-heading h3{flex:1;margin:0;font-size:12px;font-weight:600;color:var(--secondary-text-color,#666)}.section-heading button{font-size:12px;color:var(--secondary-text-color,#666)}.edit-form{border-top:1px solid var(--divider-color,#ddd);padding-top:16px;margin-top:12px}.edit-form label{display:block;font-size:13px;line-height:1.5;margin-bottom:12px}.edit-form input,.edit-form textarea,.edit-form select{display:block;min-width:0;width:100%;min-height:44px;border:1px solid var(--divider-color,#aaa);border-radius:8px;background:var(--secondary-background-color,#f4f5f7);padding:10px;font-size:16px}.edit-actions,.confirm{display:flex;gap:4px;flex-wrap:wrap}.confirm p{flex-basis:100%}.edit-actions [data-key="save"]{color:var(--primary-color,#1976d2)}.edit-actions [data-key="delete"],.confirm [data-key="confirm-clear"]{color:var(--error-color,#b71c1c)}p{font-size:14px;color:var(--secondary-text-color,#666)}`;
+const styles=`:host{display:block;color:var(--primary-text-color,#202124);font-family:var(--paper-font-body1_-_font-family,inherit)}*{box-sizing:border-box}ha-card{display:block;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px)}:host{container-type:inline-size}.move-actions{display:flex;flex:none}@container(max-width:340px){.row.reordering{flex-wrap:wrap}.row.reordering .summary{flex-basis:calc(100% - 48px)}.move-actions{flex-basis:100%;justify-content:flex-end}}.content{padding:18px}@container(min-width:480px){.content{padding:22px}}header{display:flex;align-items:center;gap:10px;min-height:44px;margin-bottom:12px}.title-icon{display:flex;flex:none;align-items:center;justify-content:center;width:20px;height:20px;color:var(--secondary-text-color,#666)}h2{margin:0;font-size:16px;font-weight:600;line-height:1.4;flex:1;min-width:0;overflow-wrap:anywhere}button,input,textarea,select{font:inherit;color:inherit}input::placeholder,textarea::placeholder{color:var(--secondary-text-color,#666);opacity:1}button{border:0;border-radius:8px;background:transparent;min-height:44px;min-width:44px;cursor:pointer;padding:8px}button:hover{background:var(--secondary-background-color,#f1f2f4)}button:disabled{opacity:.45;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--primary-color,#1976d2);outline-offset:1px}svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}.add{display:flex;gap:4px;border-bottom:1px solid var(--divider-color,#ddd);margin-bottom:8px}.add input{border:0;background:transparent;min-width:0;flex:1;min-height:44px;font-size:14px}.row{display:flex;align-items:center;min-height:48px;gap:4px;font-size:14px}.check{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}.check input{width:18px;height:18px;accent-color:var(--primary-color,#1976d2);cursor:pointer}.summary{flex:1;min-width:0;text-align:start;overflow-wrap:anywhere;line-height:1.45}.metadata{display:block;font-size:12px;line-height:1.45;color:var(--secondary-text-color,#666);margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere}.add-job .summary{padding:8px}.add-job .check{color:var(--secondary-text-color,#666)}.add-job .check svg{width:18px;height:18px}.add-job.failed .check{color:var(--error-color,#b71c1c)}.add-job .retry-add{flex:none;font-size:12px;color:var(--primary-color,#1976d2)}.done{color:var(--secondary-text-color,#666);text-decoration:line-through}.feedback{font-size:13px;line-height:1.5;color:var(--error-color,#b71c1c);overflow-wrap:anywhere}.feedback:empty{display:none}.completed{border-top:1px solid var(--divider-color,#ddd);margin-top:12px;padding-top:8px}.section-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.section-heading h3{flex:1;margin:0;font-size:12px;font-weight:600;color:var(--secondary-text-color,#666)}.section-heading button{font-size:12px;color:var(--secondary-text-color,#666)}.edit-form{border-top:1px solid var(--divider-color,#ddd);padding-top:16px;margin-top:12px}.edit-form label{display:block;font-size:13px;line-height:1.5;margin-bottom:12px}.edit-form input,.edit-form textarea,.edit-form select{display:block;min-width:0;width:100%;min-height:44px;border:1px solid var(--divider-color,#aaa);border-radius:8px;background:var(--secondary-background-color,#f4f5f7);padding:10px;font-size:16px}.edit-actions,.confirm{display:flex;gap:4px;flex-wrap:wrap}.confirm p{flex-basis:100%}.edit-actions [data-key="save"]{color:var(--primary-color,#1976d2)}.edit-actions [data-key="delete"],.confirm [data-key="confirm-clear"]{color:var(--error-color,#b71c1c)}p{font-size:14px;color:var(--secondary-text-color,#666)}
+/* Flat list anatomy; only real inputs/save use the shared theme depth roles. */
+button:hover:disabled{background:transparent}
+.add{align-items:center}.add button{flex:none;color:var(--primary-color,#1976d2)}
+.add input{min-width:44px;width:0;padding:8px 0;font-size:16px;line-height:1.5}
+.check{flex:none;margin:0}
+.summary{line-height:1.5}.summary[data-edit]{display:grid;grid-template-columns:minmax(0,1fr) 20px;align-items:center;gap:8px}
+.row-copy{display:block;min-width:0}.summary-text{display:block}
+.edit-hint{display:flex;align-items:center;justify-content:center;color:var(--secondary-text-color,#666)}.edit-hint svg{width:16px;height:16px}
+.summary:not(button){padding:8px}
+.row [data-delete]{flex:none;font-size:13px;margin-inline-start:auto}
+.row:has([data-delete]){flex-wrap:wrap}.row:has([data-delete]) .summary{flex-basis:calc(100% - 48px)}
+.section-heading h3{font-size:13px}
+.edit-form{padding-top:12px}.edit-form label{margin-bottom:8px}
+.edit-actions button,.confirm button{font-size:13px;line-height:1.5;overflow-wrap:anywhere;max-width:100%}
+`;
 class ShoppingCard extends HTMLElement {
   static getConfigElement(){return document.createElement('eleven-shopping-card-editor');}
   static getStubConfig(hass){return {type:'custom:eleven-shopping-card',entity:Object.keys(hass?.states||{}).find(id=>id.startsWith('todo.'))||''};}
@@ -15056,7 +16262,7 @@ class ShoppingCard extends HTMLElement {
     const editable=this.supports(4),remove=this.supports(2),label=this.t('Bewerk ','Edit ')+i.summary;
     const summary=`<span class="summary-text ${i.status==='completed'?'done':''}">${esc(i.summary)}</span>${i.description?`<span class="metadata description">${esc(i.description)}</span>`:''}${i.due?`<time class="metadata" datetime="${esc(i.due)}">${esc(this._formatDue(i.due))}</time>`:''}`;
     const reorder=this._reorder&&this.supports(8)&&i.status!=='completed'?`<div class="move-actions">${[-1,1].map(direction=>{const list=this._items.filter(i=>i.status!=='completed'),index=list.findIndex(e=>e.uid===i.uid),blocked=direction<0?index===0:index===list.length-1;return `<button type="button" data-move="${direction}" data-move-uid="${esc(i.uid)}" data-key="move-${esc(i.uid)}-${direction}" aria-label="${esc(this.t(direction<0?'Omhoog: ':'Omlaag: ',direction<0?'Move up: ':'Move down: ')+i.summary)}" ${disabled||blocked?'disabled':''}>${svg(direction<0?'up':'down')}</button>`;}).join('')}</div>`:'';
-    return `<div data-row="${esc(i.uid)}" class="row ${reorder?'reordering':''}"><label class="check"><input type="checkbox" data-uid="${esc(i.uid)}" data-key="check-${esc(i.uid)}" aria-label="${esc(i.summary)}" ${i.status==='completed'?'checked':''} ${disabled||!editable?'disabled':''}></label>${editable?`<button type="button" class="summary" data-edit="${esc(i.uid)}" data-key="edit-${esc(i.uid)}" aria-label="${esc(label)}" ${disabled}>${summary}</button>`:`<span class="summary">${summary}</span>`}${!editable&&remove?`<button type="button" data-delete="${esc(i.uid)}" data-key="delete-${esc(i.uid)}" ${disabled}>${this.t('Verwijderen','Delete')}</button>`:''}${reorder}</div>`;
+    return `<div data-row="${esc(i.uid)}" class="row ${reorder?'reordering':''}"><label class="check"><input type="checkbox" data-uid="${esc(i.uid)}" data-key="check-${esc(i.uid)}" aria-label="${esc(i.summary)}" ${i.status==='completed'?'checked':''} ${disabled||!editable?'disabled':''}></label>${editable?`<button type="button" class="summary" data-edit="${esc(i.uid)}" data-key="edit-${esc(i.uid)}" aria-label="${esc(label)}" ${disabled}><span class="row-copy">${summary}</span><span class="edit-hint" aria-hidden="true">${svg('edit')}</span></button>`:`<span class="summary">${summary}</span>`}${!editable&&remove?`<button type="button" data-delete="${esc(i.uid)}" data-key="delete-${esc(i.uid)}" ${disabled}>${this.t('Verwijderen','Delete')}</button>`:''}${reorder}</div>`;
   }
   _addRow(job){
     const status=job.pending?this.t('Opslaan…','Saving…'):this.t('Niet opgeslagen · ','Not saved · ')+job.error;
@@ -15126,7 +16332,7 @@ class ShoppingCard extends HTMLElement {
     const activeItems=(this._items||[]).filter(i=>i.status!=='completed'),completed=(this._items||[]).filter(i=>i.status==='completed');
     const rows=activeItems.map(i=>this._row(i,disabled)).join('');
     const clear=this._confirmClear?`<div class="confirm"><p>${this.t('Afgevinkte producten definitief wissen?','Permanently delete completed items?')}</p>${this._button('confirm-clear',this.t('Definitief wissen','Delete permanently'),'',disabled)}${this._button('cancel-clear',this.t('Annuleren','Cancel'),'',disabled)}</div>`:'';
-    this._updateDOM(`<style>${styles}</style><ha-card><div class="content"><header><h2>${esc(this._config.title??this.state?.attributes?.friendly_name??this.t('Boodschappen','Shopping'))}</h2>${this.supports(8)?this._button('reorder',this._reorder?this.t('Klaar met volgorde','Finish reordering'):this.t('Volgorde wijzigen','Reorder items'),svg(this._reorder?'done':'reorder'),disabled):''}</header>${this.supports(1)?`<form class="add"><input data-key="add" aria-label="${this.t('Nieuw product','New item')}" placeholder="${this.t('Product toevoegen…','Add an item…')}" value="${esc(this._draft)}" ${disabled}><button type="submit" aria-label="${this.t('Toevoegen','Add')}" ${disabled}>${svg('plus')}</button></form>`:''}${`<div class="add-jobs" aria-live="polite" aria-relevant="additions text">${(this._adds||[]).map(j=>this._addRow(j)).join('')}</div>`}${!this.available?`<p>${this.t('Lijst niet beschikbaar','List unavailable')}</p>`:this._items===null&&!this._subscriptionError?`<p>${this.t('Laden…','Loading…')}</p>`:''}${rows}${this._items&&!activeItems.length&&!this._adds?.length?`<p>${this.t('Alles afgevinkt.','All done.')}</p>`:''}${completed.length?`<section class="completed"><div class="section-heading"><h3>${this.t('Afgevinkt','Completed')} · ${completed.length}</h3>${this.supports(2)?this._button('clear',this.t('Afgevinkt wissen','Clear completed'),'',disabled):''}</div>${completed.map(i=>this._row(i,disabled)).join('')}</section>`:''}${clear}${this._editing(disabled)}<div class="feedback" role="status">${esc(this._error||'')}</div>${this._subscriptionError?this._button('retry',this.t('Opnieuw proberen','Retry')):''}</div></ha-card>`);
+    this._updateDOM(`<style>${styles}${cardThemeStyles({wells:'.edit-form input,.edit-form textarea,.edit-form select',controls:'.edit-actions [data-key=save]'})}</style><ha-card><div class="content"><header><span class="title-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 7h12l2 14H4L6 7ZM9 8V6a3 3 0 0 1 6 0v2"/></svg></span><h2>${esc(this._config.title??this.state?.attributes?.friendly_name??this.t('Boodschappen','Shopping'))}</h2>${this.supports(8)?this._button('reorder',this._reorder?this.t('Klaar met volgorde','Finish reordering'):this.t('Volgorde wijzigen','Reorder items'),svg(this._reorder?'done':'reorder'),disabled):''}</header>${this.supports(1)?`<form class="add"><input data-key="add" aria-label="${this.t('Nieuw product','New item')}" placeholder="${this.t('Product toevoegen…','Add an item…')}" value="${esc(this._draft)}" ${disabled}><button type="submit" aria-label="${this.t('Toevoegen','Add')}" ${disabled}>${svg('plus')}</button></form>`:''}${`<div class="add-jobs" aria-live="polite" aria-relevant="additions text">${(this._adds||[]).map(j=>this._addRow(j)).join('')}</div>`}${!this.available?`<p>${this.t('Lijst niet beschikbaar','List unavailable')}</p>`:this._items===null&&!this._subscriptionError?`<p>${this.t('Laden…','Loading…')}</p>`:''}${rows}${this._items&&!activeItems.length&&!this._adds?.length?`<p>${this.t('Alles afgevinkt.','All done.')}</p>`:''}${completed.length?`<section class="completed"><div class="section-heading"><h3>${this.t('Afgevinkt','Completed')} · ${completed.length}</h3>${this.supports(2)?this._button('clear',this.t('Afgevinkt wissen','Clear completed'),'',disabled):''}</div>${completed.map(i=>this._row(i,disabled)).join('')}</section>`:''}${clear}${this._editing(disabled)}<div class="feedback" role="status">${esc(this._error||'')}</div>${this._subscriptionError?this._button('retry',this.t('Opnieuw proberen','Retry')):''}</div></ha-card>`);
     const input=root.querySelector('[data-key="add"]');if(input)input.oninput=()=>this._draft=input.value;
     const addForm=root.querySelector('.add');if(addForm)addForm.onsubmit=e=>{e.preventDefault();const item=this._draft?.trim();if(item&&this.supports(1)){this._add(item);input?.focus();}};
     root.querySelectorAll('[data-uid]').forEach(c=>c.onchange=()=>{const i=this._items.find(i=>i.uid===c.dataset.uid);c.checked=i.status==='completed';if(this.supports(4))this._mutate('update_item',{item:i.uid,status:i.status==='completed'?'needs_action':'completed'});});
@@ -15172,6 +16378,7 @@ window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==='eleven-shopping-card'))window.customCards.push({type:'eleven-shopping-card',name:'Eleven Shopping Card',description:'A calm, compact shopping list for any todo entity.',preview:true});
 })();
 
+})();
 ;
 // Eleven House — self-contained standalone module
 (()=>{

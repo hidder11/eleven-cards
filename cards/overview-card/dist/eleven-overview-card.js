@@ -1,5 +1,47 @@
 // Eleven Overview (beta) 0.1.0 — self-contained standalone module
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
@@ -198,6 +240,7 @@ function normalizeConfig(input,{draft=false}={}){
 
 
 
+
 const esc=escapeHtml;
 const nl=h=>String(h?.locale?.language??h?.language??'en').startsWith('nl');
 const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],hover_sync_group:['Synchronisatiegroep','Synchronization group'],title:['Titel','Title'],hours_to_show:['Periode (uur)','Period (hours)'],columns:['Kolommen','Columns'],show_graph:['Trendlijnen tonen','Show sparklines'],show_delta:['Verandering tonen','Show change'],entity:['Sensor','Sensor'],name:['Naam','Name'],color:['Kleur','Color']};
@@ -240,7 +283,7 @@ class OverviewCard extends HTMLElement{
   if(this._connected&&!this._promise&&this._status==='loading')this._refresh();
  }get hass(){return this._hass;}
  connectedCallback(){this._connected=true;connectTimeframeSync(this);this._refresh();}
- disconnectedCallback(){disconnectTimeframeSync(this);this._stopAnimation();this._connected=false;this._generation++;this._promise=null;clearTimeout(this._timer);this._timer=null;}
+ disconnectedCallback(){this._layoutObserver?.disconnect();disconnectTimeframeSync(this);this._stopAnimation();this._connected=false;this._generation++;this._promise=null;clearTimeout(this._timer);this._timer=null;}
  getCardSize(){return 1+Math.ceil((this._config?.entities.length??1)/2)*2;}
  getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(2,Math.ceil(this.getCardSize()*50/64)),min_rows:2};}
  // Only the visual reading is interpolated; sensor values remain authoritative.
@@ -283,8 +326,43 @@ class OverviewCard extends HTMLElement{
    finally{clearTimeout(requestTimer);if(generation===this._generation&&this._connected){this._promise=null;this._render();this._timer=setTimeout(()=>this._refresh(),retryDelay(this._refreshFailures??0));}}
   })();this._promise=work;return work;
  }
+ // Fit the configured upper bound to atomic values and actual label fonts.
+ // Observe text too: text enlargement need not resize the outer card.
+ _observeLayout(){
+  if(typeof ResizeObserver!=='function')return;
+  this._layoutObserver??=new ResizeObserver(()=>this._fitColumns());
+  this._layoutObserver.disconnect();
+  const grid=this.shadowRoot.querySelector('.grid');if(!grid)return;
+  this._layoutObserver.observe(grid);
+  this.shadowRoot.querySelectorAll('.value,.label,.unit,.delta,h2,.period').forEach(node=>this._layoutObserver.observe(node));
+  this._fitColumns();
+ }
+ _fitColumns(){
+  const grid=this.shadowRoot.querySelector('.grid');if(!grid)return;
+  const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');if(!ctx)return;
+  const wordWidth=node=>{const style=getComputedStyle(node);ctx.font=style.font;return Math.max(0,...node.textContent.split(/[\s-]+/u).map(word=>ctx.measureText(word).width));};
+  const title=this.shadowRoot.querySelector('h2'),period=this.shadowRoot.querySelector('.period');
+  const titleMinimum=wordWidth(title);ctx.font=getComputedStyle(period).font;
+  this.shadowRoot.querySelector('header').classList.toggle('stacked',titleMinimum+12+ctx.measureText(period.textContent).width>grid.clientWidth);
+  let minimum=134;const values=[];
+  this.shadowRoot.querySelectorAll('.metric').forEach(metric=>{
+   const value=metric.querySelector('.value');value.style.removeProperty('font-size');
+   const range=document.createRange();range.selectNodeContents(value);
+   const scale=metric.getBoundingClientRect().width/metric.offsetWidth||1;
+   let width=range.getBoundingClientRect().width/scale;
+   values.push({node:value,width,font:parseFloat(getComputedStyle(value).fontSize)});
+   for(const node of metric.querySelectorAll('.name,.unit,.delta'))width=Math.max(width,wordWidth(node)+(node.matches('.name')?15:0));
+   minimum=Math.max(minimum,Math.ceil(width)+20);
+  });
+  const configured=this._config.columns==='auto'?2:Number(this._config.columns),columns=Math.max(1,Math.min(configured,this._config.entities.length,Math.floor((grid.clientWidth+16)/(minimum+16))));
+  grid.style.setProperty('--overview-columns',String(columns));
+  // Only a value wider than the full available reading needs smaller type.
+  // Never split or round the authoritative numeric text to make it fit.
+  const available=(grid.clientWidth-16*(columns-1))/columns-20;
+  for(const value of values)if(value.width>available&&available>0)value.node.style.fontSize=`${value.font*available/value.width}px`;
+ }
  _render(){
-  if(!this._config)return;const c=this._config,dutch=nl(this._hass),focus=this.shadowRoot.activeElement?.dataset.entity;
+  if(!this._config)return;const c=this._config,dutch=nl(this._hass),active=this.shadowRoot.activeElement,focus=active?.dataset.entity,retryFocus=active?.classList.contains('retry');
   const synced=!!this._sharedTimeframe,range=this._status==='ready'?{start:this._start,end:this._end}:graphPeriodRange(this),formatter=new Intl.DateTimeFormat(dutch?'nl-NL':'en-GB',{timeZone:this._hass?.config?.time_zone||'UTC',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const period=synced?formatter.formatRange(range.start,range.end):`${c.hours_to_show} ${dutch?'uur':'hours'}`,cells=c.entities.map((row,i)=>{
    const s=this._hass?.states?.[row.entity],unit=s?.attributes?.unit_of_measurement??'',history=this._status==='ready'&&this._units[row.entity]===unit?this._history[row.entity]:null,v=synced?(history?.points.at(-1)?.v??null):numeric(s?.state),name=row.name||s?.attributes?.friendly_name||row.entity,displayValue=this._reading(row.entity,v,unit);
@@ -292,10 +370,41 @@ class OverviewCard extends HTMLElement{
    const status=!s?(dutch?'Sensor niet gevonden':'Entity not found'):v==null?(synced&&this._status==='loading'?(dutch?'Geschiedenis laden…':'Loading history…'):synced?(dutch?'Geen historische waarde':'No historical value'):(dutch?'Niet beschikbaar':'Unavailable')):'';
    const graphStatus=this._status==='loading'?(dutch?'Geschiedenis laden…':'Loading history…'):this._status==='error'?(dutch?'Geen geschiedenis geladen':'History not loaded'):dutch?'Geen geschiedenis':'No history';
    const difference=change==null?(dutch?'Geen vergelijkingspunt':'No comparison point'):`${change>0?'+':''}${this._format(change)}${unit?' '+(unit==='%'?'pp':unit):''}`;
-   return `<button type="button" class="metric" data-entity="${esc(row.entity)}" aria-label="${esc(name+': '+(status||this._format(v)+' '+unit))}" style="--series-color:${color(row.color,PALETTE[i])}"><span class="label"><i></i>${esc(name)}</span><span class="reading"><span class="value">${v==null?'—':esc(this._format(displayValue,v))}</span>${v!=null&&unit?`<span class="unit">${esc(unit)}</span>`:''}</span>${status?`<span class="status">${status}</span>`:''}${c.show_graph?`<span class="spark">${path?`<svg viewBox="0 0 300 48" preserveAspectRatio="none" aria-hidden="true"><path d="${path}"/></svg>`:`<span>${graphStatus}</span>`}</span>`:''}${c.show_delta?`<span class="delta">${v==null?'—':esc(difference)}</span><span class="caption">${dutch?'sinds begin periode':'since period start'}</span>`:''}</button>`;
+   return `<button type="button" class="metric" data-entity="${esc(row.entity)}" aria-label="${esc(name+': '+(status||this._format(v)+' '+unit))}" style="--series-color:${color(row.color,PALETTE[i])}"><span class="label"><i></i><span class="name">${esc(name)}</span></span><span class="reading"><span class="value">${v==null?'—':esc(this._format(displayValue,v))}</span>${v!=null&&unit?`<span class="unit">${esc(unit)}</span>`:''}${status?`<span class="status">${status}</span>`:''}</span>${c.show_graph?`<span class="spark">${path?`<svg viewBox="0 0 300 48" preserveAspectRatio="none" aria-hidden="true"><path d="${path}"/></svg>`:`<span>${graphStatus}</span>`}</span>`:''}${c.show_delta?`<span class="delta">${v==null?'—':esc(difference)}</span><span class="caption">${dutch?'sinds begin periode':'since period start'}</span>`:''}</button>`;
   }).join('');
-  this.shadowRoot.innerHTML=`<style>:host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}ha-card{display:block;height:100%;font-family:inherit;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b)}.content{height:100%;min-height:0;overflow:auto;padding:var(--eleven-card-padding,16px);box-sizing:border-box;scrollbar-width:thin}header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:20px}h2{font-size:18px;font-weight:650;letter-spacing:-.01em;line-height:1.25;margin:0;overflow-wrap:anywhere}.period{font-size:12px;text-align:right;overflow-wrap:anywhere;color:var(--secondary-text-color,#666);}.grid{display:grid;grid-template-columns:repeat(${c.columns==='auto'?'2':c.columns},minmax(0,1fr));gap:20px 24px}.metric{appearance:none;font:inherit;color:inherit;background:none;border:0;border-radius:4px;text-align:left;min-width:0;min-height:44px;padding:0;cursor:pointer;display:flex;flex-direction:column;align-items:stretch}.metric:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:5px}.label{font-size:12px;color:var(--secondary-text-color,#666);line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:7px}.label i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--series-color);flex-shrink:0}.reading{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;margin-top:6px;font-variant-numeric:tabular-nums;min-width:0}.value{font-size:28px;font-weight:550;line-height:1.25;overflow-wrap:anywhere;letter-spacing:-.025em}.unit{font-size:13px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere}.spark{height:48px;display:flex;align-items:center;margin-top:8px;color:var(--secondary-text-color,#666);font-size:11px}.spark svg{width:100%;height:48px;overflow:visible}.spark path{fill:none;stroke:var(--series-color);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.delta{font-size:12px;font-variant-numeric:tabular-nums;margin-top:8px;overflow-wrap:anywhere}.caption{font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}.status{font-size:12px;color:var(--secondary-text-color,#666);margin-top:4px}.error{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;font-size:12px;color:var(--secondary-text-color,#666)}.retry{font:inherit;min-height:44px;flex-shrink:0;padding:8px 12px;border:1px solid var(--divider-color,#ddd);border-radius:6px;background:transparent;color:inherit;cursor:pointer}@container(max-width:340px){.grid{grid-template-columns:minmax(0,1fr)}header{margin-bottom:16px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}</style><ha-card><div class="content"><header><h2>${esc(c.title)}${/\(beta\)/i.test(c.title)?'':' <small>(beta)</small>'}</h2><span class="period">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span><button type="button" class="retry">${dutch?'Opnieuw':'Retry'}</button></div>`:''}</div></ha-card>`;
-  this.shadowRoot.querySelectorAll('.metric').forEach(b=>{b.onclick=()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:b.dataset.entity},bubbles:true,composed:true}));if(b.dataset.entity===focus)b.focus();});const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();
+  this.shadowRoot.innerHTML=`<style>
+:host{display:block;height:auto;min-width:0;min-height:0;container-type:inline-size}
+ha-card{display:block;min-height:100%;font-family:inherit;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b)}
+.content{padding:var(--eleven-card-padding,16px);box-sizing:border-box;min-width:0}
+header{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:16px}
+h2{flex:1 1 160px;font-size:16px;font-weight:600;letter-spacing:normal;line-height:1.4;margin:0;overflow-wrap:anywhere}
+header.stacked h2{flex-basis:100%}
+header.stacked .period{text-align:start}
+h2 small{font-size:.8em;font-weight:400;color:var(--secondary-text-color,#666);white-space:nowrap}
+.period{font-size:12px;line-height:1.4;text-align:end;white-space:nowrap;flex:0 0 auto;color:var(--secondary-text-color,#666)}
+.period.synced{flex:0 1 auto;white-space:normal;overflow-wrap:normal;max-width:100%;text-align:start}
+.grid{display:grid;grid-template-columns:repeat(var(--overview-columns,1),minmax(0,1fr));column-gap:16px;row-gap:0;align-items:stretch}
+.metric{appearance:none;font:inherit;color:inherit;background:var(--eleven-material-plot-background,transparent);border:0;border-radius:4px;text-align:start;min-width:0;min-height:44px;padding:10px;cursor:pointer;display:grid;grid-template-rows:subgrid;grid-row:span ${2+(c.show_graph?1:0)+(c.show_delta?2:0)};align-content:start;margin-bottom:20px}
+.metric:focus-visible,.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+.label{font-size:12px;color:var(--secondary-text-color,#666);line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:7px;min-width:0}
+.label i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--series-color);flex-shrink:0}
+.name{min-width:0}
+.reading{display:flex;align-items:baseline;align-content:start;flex-wrap:wrap;gap:4px 6px;margin-top:6px;font-variant-numeric:tabular-nums;min-width:0}
+.value{font-size:28px;font-weight:550;line-height:1.25;white-space:nowrap;flex:0 0 auto;letter-spacing:-.025em}
+.unit{font-size:13px;line-height:1.4;color:var(--secondary-text-color,#666);overflow-wrap:anywhere;min-width:0}
+.spark{height:48px;box-sizing:border-box;display:flex;align-items:center;margin-top:8px;padding:2px;color:var(--secondary-text-color,#666);font-size:11px;line-height:1.4;min-width:0}
+.spark svg{width:100%;height:44px;overflow:visible}
+.spark path{fill:none;stroke:var(--series-color);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.delta{font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums;margin-top:8px;overflow-wrap:normal;min-width:0}
+.caption{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px;overflow-wrap:normal}
+.status{font-size:12px;line-height:1.4;color:var(--secondary-text-color,#666);flex-basis:100%}
+.error{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:16px;font-size:12px;color:var(--secondary-text-color,#666)}
+.error>span{flex:1 1 140px}
+.retry{font:inherit;min-height:44px;flex-shrink:0;padding:8px 12px;border:1px solid var(--divider-color,#ddd);border-radius:6px;background:transparent;color:inherit;cursor:pointer}
+.grid{margin-bottom:-20px}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+${cardThemeStyles({wells:'.metric',controls:'.retry'})}</style><ha-card><div class="content"><header><h2>${esc(c.title)}${/\(beta\)/i.test(c.title)?'':' <small>(beta)</small>'}</h2><span class="period${synced?' synced':''}">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span><button type="button" class="retry">${dutch?'Opnieuw':'Retry'}</button></div>`:''}</div></ha-card>`;
+  this.shadowRoot.querySelectorAll('.metric').forEach(b=>{b.onclick=()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:b.dataset.entity},bubbles:true,composed:true}));if(b.dataset.entity===focus)b.focus();});const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();if(retryFocus)(retry??this.shadowRoot.querySelector('.metric'))?.focus();this._observeLayout();
  }
 }
 

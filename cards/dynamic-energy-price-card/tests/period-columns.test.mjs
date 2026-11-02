@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import * as utils from '../src/price-utils.js';
-import * as graph from '../../../shared/graph.js';
+import * as graphModule from '../../../shared/graph.js';
+import {cardThemeStyles} from '../../../shared/card-theme.js';
+const graph={...graphModule,cardThemeStyles};
 import * as localization from '../src/localization.js';
 let Card;
 vm.runInNewContext(readFileSync(new URL('../src/dynamic-energy-price-card.js', import.meta.url), 'utf8').replace(/^import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];\s*/gm, ''), {

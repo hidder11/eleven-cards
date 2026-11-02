@@ -30,6 +30,7 @@ import {
   zonedParts,
   zonneplanPriceData,
 } from './price-utils.js';
+import {cardThemeStyles} from '../../../shared/card-theme.js';
 import { formatDuration, frontendHass, resolveLanguage, translate } from './localization.js';
 import {timeframeSyncConfig,connectTimeframeSync,disconnectTimeframeSync} from '../../../shared/periods.js';
 import {graphPeriodRange,resetGraphPeriod} from '../../../shared/periods.js';
@@ -801,6 +802,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._labelResize?.disconnect();if(this._labelLayoutFrame!=null)cancelAnimationFrame(this._labelLayoutFrame);this._labelLayoutFrame=null;
     this._connected=false;disconnectTimeframeSync(this);
     SharedGraph.disconnectHover(this);
     this._unwatchTibberConnection();
@@ -815,22 +817,66 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _observeConsumptionSize() {
-    if (this._config?.show_consumption !== true) {
-      this._consumptionResizeObserver?.disconnect();
-      this._consumptionResizeObserver = undefined;
-      return;
-    }
     if (this._consumptionResizeObserver || typeof ResizeObserver === 'undefined') return;
     this._consumptionResizeObserver = new ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width;
-      if (!width || width === this._consumptionWidth) return;
+      const height = entries[0]?.contentRect.height;
+      if (!width || (width === this._consumptionWidth && height === this._chartHeight)) return;
       this._consumptionWidth = width;
+      this._chartHeight = height;
+      this._layoutChartLabels();
       if (this._hass && this._config?.show_consumption && this._consumptionResizeFrame==null) {
         if(typeof requestAnimationFrame!=='function'){this._render();return;}
         this._consumptionResizeFrame=requestAnimationFrame(()=>{this._consumptionResizeFrame=null;if(this.isConnected)this._render();});
       }
     });
     this._consumptionResizeObserver.observe(this);
+  }
+
+  _layoutChartLabels() {
+    const chart=this.shadowRoot.querySelector('.chart');
+    if(!chart?.getBoundingClientRect||!globalThis.getComputedStyle)return;
+    const rawBounds=chart.getBoundingClientRect();if(!rawBounds.width||!rawBounds.height)return;
+    const scale=rawBounds.width/chart.clientWidth||1,bounds={left:rawBounds.left,top:rawBounds.top,width:rawBounds.width/scale,height:rawBounds.height/scale,right:rawBounds.left+rawBounds.width/scale,bottom:rawBounds.top+rawBounds.height/scale};
+    const inset=10,gap=8,all=s=>[...chart.querySelectorAll(s)],size=n=>{const r=n.getBoundingClientRect();return {left:bounds.left+(r.left-bounds.left)/scale,right:bounds.left+(r.right-bounds.left)/scale,top:bounds.top+(r.top-bounds.top)/scale,bottom:bounds.top+(r.bottom-bounds.top)/scale,width:r.width/scale,height:r.height/scale};};
+    const y=all('.y-label'),energy=all('.energy-axis-label'),ticks=all('.x-label');
+    for(const n of [...y,...energy,...ticks,...all('.level-label,.day-label,.average-label,.now-label,.energy-unit')]){n.hidden=false;n.style.marginLeft='0px';}
+    const width=nodes=>Math.max(0,...nodes.map(n=>size(n).width)),height=nodes=>Math.max(0,...nodes.map(n=>size(n).height));
+    const refs=all('.day-label,.average-label,.level-label,.now-label,.energy-unit').sort((a,b)=>{const priority=n=>n.matches('.day-label,.energy-unit')?0:n.matches('.average-label')?1:n.matches('.level-label')?2:3;return priority(a)-priority(b);});
+    for(const n of refs){n.dataset.anchorTop??=n.style.top;n.style.top=n.dataset.anchorTop;}
+    // Measure rendered typography, never infer gutters from SVG units or digit counts.
+    const next={left:inset+width(y)+gap,right:inset+(energy.length?Math.max(width(energy),width(all('.energy-unit')))+gap:0),top:inset+Math.max(height(all('.day-label,.energy-unit'))+gap,height(y)/2),bottom:inset+height(ticks)+gap+height(y)/2};
+    const minChart=Math.max(180,Math.min(460,refs.reduce((sum,n)=>sum+size(n).height+6,0)+next.top+next.bottom));
+    chart.style.minHeight=`${minChart}px`;
+    const content=this.shadowRoot.querySelector('.card-content');
+    if(content){const style=getComputedStyle(content),other=[...content.children].filter(n=>n!==chart&&n.tagName!=='STYLE').reduce((sum,n)=>{const s=getComputedStyle(n);return sum+size(n).height+parseFloat(s.marginTop||0)+parseFloat(s.marginBottom||0);},0);this.style?.setProperty('--energy-required-height',`${Math.ceil(other+minChart+parseFloat(style.paddingTop)+parseFloat(style.paddingBottom)+2)}px`);}
+    const changed=!this._labelInsets||Object.keys(next).some(k=>Math.abs(next[k]-this._labelInsets[k])>.5)||!this._renderChartSize||Math.abs(chart.clientWidth-this._renderChartSize.width)>.5||Math.abs(chart.clientHeight-this._renderChartSize.height)>.5;
+    this._labelInsets=next;
+    if(changed&&typeof requestAnimationFrame==='function'&&this._labelLayoutFrame==null){this._labelLayoutFrame=requestAnimationFrame(()=>{this._labelLayoutFrame=null;if(this.isConnected&&this._hass)this._render();});}
+    // Endpoints survive; suppress only interior captions, never grid lines or data.
+    const density=(nodes,vertical=false)=>{
+      for(const n of nodes){const r=size(n);if(!vertical){n.style.marginLeft=`${Math.max(0,bounds.left+inset-r.left)-Math.max(0,r.right-(bounds.right-inset))}px`;}}
+      const ordered=[...nodes].sort((a,b)=>vertical?size(a).top-size(b).top:size(a).left-size(b).left);if(ordered.length<2)return;
+      const start=r=>vertical?r.top:r.left,end=r=>vertical?r.bottom:r.right;
+      let previous=size(ordered[0]);const last=size(ordered.at(-1));
+      for(const n of ordered.slice(1,-1)){const r=size(n);n.hidden=start(r)<end(previous)+gap||end(r)+gap>start(last);if(!n.hidden)previous=r;}
+    };
+    density(y,true);density(energy,true);density(ticks);
+    const days=all('.day-label');
+    for(const day of days){day.title ||=day.textContent;day.textContent=day.title;}
+    for(let i=0;i<days.length;i++){const day=days[i],r=size(day),right=days[i+1]?size(days[i+1]).left-gap:bounds.right-inset;if(r.right>right)day.textContent=day.dataset.shortLabel;}
+    // Captions may move, their SVG lines retain exact tariff/time coordinates.
+    // Place date references first, then averages/thresholds/Now in free measured slots.
+    const placed=[];
+    for(const n of refs){
+      let r=size(n);n.style.marginLeft=`${Math.max(0,bounds.left+inset-r.left)-Math.max(0,r.right-(bounds.right-inset))}px`;
+      r=size(n);const low=bounds.top+inset,high=bounds.bottom-next.bottom-r.height,desired=Math.max(low,Math.min(r.top,high));
+      const candidates=[desired,low,...placed.flatMap(p=>[p.bottom+6,p.top-r.height-6])].filter(t=>t>=low&&t<=high).sort((a,b)=>Math.abs(a-desired)-Math.abs(b-desired));
+      const top=candidates.find(t=>!placed.some(p=>r.left<p.right+6&&r.right+6>p.left&&t<p.bottom+6&&t+r.height+6>p.top))??desired;
+      // Use the actual transformed box when applying top; no guessed text baseline.
+      n.style.top=`${parseFloat(getComputedStyle(n).top)+top-r.top}px`;
+      placed.push(size(n));
+    }
   }
 
   _unwatchConsumptionConnection() {
@@ -1064,7 +1110,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const consumptionPoints = this._consumption?.points ?? [];
     const consumptionIntervalMs = (this._consumption?.intervalMinutes ?? intervalMinutes) * 60000;
     const chartPixels = this.shadowRoot.querySelector('.chart')?.clientWidth || Math.max(1, (this.clientWidth || 1000) - (this.clientWidth <= 520 ? 24 : 32));
-    const plotRight = PLOT.right + (graphShowsConsumption ? 32 * svgWidth / chartPixels : 0);
+    const chartHeight=this.shadowRoot.querySelector('.chart')?.clientHeight||this._chartHeight||SVG_HEIGHT;
+    this._renderChartSize={width:chartPixels,height:chartHeight};
+    const insets=this._labelInsets??{left:40,right:graphShowsConsumption?52:10,top:36,bottom:36};
+    const PLOT={left:insets.left*svgWidth/chartPixels,right:insets.right*svgWidth/chartPixels,top:insets.top*svgHeight/chartHeight,bottom:insets.bottom*svgHeight/chartHeight};
+    const plotRight = PLOT.right;
     const plotWidth = svgWidth - PLOT.left - plotRight;
     const plotHeight = svgHeight - PLOT.top - PLOT.bottom;
     const span = Math.max(sharedRange?1:intervalMs, end - start);
@@ -1166,7 +1216,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         (positionedAverages[index - 1].labelY ?? positionedAverages[index - 1].y) + 18,
       );
     }
-    const averageLabel = positionedAverages.map((average) => `<span class="chart-label average-label ${average.key}-average-label" style="top:${(Math.min(PLOT.top + plotHeight - 8, average.labelY ?? average.y) / svgHeight) * 100}%;left:${PLOT.left + 6}px">${average.label} ${this._formatPrice(average.value)} ct</span>`).join('');
+    const averageLabel = positionedAverages.map((average) => `<span class="chart-label average-label ${average.key}-average-label" style="top:${(Math.min(PLOT.top + plotHeight - 8, average.labelY ?? average.y) / svgHeight) * 100}%;left:${(PLOT.left / svgWidth) * 100}%">${average.label} ${this._formatPrice(average.value)} ct</span>`).join('');
     const hoverLine = this._config.show_hover_line
       ? `<line class="hover-line" x1="0" y1="${PLOT.top}" x2="0" y2="${PLOT.top + plotHeight}" hidden />`
       : '';
@@ -1207,7 +1257,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     }).join('');
     const dayLabels = [...groups.values()].map((dayPoints, index) => {
       const x = Math.max(PLOT.left + 8, xFor(dayPoints[0].timestamp) + 10);
-      return `<span class="chart-label day-label" style="left:${(x / svgWidth) * 100}%">${sharedRange?'':`${index === 0 ? this._t("Vandaag") : this._t("Morgen")} · `}${this._formatDay(dayPoints[0].timestamp, timeZone)}</span>`;
+      return `<span class="chart-label day-label" data-short-label="${escapeHtml(this._formatDay(dayPoints[0].timestamp,timeZone))}" style="left:${(x / svgWidth) * 100}%">${sharedRange?'':`${index === 0 ? this._t("Vandaag") : this._t("Morgen")} · `}${this._formatDay(dayPoints[0].timestamp, timeZone)}</span>`;
     }).join('');
 
     const todayKey = localDayKey(now, timeZone);
@@ -1234,8 +1284,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const currentImport = currentPricePoint(rawImportData,now,timeZone,this._config.tomorrow_after);
     const currentExport = currentPricePoint(rawExportData,now,timeZone,this._config.tomorrow_after);
     const currentCards = [];
-    if (currentShowsImport) currentCards.push(this._currentMetric(this._t("Afname"), currentImport, 'import', importSelected, cheapestEnabled));
-    if (currentShowsExport) currentCards.push(this._currentMetric(this._t("Teruglevering"), currentExport, 'export', exportSelected, exportBestEnabled));
+    if (currentShowsImport) currentCards.push(this._currentMetric(this._t("Afname"), currentImport, 'import', importSelected, cheapestEnabled, graphIncludesImport));
+    if (currentShowsExport) currentCards.push(this._currentMetric(this._t("Teruglevering"), currentExport, 'export', exportSelected, exportBestEnabled, graphIncludesExport));
 
     const showTitle = this._config.show_title !== false;
     const useCompactSummary = !showTitle
@@ -1259,8 +1309,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
           ? `<div class="heading"><div class="header-cheapest">${contextLabels.join('')}</div></div>`
           : '';
     const seriesLegend = [];
-    if (graphIncludesImport && !useCompactSummary) seriesLegend.push(this._seriesLegendItem('import', this._t("Afname")));
-    if (graphIncludesExport) seriesLegend.push(this._seriesLegendItem('export', this._t("Teruglevering")));
+    if (graphIncludesImport && !currentShowsImport && !useCompactSummary) seriesLegend.push(this._seriesLegendItem('import', this._t("Afname")));
+    if (graphIncludesExport && !currentShowsExport) seriesLegend.push(this._seriesLegendItem('export', this._t("Teruglevering")));
     if (consumptionEnabled) seriesLegend.push(this._seriesLegendItem('consumption', `${this._t('Netafname')} · kWh / ${this._consumption?.intervalMinutes ?? intervalMinutes} min`));
     const legendItems = [...seriesLegend, ...(showTitle ? contextLabels : [])];
     const legend = legendItems.length
@@ -1273,16 +1323,20 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const exportPeriods = exportBestEnabled && this._config.show_export_table
       ? exportSelectedPeriods
       : [];
-    const favorableTable = importPeriods.length || exportPeriods.length
-      ? this._periodTable(importPeriods, exportPeriods, timeZone, todayKey, tomorrowKey)
+    const periodDetailsOpen=this.shadowRoot.querySelector('.price-periods')?.open;
+    const periodTable = importPeriods.length || exportPeriods.length
+      ? this._periodTable(importPeriods, exportPeriods, timeZone, todayKey, tomorrowKey) : '';
+    const favorableTable = periodTable
+      ? `<details class="price-periods"${periodDetailsOpen?' open':''}><summary>${this._t("Gunstige momenten")}${this._config.show_period_average?'<span class="table-unit">ct/kWh</span>':''}</summary>${periodTable}</details>`
       : '';
 
     this._chart = {
       timeline, importSelected, exportSelected, intervalMs, timeZone, xFor, yFor, start, span,
       cheapPrice, normalPrice, expensivePrice, svgWidth, svgHeight, graphShowsImport, graphShowsExport,
-      importAppearance, exportAppearance, plotRight, consumptionPoints, consumptionAppearance, consumptionIntervalMs, graphShowsConsumption, energyYFor,
+      importAppearance, exportAppearance, plotLeft:PLOT.left, plotRight, consumptionPoints, consumptionAppearance, consumptionIntervalMs, graphShowsConsumption, energyYFor,
     };
 
+    const active=this.shadowRoot.activeElement,focusSeries=active?.matches('.legend-series')?active.dataset.series:null,focusPeriods=active?.matches('.price-periods>summary');
     this._graph ??= new SharedGraph();
     this.shadowRoot.innerHTML = `
       <ha-card lang="${this._language}">
@@ -1340,14 +1394,21 @@ class DynamicEnergyPriceCard extends HTMLElement {
           <div class="sr-only" aria-live="polite"></div>
         </div>
       </ha-card>
-      <style>${this._styles()}</style>`;
+      <style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
+    this._layoutChartLabels();
+    this._labelResize?.disconnect();
+    const labelChart=this.shadowRoot.querySelector('.chart');
+    if(labelChart&&globalThis.ResizeObserver){this._labelResize=new ResizeObserver(()=>{if(this.shadowRoot.querySelector('.chart')===labelChart)this._layoutChartLabels();});for(const n of [labelChart,...labelChart.querySelectorAll('.chart-label'),this.shadowRoot.querySelector('.header')].filter(Boolean))this._labelResize.observe(n);}
     this._graph.restore(this);
     this._chartHasLoaded = this._graph.loaded;
     this._bindInteractions();
+    if(focusSeries)this.shadowRoot.querySelector(`.legend-series[data-series="${focusSeries}"]`)?.focus({preventScroll:true});
+    if(focusPeriods)this.shadowRoot.querySelector('.price-periods>summary')?.focus({preventScroll:true});
+    const periods=this.shadowRoot.querySelector('.price-periods');if(periods)periods.ontoggle=()=>this._layoutChartLabels();
     SharedGraph.restoreHover(this);
   }
 
-  _currentMetric(label, point, type, selected, enabled) {
+  _currentMetric(label, point, type, selected, enabled, interactive=false) {
     const price = point?.price ?? null;
     const priceClass = price === null
       ? 'unavailable'
@@ -1359,12 +1420,13 @@ class DynamicEnergyPriceCard extends HTMLElement {
         ? `<div class="current-window active">${this._t("Goedkoopst")}</div>`
         : `<div class="current-window active">${this._t("Beste opbrengst")}</div>`
       : '';
-    return `<div class="current-metric ${type}">
-      <span class="current-label">${label}</span>
+    const tag=interactive?'button':'div',appearance=this._seriesAppearance(type);
+    return `<${tag} class="current-metric ${type}${interactive?' legend-series':''}" ${interactive?`type="button" data-series="${type}" aria-pressed="${!this._hiddenSeries.has(type)}"`:""}>
+      <span class="current-label">${interactive?`<i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i>`:""}${label}</span>
       <div class="current ${priceClass}" aria-label="${this._t("Huidige {tariff}prijs {price}", { tariff: label.toLowerCase(), price: price === null ? this._t("onbekend") : `${priceText} ${this._t("cent per kilowattuur")}` })}">
         <strong>${priceText}</strong><span>ct/kWh</span>
       </div>${badge}
-    </div>`;
+    </${tag}>`;
   }
 
   _compactCurrentMetric(label, point, type, selected, enabled) {
@@ -1452,7 +1514,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _stateCard(title, message) {
-    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}</style>`;
+    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
   }
 
   _bindInteractions() {
@@ -1493,7 +1555,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const chart = this.shadowRoot.querySelector('.chart');
     const bounds = chart.getBoundingClientRect();
     const svgX = ((event.clientX - bounds.left) / bounds.width) * this._chart.svgWidth;
-    const timestamp = this._chart.start + Math.max(0, Math.min(1, (svgX - PLOT.left) / (this._chart.svgWidth - PLOT.left - this._chart.plotRight))) * this._chart.span;
+    const timestamp = this._chart.start + Math.max(0, Math.min(1, (svgX - (this._chart.plotLeft??PLOT.left)) / (this._chart.svgWidth - (this._chart.plotLeft??PLOT.left) - this._chart.plotRight))) * this._chart.span;
     let low = 0;
     let high = this._chart.timeline.length - 1;
     while (low < high) {
@@ -1651,6 +1713,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     }).join('\n');
     return `
       :host {
+        min-height:var(--energy-required-height,0px);
         --cheap: var(--success-color, #19a974);
         --normal: #f2a93b;
         --expensive: var(--error-color, #e45c4f);
@@ -1661,10 +1724,10 @@ class DynamicEnergyPriceCard extends HTMLElement {
         ${colorOverrides}
         --cheapest-fill: color-mix(in srgb, var(--import-best) 13%, transparent);
         --export-best-fill: color-mix(in srgb, var(--export-best) 18%, transparent);
-        --font-size-meta: 10px;
+        --font-size-meta: 11px;
         --font-size-label: 12px;
-        --font-size-title: 18px;
-        --font-size-value: 20px;
+        --font-size-title: 16px;
+        --font-size-value: 16px;
         --font-weight-regular: 400;
         --font-weight-medium: 500;
         --font-weight-strong: 600;
@@ -1673,9 +1736,9 @@ class DynamicEnergyPriceCard extends HTMLElement {
         display: block;
         height: 100%;
       }
-      ha-card { overflow: hidden; height: 100%; }
+      ha-card { overflow: visible; height: 100%; min-height:var(--energy-required-height,0px); }
       .card-content { display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; height: 100%; padding: 16px 16px 12px; color: var(--primary-text-color); font-weight: var(--font-weight-regular); line-height: var(--line-height-normal); }
-      .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+      .header { display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:6px; }
       .heading { min-width: 0; }
       h2 { margin: 0; font-size: var(--font-size-title); line-height: var(--line-height-tight); font-weight: var(--font-weight-strong); letter-spacing: -0.01em; }
       .header-cheapest { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; min-height: 34px; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
@@ -1687,11 +1750,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .compact-current strong { font-size: 16px; font-variant-numeric: tabular-nums; }
       .compact-current em { padding: 2px 5px; border-radius: 999px; color: var(--import-best); background: var(--cheapest-fill); font-size: var(--font-size-meta); font-style: normal; }
       .compact-context { overflow: hidden; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); text-overflow: ellipsis; white-space: nowrap; }
-      .current-block { display: flex; justify-content: flex-end; align-items: flex-start; gap: 8px; flex: none; margin-left: auto; }
-      .current-metric { display: grid; justify-items: end; gap: 3px; min-width: 0; }
-      .current-label { color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
-      .current { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 5px; padding: 7px 9px; border-radius: 8px; background: var(--secondary-background-color); font-variant-numeric: tabular-nums; }
-      .current strong { font-size: var(--font-size-value); line-height: 1; font-weight: var(--font-weight-strong); }
+      .current-block { display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start;gap:8px 24px; }
+      .current-metric,.current-metric.legend-series { display:grid;justify-items:start;align-content:center;gap:3px;min-width:44px;max-width:100%;text-align:start; }
+      .current-label { display:flex;align-items:center;gap:6px;color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
+      .current { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 5px; padding:0;border-radius:0;background:none;max-width:100%; font-variant-numeric: tabular-nums; }
+      .current strong { white-space:nowrap;min-width:0;font-size: var(--font-size-value); line-height: 1; font-weight: var(--font-weight-strong); }
       .current span { font-size: var(--font-size-meta); color: var(--secondary-text-color); }
       .current.negative strong { color: var(--negative-color); }
       .current.cheap strong { color: var(--cheap); }
@@ -1706,7 +1769,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .legend span { display: inline-flex; align-items: center; gap: 6px; }
       .legend-label { color: var(--secondary-text-color); }
       .legend-value { color: var(--primary-text-color,#20252b); }
-      .legend-series { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 1px 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+      .legend-series { display: inline-flex; align-items: center; gap: 6px; min-width: 44px; min-height: 44px; box-sizing: border-box; margin: 0; padding: 1px 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
       .legend-series[aria-pressed="false"] { opacity: 0.45; text-decoration: line-through; }
       .legend-series:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; border-radius: 3px; }
       .data-status { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-height: 14px; margin: 3px 0 0; color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
@@ -1722,16 +1785,16 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .chart:focus-visible { box-shadow: inset 0 0 0 2px var(--primary-color); border-radius: 8px; }
       svg { display: block; width: 100%; height: 100%; overflow: hidden; }
       .chart-label { position: absolute; z-index: 1; pointer-events: none; font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: 0 1px 2px var(--card-background-color), 0 0 4px var(--card-background-color); }
-      .x-label { bottom: 4px; transform: translateX(-50%); color: var(--secondary-text-color); }
-      .energy-axis-label { right: 1px; transform: translateY(-50%); color: var(--secondary-text-color); }
-      .energy-unit { right: 1px; top: 0; color: var(--secondary-text-color); }
-      .with-consumption .level-label { right: 34px; }
+      .x-label { bottom: 10px; transform: translateX(-50%); color: var(--secondary-text-color); }
+      .energy-axis-label { right: 10px; transform: translateY(-50%); color: var(--secondary-text-color); }
+      .energy-unit { right: 10px; top: 10px; color: var(--secondary-text-color); }
+      .with-consumption .level-label { right:var(--energy-right-label-gap,54px); }
       .consumption-area { fill: var(--consumption-fill-color); }
       .consumption-area.fade { fill: url(#consumption-area-gradient); opacity: 1; }
-      .y-label { left: 1px; transform: translateY(-50%); color: var(--secondary-text-color); }
-      .day-label { top: 8px; color: var(--primary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
+      .y-label { left: 10px; transform: translateY(-50%); color: var(--secondary-text-color); }
+      .day-label { top: 10px; color: var(--primary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
       .now-label { top: 24px; transform: translateX(-50%); color: var(--primary-text-color); font-weight: var(--font-weight-strong); }
-      .level-label { right: 3px; transform: translateY(-135%); padding: 1px 4px; border-radius: 3px; color: var(--secondary-text-color); background: color-mix(in srgb, var(--card-background-color) 88%, transparent); }
+      .level-label { right: 10px; transform: translateY(-135%); padding: 1px 4px; border-radius: 3px; color: var(--secondary-text-color); background: color-mix(in srgb, var(--card-background-color) 88%, transparent); }
       .level-label.import-level:nth-of-type(1) { color: var(--cheap); }
       .average-label { transform: translateY(-135%); padding: 2px 5px; border-radius: 4px; color: var(--primary-text-color); background: color-mix(in srgb, var(--card-background-color) 88%, transparent); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
       .export-average-label { border-left: 2px dashed currentColor; }
@@ -1779,6 +1842,14 @@ class DynamicEnergyPriceCard extends HTMLElement {
 
       .tooltip[data-horizontal="positioned"] { transform: none; }
 
+      .price-periods{flex:none;margin-top:8px;border-top:1px solid var(--divider-color)}
+      .price-periods>summary{min-height:44px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:var(--font-size-label);font-weight:500;color:var(--secondary-text-color);list-style:none}
+      .price-periods>summary::-webkit-details-marker{display:none}
+      .price-periods>summary::after{content:'⌄';margin-inline-start:auto}
+      .price-periods[open]>summary::after{content:'⌃'}
+      .price-periods>summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+      .price-periods .price-table-wrap{margin-top:0;border-top:0;padding-top:0}
+      .price-periods .price-table-wrap h3{display:none}
       .price-table-wrap { flex: 0 1 auto; min-height: 0; max-height: 190px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider-color); overflow: auto; }
       .price-table-wrap h3 { margin: 0 0 4px; font-size: var(--font-size-label); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
       .table-unit { float: right; color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); }
@@ -1795,7 +1866,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       [hidden] { display: none !important; }
       @media (max-width: 520px) {
-        :host { --font-size-title: 17px; --font-size-value: 18px; }
+        :host { --font-size-title: 16px; --font-size-value: 16px; }
         .card-content { padding: 12px 12px 10px; }
         .compact-summary { gap: 8px; }
         .compact-current { font-size: 11px; }
@@ -1803,8 +1874,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
         .compact-context { font-size: var(--font-size-meta); }
         .header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; }
         .heading { grid-column: 1 / -1; }
-        .current-block { grid-column: 1 / -1; width: 100%; max-width: none; margin-left: 0; gap: 5px; justify-content: flex-end; }
-        .current { padding: 5px 7px; column-gap: 3px; }
+        .current-block { grid-column:1 / -1;width:100%;max-width:none;margin-left:0;gap:8px 24px;justify-content:flex-start; }
+        .current { padding:0;column-gap:5px; }
         .legend { gap: 6px 10px; margin-top: 9px; }
         .data-status { margin-top: 2px; }
         .chart { flex-basis: 260px; min-height: 110px; }
@@ -1815,9 +1886,9 @@ class DynamicEnergyPriceCard extends HTMLElement {
       }
       @media (max-width: 360px) {
         .cheapest-table { font-size: 10px; }
-        .current-block { justify-content: stretch; }
-        .current-metric { flex: 1 1 0; justify-items: stretch; }
-        .current { justify-content: center; }
+        .current-block { justify-content:flex-start; }
+        .current-metric { flex:0 1 auto;justify-items:start; }
+        .current { justify-content:start; }
       }
       @media (prefers-reduced-motion: reduce) { .tooltip { transition: none; } }
       ${this._config?.embedded===true?`:host{height:auto;min-width:0}ha-card{height:auto;background:transparent;border:0;border-radius:0;box-shadow:none}.card-content{height:auto;padding:0}.state{padding:8px 0}.chart{flex:0 0 auto;height:260px;min-height:180px}.current{border-radius:8px}.cheapest-table .period-type{border-radius:8px}`:''}

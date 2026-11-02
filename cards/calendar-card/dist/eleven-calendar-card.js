@@ -1,5 +1,47 @@
 // Eleven Calendar (beta) — self-contained standalone module
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false}={}) {
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button],.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:8px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.period-menu [data-ui-tabs]{border-bottom:0;gap:6px}
+.period-menu [role=tab]{border-bottom:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));white-space:normal;padding:8px 4px;background:var(--eleven-material-control-background,var(--secondary-background-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.period-menu [role=tab][aria-selected=true],.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover,.period-menu [role=tab][aria-selected=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
 function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
@@ -476,6 +518,7 @@ function nextCalendarEvent(events,now=Date.now()){
 
 
 
+
 function calendarCardStyles(){return uiDetailSurfaceStyles()+uiSurfaceStyles('.navigation,.info-button')+`
 :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
 ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
@@ -546,6 +589,58 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .calendar-info .insight-sensor-heading{display:flex;align-items:center;gap:8px;min-width:0}.calendar-info .insight-sensor-heading strong{flex:1;min-width:0;overflow-wrap:anywhere}
 .calendar-info .insight-states{font-size:10px;color:var(--secondary-text-color,#666);margin-top:4px}
 @container(max-width:420px){.content{padding:var(--eleven-card-padding,16px)}.header{align-items:flex-start}.header-actions{gap:5px}.navigation .range{font-size:10px;padding:0 6px}.navigation [data-nav=now]{padding:0 6px}.list-event{grid-template-columns:50px minmax(0,1fr);gap:8px}.weather{font-size:10px}}
+.header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}.legend-item{min-height:44px;min-width:44px}
+/* Calendar-local calm agenda anatomy; paint remains theme-owned. */
+:host,ha-card,.content{height:auto;min-height:100%}
+.calendar-body{flex:none;overflow:visible;min-width:0}
+.header,.compact .header{gap:12px;margin-bottom:12px;align-items:center;flex-wrap:nowrap}
+.header h2{font-size:16px;font-weight:600;line-height:1.4;min-width:0;overflow-wrap:anywhere}
+.header svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.header{position:relative}
+.calendar-tools{margin-inline-start:auto;flex:none}
+.calendar-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+.calendar-tools summary::-webkit-details-marker{display:none}
+.calendar-tools summary svg{width:22px;height:22px;stroke-width:3}
+.calendar-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.calendar-tools-panel{position:absolute;z-index:5;inset-inline-end:0;top:48px;width:max-content;max-width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color);box-shadow:var(--eleven-material-surface-shadow,var(--ha-card-box-shadow,none))}
+.calendar-tools:not([open])>.calendar-tools-panel{display:none}
+.calendar-tools-panel .info-button{display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;min-height:44px;padding:8px 10px;font-size:13px;white-space:normal;text-align:start}
+.calendar-tools-panel .info-button span{min-width:0;overflow-wrap:anywhere}
+.calendar-tools-panel .info-button svg{flex:none}
+.header-actions{width:100%;margin:0 0 12px;flex-shrink:0}
+.header-actions:empty{display:none}
+.navigation{width:100%;gap:0;background:var(--secondary-background-color,#eee);box-shadow:none;border-radius:8px;flex-wrap:wrap}
+.navigation-actions{display:flex;align-items:center;gap:0;flex:none;margin-inline-start:auto}
+.navigation .range{flex:1 1 6em;min-width:0;white-space:normal;overflow-wrap:anywhere;border:0;padding:8px;font-size:13px;line-height:1.4;color:var(--primary-text-color);font-variant-numeric:tabular-nums}
+.navigation [data-nav=now]{padding:8px;min-width:44px;font-size:13px}
+.navigation [data-nav]{flex:none}
+.legend,.compact .legend{gap:8px;margin-bottom:16px;font-size:12px}
+.legend-item{padding:8px 10px;gap:7px;line-height:1.4;box-sizing:border-box;min-width:44px;min-height:44px}
+.legend-item[aria-pressed=false]{opacity:1;color:var(--secondary-text-color)}
+.legend-item[aria-pressed=false] .dot{opacity:.45}
+.legend-item[aria-pressed=true]{color:var(--eleven-material-selection-color,color-mix(in srgb,var(--accent-color,var(--primary-color)) 40%,var(--primary-text-color)));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);transform:translateY(1px)}
+.legend-item[aria-pressed=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.list-day+.list-day,.compact .list-day+.list-day{margin-top:12px;padding-top:12px}
+.day-heading,.compact .day-heading{margin-bottom:8px;flex-wrap:wrap;gap:6px 10px}
+.day-title{font-size:13px;line-height:1.4}.day-title time,.weather{font-size:12px}
+.list-event,.compact .list-event{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px}
+.list-event>.event-time,.compact .list-event>.event-time{flex:0 1 5.8em;min-width:min-content;font-size:12px;line-height:1.5;padding-top:7px;overflow-wrap:normal}
+.list-event .event-button,.compact .list-event .event-button{flex:1 1 12em;font-size:13px;min-height:44px!important;padding:6px 4px 6px 10px!important}
+.event-button .event-title,.column .event-title{font-size:13px;line-height:1.45;white-space:normal;overflow:visible;text-overflow:clip}
+.compact .list-event .event-title{white-space:normal;overflow:visible;text-overflow:clip}
+.event-button .event-meta,.column .event-meta{font-size:12px;line-height:1.45;margin-top:3px}
+.column .event-time{font-size:12px;color:var(--secondary-text-color)}
+.event-button,.compact .column .event-button{min-height:44px!important}
+.empty-day{font-size:12px;line-height:1.5;padding:8px 0}
+.month-chip,.compact .month-chip{min-height:44px!important;padding:7px!important;font-size:12px;line-height:1.45;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.month-more,.compact .month-more,.status button,.popup-more summary{min-height:44px;min-width:44px;box-sizing:border-box}
+.popup-calendar{overflow-wrap:anywhere;font-size:12px}.popup-calendar .dot{flex:none}
+.popup-date time,.popup-date-range time{min-width:0;overflow-wrap:anywhere}
+.content [data-ui-popup] [data-ui-button]{min-height:44px;min-width:44px;box-sizing:border-box}
+.popup-field-label{font-size:12px}.popup-location,.popup-description{font-size:13px;line-height:1.5}
+${cardThemeStyles({controls:'.navigation,.info-button,.legend-item',selected:'.legend-item[aria-pressed=true]',surfaces:'[data-ui-popup],.tooltip,[data-ui-detail-surface]'})}
+/* Selection must win over ordinary theme control faces. */
+.legend-item[aria-pressed=true],.legend-item[aria-pressed=true]:not(:disabled):hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none)}
 `;}
 
 
@@ -816,10 +911,13 @@ class CalendarCard extends HTMLElement{
   const content=`<div class="calendar-info"><div class="insight-sensors">${rows}</div></div>`;
   return uiPopup({id:'calendar-info',className:'insight-popup',title:dutch?'Gegevens':'Data information',closeLabel:label('close',dutch),content});
  }
- _cleanupUI(){for(const controller of this._popupControllers){controller.close();controller.disconnect();}this._popupControllers=[];}
+ _cleanupUI(){globalThis.document?.removeEventListener?.('pointerdown',this._toolsOutside);for(const controller of this._popupControllers){controller.close();controller.disconnect();}this._popupControllers=[];}
  _render(){
   if(!this._config)return;
   const dutch=isDutch(this._hass),range=this._range(),renderKey=`${this._view}/${range.startKey}/${range.endKey}`,sameRange=this._renderKey===renderKey,scroll=sameRange?this.shadowRoot.querySelector('.horizontal')?.scrollLeft??0:0,scrollTop=sameRange?this.shadowRoot.querySelector('.calendar-body')?.scrollTop??0:0,focusedNav=this.shadowRoot.activeElement?.dataset?.nav;
+  const active=this.shadowRoot.activeElement,focusCalendar=active?.dataset?.calendar,focusEvent=active?.dataset?.calendarEvent,focusInfo=active?.hasAttribute?.('data-info'),focusRetry=active?.hasAttribute?.('data-retry');
+  const toolsOpen=Boolean(this.shadowRoot.querySelector('.calendar-tools')?.open),focusTools=active?.matches?.('.calendar-tools summary');
+  const openInfo=this.shadowRoot.querySelector('#calendar-info:popover-open,#calendar-info[data-fallback-open]'),infoPopupFocus=Boolean(openInfo?.contains(active));
   this._renderKey=renderKey;
   this._cleanupUI();
   if(this._emptyConfig){this._displayEvents=[];this._updateNextEvent();this.shadowRoot.innerHTML=`<style>${calendarCardStyles()}</style><ha-card><div class="content"><div class="status">${label('select',dutch)}</div></div></ha-card>`;return;}
@@ -832,17 +930,26 @@ class CalendarCard extends HTMLElement{
   const loadingOnly=Object.values(this._statuses).length>0&&Object.values(this._statuses).every(status=>status==='loading')&&!Object.values(this._events).some(events=>events.length);
   const body=!visibleEntities.length?`<p class="status" role="status">${label('allHidden',dutch)}</p>`:loadingOnly?'':this._view==='columns'?this._columns(visibleDays,forecast):this._view==='month'?this._month(visibleDays,range,forecast):this._list(visibleDays,forecast);
   const button=(action,content,name)=>uiButton({content,label:name,title:name,attrs:{'data-nav':action}});
-  const navigation=this._config.show_navigation?`<div class="navigation"><span class="range">${escapeCalendarHtml(this._rangeLabel(range))}</span>${button('previous',cardHeaderIcon('previous'),label('previous',dutch))}${button('now',label('now',dutch),this._view==='month'?label('today',dutch):label('now',dutch))}${button('next',cardHeaderIcon('next'),label('next',dutch))}</div>`:'';
-  const info=uiButton({content:cardHeaderIcon('info'),className:'info-button',label:label('info',dutch),attrs:{'data-info':'','aria-controls':'calendar-info','aria-haspopup':'dialog'}});
+  const navigation=this._config.show_navigation?`<div class="navigation" role="group" aria-label="${dutch?'Datumnavigatie':'Date navigation'}"><span class="range">${escapeCalendarHtml(this._rangeLabel(range))}</span><div class="navigation-actions">${button('previous',cardHeaderIcon('previous'),label('previous',dutch))}${button('now',label('now',dutch),this._view==='month'?label('today',dutch):label('now',dutch))}${button('next',cardHeaderIcon('next'),label('next',dutch))}</div></div>`:'';
+  const info=uiButton({content:cardHeaderIcon('info')+`<span>${label('info',dutch)}</span>`,className:'info-button',label:label('info',dutch),attrs:{'data-info':'','aria-controls':'calendar-info','aria-haspopup':'dialog'}});
+  const toolsLabel=dutch?'Agendaopties':'Calendar tools',tools=`<details class="calendar-tools"${toolsOpen?' open':''}><summary aria-label="${toolsLabel}" title="${toolsLabel}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="calendar-tools-panel">${info}</div></details>`;
   const legend=this._config.show_legend?uiLegend({items:this._config.entities.map(row=>{const name=this._calendarName(row.entity),visible=!this._hiddenCalendars.has(row.entity),failed=this._calendarFailed(row.entity),failure=failed?label('calendarUnavailable',dutch):'';return {id:row.entity,visible,title:label(visible?'hideCalendar':'showCalendar',dutch)+' '+name+'.'+(failure?' '+failure+'.':''),attrs:{'data-calendar':row.entity,'data-calendar-error':failed?'':null,'aria-label':failure?name+'. '+failure:null,style:`--event-color:${this._eventColor(row.entity)}`},content:`<i class="dot"></i><span>${escapeCalendarHtml(name)}</span>${failed?'<b class="legend-error" aria-hidden="true">!</b>':''}`};})}):'';
-  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiPopupStyles()}${calendarCardStyles()}</style><ha-card class="${this._config.density==='compact'?'compact':''}"><div class="content"><header class="header">${this._config.show_title?`<h2>${escapeCalendarHtml(this._config.title||label('title',dutch))}</h2>`:''}<div class="header-actions">${navigation}${info}</div></header>${legend}${this._status()}<div class="calendar-body">${body}</div>${this._infoPopup(dutch,range,days)}${this._popupMarkup.join('')}</div></ha-card>`;
+  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiPopupStyles()}${calendarCardStyles()}</style><ha-card class="${this._config.density==='compact'?'compact':''}"><div class="content"><header class="header">${this._config.show_title?`<h2>${escapeCalendarHtml(this._config.title||label('title',dutch))}</h2>`:''}${tools}</header><div class="header-actions">${navigation}</div>${legend}${this._status()}<div class="calendar-body">${body}</div>${this._infoPopup(dutch,range,days)}${this._popupMarkup.join('')}</div></ha-card>`;
   const horizontal=this.shadowRoot.querySelector('.horizontal');if(horizontal)horizontal.scrollLeft=scroll;
   const calendarBody=this.shadowRoot.querySelector('.calendar-body');if(calendarBody)calendarBody.scrollTop=scrollTop;
   this._updateNextEvent();
   bindUILegend(this,{selector:'[data-calendar]',getId:button=>button.dataset.calendar,hint:label('soloHint',dutch),toggle:id=>this._toggleCalendar(id),isolate:id=>this._toggleCalendarIsolation(id)});
   for(const action of this.shadowRoot.querySelectorAll('[data-nav]'))action.onclick=()=>{const kind=action.dataset.nav;this._offset=kind==='now'?0:this._offset+(kind==='previous'?-1:1);this._startCalendars();this._render();this.shadowRoot.querySelector(`[data-nav="${kind}"]`)?.focus({preventScroll:true});};
+  if(focusCalendar)this._focusLegend(focusCalendar);
+  else if(focusEvent){const target=[...this.shadowRoot.querySelectorAll('[data-calendar-event]')].find(e=>e.dataset.calendarEvent===focusEvent);(target??this.shadowRoot.querySelector('.calendar-tools summary'))?.focus({preventScroll:true});}
+  else if(focusInfo||focusRetry||focusTools)this.shadowRoot.querySelector(focusInfo&&toolsOpen?'[data-info]':'.calendar-tools summary')?.focus({preventScroll:true});
   if(focusedNav)this.shadowRoot.querySelector(`[data-nav="${focusedNav}"]`)?.focus({preventScroll:true});
-  const makePopup=(trigger,popup)=>{let control;control=bindUIPopup({trigger,popup,container:this.shadowRoot.querySelector('ha-card'),beforeOpen:()=>this._popupControllers.forEach(item=>{if(item!==control)item.close();})});this._popupControllers.push(control);};
+  const toolsEl=this.shadowRoot.querySelector('.calendar-tools'),summary=toolsEl.querySelector('summary');
+  const closeTools=()=>{if(toolsEl.contains(this.shadowRoot.activeElement))summary.focus({preventScroll:true});toolsEl.open=false;};
+  toolsEl.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeTools();}};
+  this._toolsOutside=e=>{if(toolsEl.open&&!e.composedPath().includes(toolsEl)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))closeTools();};
+  globalThis.document?.addEventListener?.('pointerdown',this._toolsOutside);
+  const makePopup=(trigger,popup)=>{let control;control=bindUIPopup({trigger,popup,container:this.shadowRoot.querySelector('ha-card'),beforeOpen:()=>this._popupControllers.forEach(item=>{if(item!==control)item.close();})});this._popupControllers.push(control);if(openInfo&&popup.id==='calendar-info'){control.open(false);if(infoPopupFocus)popup.querySelector('[data-ui-popup-close]')?.focus({preventScroll:true});}};
   makePopup(this.shadowRoot.querySelector('[data-info]'),this.shadowRoot.querySelector('#calendar-info'));
   for(const trigger of this.shadowRoot.querySelectorAll('[data-event-popup-id]'))makePopup(trigger,this.shadowRoot.getElementById(trigger.dataset.eventPopupId));
   this.shadowRoot.querySelector('[data-retry]')?.addEventListener('click',()=>{this._calendarRetryFailures=0;this._startCalendars();this._render();});

@@ -267,10 +267,13 @@ export class CalendarCard extends HTMLElement{
   const content=`<div class="calendar-info"><div class="insight-sensors">${rows}</div></div>`;
   return uiPopup({id:'calendar-info',className:'insight-popup',title:dutch?'Gegevens':'Data information',closeLabel:label('close',dutch),content});
  }
- _cleanupUI(){for(const controller of this._popupControllers){controller.close();controller.disconnect();}this._popupControllers=[];}
+ _cleanupUI(){globalThis.document?.removeEventListener?.('pointerdown',this._toolsOutside);for(const controller of this._popupControllers){controller.close();controller.disconnect();}this._popupControllers=[];}
  _render(){
   if(!this._config)return;
   const dutch=isDutch(this._hass),range=this._range(),renderKey=`${this._view}/${range.startKey}/${range.endKey}`,sameRange=this._renderKey===renderKey,scroll=sameRange?this.shadowRoot.querySelector('.horizontal')?.scrollLeft??0:0,scrollTop=sameRange?this.shadowRoot.querySelector('.calendar-body')?.scrollTop??0:0,focusedNav=this.shadowRoot.activeElement?.dataset?.nav;
+  const active=this.shadowRoot.activeElement,focusCalendar=active?.dataset?.calendar,focusEvent=active?.dataset?.calendarEvent,focusInfo=active?.hasAttribute?.('data-info'),focusRetry=active?.hasAttribute?.('data-retry');
+  const toolsOpen=Boolean(this.shadowRoot.querySelector('.calendar-tools')?.open),focusTools=active?.matches?.('.calendar-tools summary');
+  const openInfo=this.shadowRoot.querySelector('#calendar-info:popover-open,#calendar-info[data-fallback-open]'),infoPopupFocus=Boolean(openInfo?.contains(active));
   this._renderKey=renderKey;
   this._cleanupUI();
   if(this._emptyConfig){this._displayEvents=[];this._updateNextEvent();this.shadowRoot.innerHTML=`<style>${calendarCardStyles()}</style><ha-card><div class="content"><div class="status">${label('select',dutch)}</div></div></ha-card>`;return;}
@@ -283,17 +286,26 @@ export class CalendarCard extends HTMLElement{
   const loadingOnly=Object.values(this._statuses).length>0&&Object.values(this._statuses).every(status=>status==='loading')&&!Object.values(this._events).some(events=>events.length);
   const body=!visibleEntities.length?`<p class="status" role="status">${label('allHidden',dutch)}</p>`:loadingOnly?'':this._view==='columns'?this._columns(visibleDays,forecast):this._view==='month'?this._month(visibleDays,range,forecast):this._list(visibleDays,forecast);
   const button=(action,content,name)=>uiButton({content,label:name,title:name,attrs:{'data-nav':action}});
-  const navigation=this._config.show_navigation?`<div class="navigation"><span class="range">${escapeCalendarHtml(this._rangeLabel(range))}</span>${button('previous',cardHeaderIcon('previous'),label('previous',dutch))}${button('now',label('now',dutch),this._view==='month'?label('today',dutch):label('now',dutch))}${button('next',cardHeaderIcon('next'),label('next',dutch))}</div>`:'';
-  const info=uiButton({content:cardHeaderIcon('info'),className:'info-button',label:label('info',dutch),attrs:{'data-info':'','aria-controls':'calendar-info','aria-haspopup':'dialog'}});
+  const navigation=this._config.show_navigation?`<div class="navigation" role="group" aria-label="${dutch?'Datumnavigatie':'Date navigation'}"><span class="range">${escapeCalendarHtml(this._rangeLabel(range))}</span><div class="navigation-actions">${button('previous',cardHeaderIcon('previous'),label('previous',dutch))}${button('now',label('now',dutch),this._view==='month'?label('today',dutch):label('now',dutch))}${button('next',cardHeaderIcon('next'),label('next',dutch))}</div></div>`:'';
+  const info=uiButton({content:cardHeaderIcon('info')+`<span>${label('info',dutch)}</span>`,className:'info-button',label:label('info',dutch),attrs:{'data-info':'','aria-controls':'calendar-info','aria-haspopup':'dialog'}});
+  const toolsLabel=dutch?'Agendaopties':'Calendar tools',tools=`<details class="calendar-tools"${toolsOpen?' open':''}><summary aria-label="${toolsLabel}" title="${toolsLabel}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="calendar-tools-panel">${info}</div></details>`;
   const legend=this._config.show_legend?uiLegend({items:this._config.entities.map(row=>{const name=this._calendarName(row.entity),visible=!this._hiddenCalendars.has(row.entity),failed=this._calendarFailed(row.entity),failure=failed?label('calendarUnavailable',dutch):'';return {id:row.entity,visible,title:label(visible?'hideCalendar':'showCalendar',dutch)+' '+name+'.'+(failure?' '+failure+'.':''),attrs:{'data-calendar':row.entity,'data-calendar-error':failed?'':null,'aria-label':failure?name+'. '+failure:null,style:`--event-color:${this._eventColor(row.entity)}`},content:`<i class="dot"></i><span>${escapeCalendarHtml(name)}</span>${failed?'<b class="legend-error" aria-hidden="true">!</b>':''}`};})}):'';
-  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiPopupStyles()}${calendarCardStyles()}</style><ha-card class="${this._config.density==='compact'?'compact':''}"><div class="content"><header class="header">${this._config.show_title?`<h2>${escapeCalendarHtml(this._config.title||label('title',dutch))}</h2>`:''}<div class="header-actions">${navigation}${info}</div></header>${legend}${this._status()}<div class="calendar-body">${body}</div>${this._infoPopup(dutch,range,days)}${this._popupMarkup.join('')}</div></ha-card>`;
+  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiPopupStyles()}${calendarCardStyles()}</style><ha-card class="${this._config.density==='compact'?'compact':''}"><div class="content"><header class="header">${this._config.show_title?`<h2>${escapeCalendarHtml(this._config.title||label('title',dutch))}</h2>`:''}${tools}</header><div class="header-actions">${navigation}</div>${legend}${this._status()}<div class="calendar-body">${body}</div>${this._infoPopup(dutch,range,days)}${this._popupMarkup.join('')}</div></ha-card>`;
   const horizontal=this.shadowRoot.querySelector('.horizontal');if(horizontal)horizontal.scrollLeft=scroll;
   const calendarBody=this.shadowRoot.querySelector('.calendar-body');if(calendarBody)calendarBody.scrollTop=scrollTop;
   this._updateNextEvent();
   bindUILegend(this,{selector:'[data-calendar]',getId:button=>button.dataset.calendar,hint:label('soloHint',dutch),toggle:id=>this._toggleCalendar(id),isolate:id=>this._toggleCalendarIsolation(id)});
   for(const action of this.shadowRoot.querySelectorAll('[data-nav]'))action.onclick=()=>{const kind=action.dataset.nav;this._offset=kind==='now'?0:this._offset+(kind==='previous'?-1:1);this._startCalendars();this._render();this.shadowRoot.querySelector(`[data-nav="${kind}"]`)?.focus({preventScroll:true});};
+  if(focusCalendar)this._focusLegend(focusCalendar);
+  else if(focusEvent){const target=[...this.shadowRoot.querySelectorAll('[data-calendar-event]')].find(e=>e.dataset.calendarEvent===focusEvent);(target??this.shadowRoot.querySelector('.calendar-tools summary'))?.focus({preventScroll:true});}
+  else if(focusInfo||focusRetry||focusTools)this.shadowRoot.querySelector(focusInfo&&toolsOpen?'[data-info]':'.calendar-tools summary')?.focus({preventScroll:true});
   if(focusedNav)this.shadowRoot.querySelector(`[data-nav="${focusedNav}"]`)?.focus({preventScroll:true});
-  const makePopup=(trigger,popup)=>{let control;control=bindUIPopup({trigger,popup,container:this.shadowRoot.querySelector('ha-card'),beforeOpen:()=>this._popupControllers.forEach(item=>{if(item!==control)item.close();})});this._popupControllers.push(control);};
+  const toolsEl=this.shadowRoot.querySelector('.calendar-tools'),summary=toolsEl.querySelector('summary');
+  const closeTools=()=>{if(toolsEl.contains(this.shadowRoot.activeElement))summary.focus({preventScroll:true});toolsEl.open=false;};
+  toolsEl.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeTools();}};
+  this._toolsOutside=e=>{if(toolsEl.open&&!e.composedPath().includes(toolsEl)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))closeTools();};
+  globalThis.document?.addEventListener?.('pointerdown',this._toolsOutside);
+  const makePopup=(trigger,popup)=>{let control;control=bindUIPopup({trigger,popup,container:this.shadowRoot.querySelector('ha-card'),beforeOpen:()=>this._popupControllers.forEach(item=>{if(item!==control)item.close();})});this._popupControllers.push(control);if(openInfo&&popup.id==='calendar-info'){control.open(false);if(infoPopupFocus)popup.querySelector('[data-ui-popup-close]')?.focus({preventScroll:true});}};
   makePopup(this.shadowRoot.querySelector('[data-info]'),this.shadowRoot.querySelector('#calendar-info'));
   for(const trigger of this.shadowRoot.querySelectorAll('[data-event-popup-id]'))makePopup(trigger,this.shadowRoot.getElementById(trigger.dataset.eventPopupId));
   this.shadowRoot.querySelector('[data-retry]')?.addEventListener('click',()=>{this._calendarRetryFailures=0;this._startCalendars();this._render();});

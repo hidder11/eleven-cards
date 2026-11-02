@@ -1,0 +1,11 @@
+[
+  "dist/eleven-cards.js",
+  "cards/home-controls/dist/eleven-home-controls-card.js",
+  "cards/room-card/dist/eleven-room-card.js",
+  "cards/appliance-planner/dist/eleven-appliance-planner.js",
+  "cards/scene-engine-card/dist/eleven-scene-engine-card.js",
+  "review/index.html",
+  "review/gallery.js",
+  "review/ha-stub.js",
+  "review/assets/user-car.png"
+]

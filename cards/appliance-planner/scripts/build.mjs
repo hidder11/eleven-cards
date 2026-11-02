@@ -1,0 +1,7 @@
+import {readFile,mkdir,writeFile,rename} from 'node:fs/promises';
+const root=new URL('../',import.meta.url);
+const paths=['../../shared/card-theme.js','../dynamic-energy-price-card/src/price-utils.js','src/planner.js','src/providers.js','src/styles.js','src/appliance-planner.js','src/editor.js'];
+const modules=await Promise.all(paths.map(p=>readFile(new URL(p,root),'utf8')));
+const strip=s=>s.replace(/^import .*?;\s*$/gm,'').replace(/^export \{.*?\};?\s*$/gm,'').replace(/^export /gm,'');
+const out=`// Eleven Appliance Planner — standalone advice; optional explicit integration\n(()=>{\n'use strict';\n${modules.map(strip).join('\n')}\nif(!customElements.get('eleven-appliance-planner'))customElements.define('eleven-appliance-planner',ElevenAppliancePlanner);\nif(!customElements.get('eleven-appliance-planner-editor'))customElements.define('eleven-appliance-planner-editor',ElevenAppliancePlannerEditor);\nwindow.customCards=window.customCards||[];if(!window.customCards.some(c=>c.type==='eleven-appliance-planner'))window.customCards.push({type:'eleven-appliance-planner',name:'Eleven Appliance Planner',description:'Standalone appliance start advice with optional integration',preview:true});\n})();\n`;
+await mkdir(new URL('dist/',root),{recursive:true});const temporary=new URL(`dist/.planner-${process.pid}.tmp`,root);await writeFile(temporary,out);await rename(temporary,new URL('dist/eleven-appliance-planner.js',root));console.log('Built appliance-planner/dist/eleven-appliance-planner.js');

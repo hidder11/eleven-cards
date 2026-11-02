@@ -1,0 +1,36 @@
+<!doctype html><html lang="nl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic Appliance Planner QA</title><style>body{margin:0;padding:12px;font:14px system-ui;background:#f3f4f6;color:#20252b}main{max-width:560px;margin:auto}body.dark{background:#111318;--primary-text-color:#eceef3;--secondary-text-color:#adb3c0;--card-background-color:#20232a;--secondary-background-color:#292e37;--divider-color:#444a56;--primary-color:#82b2ff;--text-primary-color:#14243a;--planner-color-scheme:dark}body:not(.dark){--primary-color:#356fc2;--text-primary-color:#fff;--planner-color-scheme:light}.fixture-label{font-size:11px;color:#777;margin:0 auto 8px;max-width:560px}</style><p class="fixture-label">SYNTHETIC tariffs, programs and integration boundary — not a live HA dashboard</p><main id="mount"></main><script src="../dist/eleven-appliance-planner.js"></script><script type="module">
+import {advise} from '../src/planner.js';
+window.calls=[];window.savedConfigs=[];
+const start=Date.parse('2026-10-28T00:00Z');
+window.rows=Array.from({length:192},(_,i)=>({start:new Date(start+i*900000).toISOString(),end:new Date(start+(i+1)*900000).toISOString(),price:.22+.12*Math.sin(i/9)}));
+window.programs=[{id:'wash',name:'Wassen',kind:'washer',programs:[{id:'eco',name:'Eco 40–60',minutes:150,kwh:1},{id:'short',name:'Kort programma',minutes:60,kwh:.6}]},{id:'combi',name:'Wasdroogcombinatie',kind:'washer_dryer',programs:[{id:'combined',name:'Wassen + drogen',minutes:330,kwh:4}]}];
+window.fixtureStatus={protocol_version:2,appliances:structuredClone(window.programs),plans:[],settings:{notification_action:'persistent_notification.create'}};
+window.fixtureStatus.appliances[0].programs[0].profile_mode='simulated';
+window.fixtureStatus.appliances[0].programs[0].has_measured_profile=true;
+window.hassFixture={user:{is_admin:true},locale:{language:'nl-NL'},config:{time_zone:'Europe/Amsterdam',currency:'EUR'},connection:{connected:true},services:{notify:{mobile_app_synthetic:{}}},states:{'sensor.prices':{entity_id:'sensor.prices',state:'.2',attributes:{friendly_name:'Synthetic tariffs',unit_of_measurement:'EUR/kWh',prices:window.rows}},'sensor.eleven_appliance_planner':{entity_id:'sensor.eleven_appliance_planner',state:'0',attributes:window.fixtureStatus}},callWS:async request=>{
+ window.calls.push(structuredClone(request));const {operation,payload}=request;
+ if(request.type==='lovelace/config')return structuredClone(window.fixtureDashboard);
+ if(request.type==='config_entries/get')return [{entry_id:'synthetic-energyzero',domain:'energyzero',title:'Synthetic EnergyZero'}];
+ if(operation==='status')return structuredClone(window.fixtureStatus);
+ if(operation==='transfer_programs'){if(window.rejectTransfer)throw Error('Programmaconflict: bevestig vervangen expliciet');for(const a of payload.appliances){let existing=window.fixtureStatus.appliances.find(d=>d.id===a.id);if(!existing){window.fixtureStatus.appliances.push(structuredClone(a));continue;}for(const p of a.programs){const old=existing.programs.find(x=>x.id===p.id);if(old&&!payload.replace)throw Error('Programmaconflict');if(old)Object.assign(old,p);else existing.programs.push(structuredClone(p));}}return structuredClone(window.fixtureStatus);}
+ if(operation==='preview'||operation==='save'){const p=window.fixtureStatus.appliances.find(a=>a.id===payload.appliance_id).programs.find(p=>p.id===payload.program_id),r=advise(window.rows,p,new Date(),payload.deadline);r.profile_mode=p.profile_mode||'uniform';if(operation==='preview')r.price_intervals=structuredClone(window.rows);if(operation==='save'){const plan={...r,id:'synthetic-plan',appliance_id:payload.appliance_id,program_id:payload.program_id,status:'planned'};window.fixtureStatus.plans.push(plan);return plan;}return r;}
+ if(['start','done','cancel'].includes(operation)){const p=window.fixtureStatus.plans.find(p=>p.id===payload.id);p.status={start:'running',done:'done',cancel:'cancelled'}[operation];return p;}
+ if(operation==='settings'){window.fixtureStatus.settings=payload;return window.fixtureStatus;}
+ if(operation==='edit_program'){Object.assign(window.fixtureStatus.appliances.find(a=>a.id===payload.appliance_id).programs.find(p=>p.id===payload.program_id),{...payload,minutes:Number(payload.minutes),kwh:Number(payload.kwh)});return {};}
+ throw Error('Unexpected synthetic request '+JSON.stringify(request));
+}};
+window.configFixture={type:'custom:eleven-appliance-planner',tariff:{source:'sensor',entity:'sensor.prices'},appliances:structuredClone(window.programs)};
+window.showCard=(mode='standalone')=>{
+ document.querySelector('#mount').innerHTML='';const card=document.createElement('eleven-appliance-planner');window.card=card;
+ const c=structuredClone(window.configFixture);if(mode!=='standalone')c.integration={enabled:true,entity:'sensor.eleven_appliance_planner',programs_snapshot:structuredClone(window.fixtureStatus.appliances)};
+ const h={...window.hassFixture,states:{...window.hassFixture.states}};
+ if(mode==='outage')h.states['sensor.eleven_appliance_planner']={...h.states['sensor.eleven_appliance_planner'],state:'unavailable'};
+ window.fixtureDashboard={title:'Synthetic dashboard',views:[{cards:[structuredClone(c),{type:'markdown',content:'Unchanged sibling'}]}]};
+ document.querySelector('#mount').lovelace={mode:'storage',rawConfig:structuredClone(window.fixtureDashboard),urlPath:'synthetic',saveConfig:async updated=>{window.fixtureDashboard=structuredClone(updated);document.querySelector('#mount').lovelace.rawConfig=structuredClone(updated);}};
+ card.setConfig(c);card.hass=h;document.querySelector('#mount').append(card);return card;
+};
+window.showEditor=(config=window.card.config)=>{
+ document.querySelector('#mount').innerHTML='';const editor=document.createElement('eleven-appliance-planner-editor');window.editor=editor;editor.setConfig(config);editor.hass=window.hassFixture;editor.addEventListener('config-changed',e=>window.savedConfigs.push(structuredClone(e.detail.config)));document.querySelector('#mount').append(editor);return editor;
+};
+window.showCard();
+</script></html>

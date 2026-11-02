@@ -1,3 +1,4 @@
+import {cardThemeStyles} from '../../../../shared/card-theme.js';
 import {uiPrimaryValue} from '../../../../shared/ui-primary-value.js';
 import {uiMetric} from '../../../../shared/ui-metric.js';
 import {headerAtmosphere,observeCardMotion} from '../../../../shared/header-atmosphere.js';
@@ -51,7 +52,7 @@ export class EvccCard extends HTMLElement {
   this._render();
  }
  get hass() { return this._hass; }
- disconnectedCallback() { this._motionCleanup?.(); this._motionCleanup=null; this._cancelMode(); this._cancelSolar(); this._tabController?.disconnect(); clearInterval(this._clockTimer); this._clockTimer = null; this._resetHistory(); this._signature = null; }
+ disconnectedCallback() { this._evccLayoutObserver?.disconnect(); this._motionCleanup?.(); this._motionCleanup=null; this._cancelMode(); this._cancelSolar(); this._tabController?.disconnect(); clearInterval(this._clockTimer); this._clockTimer = null; this._resetHistory(); this._signature = null; }
  _cancelMode() { clearTimeout(this._modeTimer); this._pendingMode = null; this._actionVersion++; }
  getCardSize() { return this._config?.compact ? 8 : 12; }
  getGridOptions() { return {columns: 12, min_columns: 6, rows: this._config?.compact ? 10 : 12, min_rows: 3}; }
@@ -67,9 +68,10 @@ export class EvccCard extends HTMLElement {
   const unit=field==='power'&&sourceUnit==='W'?'kW':sourceUnit;
   let markup=uiEscape(value??'\u2014');
   if(value!=null&&['remaining_duration','charge_duration'].includes(field)&&evccDuration(entity,dutch?'nl':'en')){
-   markup=markup.replace(/(\d+) (u|h|min)\b/g,'$1 <span class="ui-metric-unit">$2</span>');
+   markup=markup.replace(/(\d+) (u|h|min)\b/g,'<span class="evcc-number">$1</span> <span class="ui-metric-unit">$2</span>');
   }else if(value!=null&&evccNumber(entity)!=null&&unit&&value.endsWith(' '+unit)){
-   markup=uiEscape(value.slice(0,-unit.length).trimEnd())+' <span class="ui-metric-unit">'+uiEscape(unit)+'</span>';
+   markup='<span class="evcc-number">'+uiEscape(value.slice(0,-unit.length).trimEnd())+'</span> <span class="ui-metric-unit">'+uiEscape(unit)+'</span>';
+  }else if(value!=null&&evccNumber(entity)!=null){markup='<span class="evcc-number">'+uiEscape(value)+'</span>';
   }
   if(!interactive)return id?markup:'\u2014';
   return id ? `<button type="button" data-entity="${uiEscape(id)}" title="${uiEscape(id)}" aria-label="${uiEscape(evccLabel(field, dutch) + ': ' + (value ?? unavailable))}">${markup}${value == null ? `<span class="sr-only"> ${unavailable}</span>` : ''}</button>` : '—';
@@ -135,9 +137,28 @@ export class EvccCard extends HTMLElement {
   return '<div class="charging-readings" data-ui-metric-grid>'+uiMetric({title:evccLabel('power',dutch),valueContent:this._reading('power',dutch,technical.length>0),action:!technical.length&&!!this._entities.power,attrs:!technical.length?{'data-entity':this._entities.power||''}:{},infoContent:technical.join(' &middot; '),icon:'mdi:lightning-bolt-outline',compact:this._config.compact})+uiMetric({title:view.kind==='done'?(dutch?'Laaddoel':'Charge target'):evccLabel('remaining_duration',dutch),valueContent:time,action:charging&&!!this._entities.remaining_duration,attrs:charging?{'data-entity':this._entities.remaining_duration||''}:{},info:this._config.compact?'':hint,icon:'mdi:timer-outline',compact:this._config.compact})+'</div>';
  }
 
+ _fitEvccLayout() {
+  this._evccLayoutObserver?.disconnect();
+  if (!this.isConnected || !this._config.evcc_enabled) return;
+  const root=this.shadowRoot,stage=root.querySelector('.car-stage'),primary=root.querySelector('.primary-value'),grid=root.querySelector('.charging-readings');
+  if(!stage||!primary)return;
+  const ctx=document.createElement('canvas').getContext('2d');
+  const width=(node,text=node.textContent)=>{const s=getComputedStyle(node);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;return ctx.measureText(text).width+Math.max(0,text.length-1)*(parseFloat(s.letterSpacing)||0);};
+  const fit=()=>{
+   if(!this.isConnected||!this._config.evcc_enabled||!stage.isConnected){this._evccLayoutObserver?.disconnect();return;}
+   const number=primary.querySelector('.primary-number'),unit=primary.querySelector('small'),s=getComputedStyle(primary),base=parseFloat(s.fontSize),slot=(stage.clientWidth-12)/3,reserve=(unit?.getBoundingClientRect().width||0)+(parseFloat(s.columnGap)||0),natural=width(primary,number?.textContent||'');
+   const stacked=base>48&&natural+reserve>slot;stage.toggleAttribute('data-hero-stacked',stacked);
+   if(number){const size=Math.floor(base*Math.min(1,Math.max(20,(stacked?stage.clientWidth:slot)-reserve)/Math.max(1,natural))*100)/100+'px';if(number.style.fontSize!==size)number.style.fontSize=size;}
+   const textWidth=node=>node.classList?.contains('evcc-number')?width(node.closest('.ui-metric-value,dd'),node.textContent):[...node.childNodes].reduce((total,child)=>total+(child.nodeType===3?width(node,child.textContent):textWidth(child)+(parseFloat(getComputedStyle(child).marginInlineStart)||0)),0);
+   if(grid){const minimum=Math.max(...[...grid.children].map(tile=>{const value=tile.querySelector('.ui-metric-value'),label=tile.querySelector('.ui-metric-title');return Math.max(textWidth(value),...label.textContent.split(/\s+/).map(word=>width(label,word)+34))+24;}));const columns=minimum*2+12<=grid.clientWidth?'2':'1';if(grid.style.getPropertyValue('--evcc-reading-columns')!==columns)grid.style.setProperty('--evcc-reading-columns',columns);}
+   for(const span of root.querySelectorAll('.evcc-number')){const parent=span.closest('.ui-metric-value,dd');if(!parent||!parent.clientWidth)continue;const base=parseFloat(getComputedStyle(parent).fontSize),size=Math.floor(base*Math.min(1,parent.clientWidth/Math.max(1,width(parent,span.textContent)))*100)/100+'px';if(span.style.fontSize!==size)span.style.fontSize=size;}
+  };
+  fit();this._evccLayoutObserver=new ResizeObserver(fit);
+  for(const el of [stage,primary,primary.querySelector('small'),grid,...root.querySelectorAll('.ui-metric-value,.ui-metric-title')])if(el)this._evccLayoutObserver.observe(el);
+ }
  _render() {
   if (!this._config) return;
-  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
+  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
   const hass = this._hass, states = hass.states ?? {}, dutch = evccDutch(hass), config = this._config;
   this._ensureClock();
   const previousSolar = this._entities?.solar_share, previousPower = this._entities?.power;
@@ -162,7 +183,7 @@ export class EvccCard extends HTMLElement {
   const soc = evccPercent(states[this._entities.soc]), target = evccPercent(states[this._entities.target_soc]);
   const image = this._vehicleImage ? this._vehicleImage() : evccImageUrl(states[config.image_entity], hass);
   const imageWarning = dutch ? 'Autoafbeelding niet beschikbaar' : 'Vehicle image unavailable';
-  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
+  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-evcc data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
    <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene"><div class="gallery-top">${!configured ? `<header><h2>${uiEscape(this._title(dutch))}</h2></header>` : ''}
    ${offline ? `<p class="notice warning" role="status">${dutch ? 'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.' : 'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>` : ''}
    ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${(this._hasVehicleImage?.()??config.image_entity) ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? `<div class="battery-track" role="progressbar" aria-label="${dutch ? 'Accuniveau' : 'Battery level'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${soc}"><div class="battery-fill" style="width:${soc}%"></div>${target != null ? `<span class="target-marker" style="left:${target}%"></span>` : ''}</div>` : ''}</div>
@@ -195,6 +216,7 @@ export class EvccCard extends HTMLElement {
   else if (focusedEntity) [...this.shadowRoot.querySelectorAll('[data-entity]')].find(button => button.dataset.entity === focusedEntity)?.focus({preventScroll: true});
   else if (focusedMode) [...this.shadowRoot.querySelectorAll('[data-mode]')].find(button => button.dataset.mode === focusedMode)?.focus({preventScroll: true});
   else if (focusedTab) ([...this.shadowRoot.querySelectorAll('[data-ui-tab]')].find(tab => tab.dataset.uiTab === focusedTab) ?? this.shadowRoot.querySelector('[role="tab"][aria-selected="true"]'))?.focus({preventScroll: true});
+  this._fitEvccLayout();
   this._syncHistory();
  }
 }

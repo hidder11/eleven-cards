@@ -166,7 +166,8 @@ try {
  for(const width of [260,280,320,480]){card.style.width=width+'px';check('compact card fits '+width,query('.content').scrollWidth<=query('.content').clientWidth);}
  card.style.width='';card.setConfig(config);
  card.style.width='260px';card.setConfig({...config,metric_primary:'apparent_temperature',metric_secondary:'humidity'});
- check('long labels keep metric values aligned on narrow cards',Math.abs(card.shadowRoot.querySelectorAll('[data-weather-field] .ui-metric-value')[0].getBoundingClientRect().top-card.shadowRoot.querySelectorAll('[data-weather-field] .ui-metric-value')[1].getBoundingClientRect().top)<.1&&query('.content').scrollWidth<=query('.content').clientWidth);
+ const narrowMetrics=Array.from(card.shadowRoot.querySelectorAll('[data-weather-field] .ui-metric-value'));
+ check('long labels keep grouped unbroken metric readings on narrow cards',narrowMetrics.length===2&&narrowMetrics.every(value=>getComputedStyle(value).overflowWrap==='normal'&&value.scrollWidth<=value.clientWidth)&&narrowMetrics[1].getBoundingClientRect().top>narrowMetrics[0].getBoundingClientRect().bottom&&query('.content').scrollWidth<=query('.content').clientWidth);
  card.style.width='';card.setConfig(config);
  card.setConfig({...config,show_forecast:false});await Promise.resolve();check('forecast can be disabled',!query('.forecast'));
  card.setConfig(config);card.hass={...hass,connected:false};await Promise.resolve();check('offline state stops subscriptions and labels old readings',query('.weather-status .ui-metric-info').textContent.includes('Geen verbinding'));

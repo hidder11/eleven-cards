@@ -52,4 +52,73 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .header-region .ui-metric-value button{font:inherit;line-height:inherit;letter-spacing:inherit;min-height:0}.header-region .ui-metric-info button{font:inherit;line-height:inherit;min-height:0;vertical-align:baseline}
 .hero{padding-top:0}.battery-track,.battery-fill{border-radius:var(--ui-metric-radius,8px)}
 .battery-row [data-ui-primary-value]{max-width:160px}
+/* Vehicle media follows the complete summary in both Auto and EVCC. */
+.car-stage{grid-template-columns:minmax(0,1fr);min-height:0}
+.car-stage .picture{position:relative;grid-column:1;grid-row:2;inset:auto;width:100%;height:145px;margin-top:12px}
+[data-ui-metric] .ui-metric-icon{grid-row:1}
+[data-ui-metric] .ui-metric-value{grid-column:1/-1;overflow-wrap:normal;word-break:normal;white-space:nowrap}
+[data-ui-metric] .ui-metric-title{overflow-wrap:normal;word-break:normal}
+[data-ui-metric] .ui-metric-value button{overflow-wrap:normal;word-break:normal;white-space:inherit}
+.car-status .ui-metric-value,.charging-status .ui-metric-value{white-space:normal}
+@container(max-width:340px){.car-readings,.charging-readings{grid-template-columns:minmax(0,1fr);row-gap:12px}}
+.content[data-density=compact] .car-stage{min-height:0}
+.content[data-density=compact] .car-stage .picture{height:108px}
+/* Opt in locally; shared tab defaults remain protected for House. */
+[data-ui-tabs]{border-bottom:0}
+[data-ui-tabs] [role=tab],.mode-options [data-ui-button]{min-height:44px;border-bottom:0;text-decoration:none}
+[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true],.mode-options button[aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
+/* EVCC-only refinement: regular Auto keeps its approved renderer and paint. */
+.content[data-evcc]{--ui-primary-size:44px;--ui-primary-size-compact:44px}
+.content[data-evcc] h2{font-size:16px;font-weight:600}
+.content[data-evcc] .gallery-top{margin:0 0 12px;padding:0;background:none}
+.content[data-evcc] .hero{padding:0;margin:0}
+.content[data-evcc] .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:12px;min-height:0;padding:0}
+.content[data-evcc] .car-stage::before,.content[data-evcc] .car-stage::after{content:none}
+.content[data-evcc] .car-stage .battery-row{grid-column:1;grid-row:1;min-width:0;margin:0;z-index:1}
+.content[data-evcc] .battery-row [data-ui-primary-value]{max-width:100%;width:100%}
+.content[data-evcc] [data-ui-primary-value] .primary-value{font-size:44px;white-space:nowrap;flex-wrap:nowrap;letter-spacing:-.035em}
+.content[data-evcc] .primary-number{white-space:nowrap;display:inline-block}
+.content[data-evcc] .primary-label{overflow-wrap:normal;word-break:normal}
+.content[data-evcc] .car-stage .picture{position:relative;grid-column:2;grid-row:1;width:100%;height:112px;min-height:0;margin:0;inset:auto;overflow:hidden;z-index:0}
+.content[data-evcc] .picture img{position:absolute;width:100%;height:100%;left:calc(50% + var(--evcc-image-offset-x,0px));bottom:calc(-1 * var(--evcc-image-offset-y,0px));max-width:none;margin:0;object-fit:contain;filter:none;transform:translateX(-50%) scale(var(--evcc-image-scale,1));transform-origin:center center}
+.content[data-evcc] .picture ha-icon{--mdc-icon-size:64px}
+.content[data-evcc] .battery-meta{display:none}
+.content[data-evcc] .hero>.battery-track{margin:8px 0 0;height:8px;border-radius:999px;background:var(--secondary-background-color);box-shadow:var(--eleven-material-well,none)}
+.content[data-evcc][data-battery-style=line] .hero>.battery-track{height:4px}
+.content[data-evcc] .battery-fill,.content[data-evcc][data-battery-style=soft] .battery-fill{background:var(--accent-color,var(--primary-color));border-radius:inherit;box-shadow:none}
+.content[data-evcc] .target-marker{top:-2px;height:calc(100% + 4px);width:1px}
+/* EVCC breathing accent: solid fill, no stripes, sweep, glow or moving edge. */
+.content[data-evcc][data-battery-style] .battery-fill::before{content:none;inset:0;width:100%;filter:none;opacity:0;transform:none;box-shadow:none;background:var(--primary-text-color);animation:none}
+@media(prefers-reduced-motion:no-preference){
+ .content[data-evcc][data-battery-style]:is([data-tone=charging],[data-tone=planned]) .battery-fill::before{content:'';animation:evcc-accent-breathe 2.4s ease-in-out infinite;animation-play-state:var(--power-motion,paused);animation-delay:var(--power-delay,0s)}
+}
+.content[data-evcc][data-theme=dark][data-battery-style] .battery-fill::before{background:var(--secondary-background-color);--evcc-breathe-peak:.42}
+@keyframes evcc-accent-breathe{0%,100%{opacity:0}50%{opacity:var(--evcc-breathe-peak,.26)}}
+.content[data-evcc] .charging-status{margin-top:0}
+.content[data-evcc] [data-ui-metric]{background:var(--secondary-background-color);--ui-metric-tone:var(--secondary-text-color)}
+.content[data-evcc] .charging-status .ui-metric-icon{color:var(--status-accent)}
+.content[data-evcc] [data-ui-metric] .ui-metric-value::before{content:none}
+.content[data-evcc] .charging-readings{column-gap:12px;grid-template-columns:repeat(var(--evcc-reading-columns,2),minmax(0,1fr))}
+.content[data-evcc] .ui-metric-title,.content[data-evcc] .ui-metric-info{overflow-wrap:normal;word-break:normal}
+.content[data-evcc] .evcc-panel{padding-top:12px}
+.content[data-evcc] .evcc-tabs{margin-top:16px}
+.content[data-evcc] .mode-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,64px),1fr));gap:8px}
+.content[data-evcc] [data-ui-tabs]{gap:8px;flex-wrap:wrap}
+.content[data-evcc] [data-ui-tabs] [role=tab]{flex:1 1 72px;min-width:0;white-space:normal;overflow-wrap:normal;padding:8px}
+.content[data-evcc] button:focus-visible,.content[data-evcc] input:focus-visible,.content[data-evcc] .plot:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.content[data-evcc] .mode-options [data-ui-button]{padding:8px 4px;font-size:13px}
+.content[data-evcc] [data-ui-tabs] [role=tab][aria-selected=true],.content[data-evcc] [data-ui-tabs] [role=tab][aria-selected=true]:hover,.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true],.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));border-bottom:0;text-decoration:none;box-shadow:var(--eleven-material-selection-well,none)}
+.content[data-evcc] input[data-solar-share]{min-height:44px;accent-color:var(--accent-color,var(--primary-color))}
+.content[data-evcc] input[data-solar-share]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(var(--accent-color,var(--primary-color)),var(--accent-color,var(--primary-color))) left/var(--solar-position) 100% no-repeat,var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}
+.content[data-evcc] input[data-solar-share]::-moz-range-track{height:8px;border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}
+.content[data-evcc] input[data-solar-share]::-moz-range-progress{height:8px;border-radius:999px;background:var(--accent-color,var(--primary-color))}
+.content[data-evcc] input[data-solar-share]::-webkit-slider-thumb{margin-top:-7px;background:var(--ha-card-background,var(--card-background-color,#fff));border-color:var(--accent-color,var(--primary-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.content[data-evcc] input[data-solar-share]::-moz-range-thumb{background:var(--ha-card-background,var(--card-background-color,#fff));border-color:var(--accent-color,var(--primary-color));box-shadow:var(--eleven-material-control-shadow,none)}
+.content[data-evcc] .evcc-number{display:inline-block;white-space:nowrap}
+.content[data-evcc] .ui-metric-icon{grid-row:1}
+.content[data-evcc] [data-ui-metric] .ui-metric-value{grid-column:1/-1}
+.content[data-evcc] [data-ui-tabs][data-ui-card-tabs]{overflow:visible}
+.content[data-evcc] [data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 1 88px;min-width:min-content;max-width:100%;overflow:visible;text-overflow:clip}
+.content[data-evcc] .car-stage[data-hero-stacked]{grid-template-columns:minmax(0,1fr)}
+.content[data-evcc] .car-stage[data-hero-stacked] .picture{grid-column:1;grid-row:2}
 `; }

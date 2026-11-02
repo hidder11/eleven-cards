@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import * as utils from '../src/price-utils.js';
-import * as graph from '../../../shared/graph.js';
+import * as graphModule from '../../../shared/graph.js';
+import {cardThemeStyles} from '../../../shared/card-theme.js';
+const graph={...graphModule,cardThemeStyles};
 import * as localization from '../src/localization.js';
 let Card;
 vm.runInNewContext(readFileSync(new URL('../src/dynamic-energy-price-card.js', import.meta.url),'utf8').replace(/^import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];\s*/gm,''), {
@@ -74,7 +76,7 @@ test('render adds independent kWh scale and measured line in every tariff mode w
   assert.equal(c._chart.consumptionPoints.length,4);
   c._config.show_consumption=false;c._render();const off=c.shadowRoot.innerHTML;
   assert.doesNotMatch(off,/class="price-line consumption-line"|class="chart-label energy-axis-label/);
-  assert.equal(c._chart.plotRight,12);c._config.show_consumption=true;
+  assert.equal(c._chart.plotRight/c._chart.svgWidth*c._renderChartSize.width,10,'off keeps a 10 CSS-pixel endpoint inset, independent of SVG scale');c._config.show_consumption=true;
  }
  c._config.show_consumption_fill=true;c._config.consumption_fill_fade=false;c._render();assert.match(c.shadowRoot.innerHTML,/class="area consumption-area"/);
  assert.ok(c.shadowRoot.innerHTML.indexOf('class="area consumption-area"')<c.shadowRoot.innerHTML.indexOf('class="price-line import-line"'),'energy fill stays behind price lines');

@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/hidder11/eleven-cards",
+  "ref": "develop",
+  "commit": "671cd0fdece05f21ddd80c0c6f430c1e9af17ae6",
+  "files": {
+    "ui-button.js": {
+      "source": "shared/ui-button.js",
+      "sha256": "2bbcf3e27d69aef3b032affcbd63249818950cf7a326f7351e1111d41556fc7f"
+    },
+    "ui-surface.js": {
+      "source": "shared/ui-surface.js",
+      "sha256": "615bed9ca80ddf9c9619003654341343ad2869a50f867e32ef838e229577d2b6"
+    },
+    "ui-metric.js": {
+      "source": "shared/ui-metric.js",
+      "sha256": "c5c69ea97cc47f5cbb91d16459b707fb49813119c891c4a7d7c3a60d026d729a"
+    },
+    "header-backgrounds.js": {
+      "source": "shared/header-backgrounds.js",
+      "sha256": "e8201fadcc7adf62ef119d1eaf8affe81883e45f7d70497dd949a8c3a0147a93"
+    },
+    "header-atmosphere.js": {
+      "source": "shared/header-atmosphere.js",
+      "sha256": "7d8d7f5864c3c6a5792f3df3db2e64db46e4caa71eb74bde3af5ea00ebcddbce"
+    }
+  }
+}

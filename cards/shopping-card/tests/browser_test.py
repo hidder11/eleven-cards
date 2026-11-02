@@ -28,6 +28,10 @@ class BrowserTests(unittest.TestCase):
         self.page.on('pageerror', lambda e:self.errors.append(str(e)))
         self.page.set_content(FIXTURE)
         source = ROOT / 'dist/eleven-shopping-card.js' if __import__('os').environ.get('BUILT') else ROOT / 'src/eleven-shopping-card.js'
+        if not os.environ.get('BUILT'):
+            # Source fixture gets its real shared dependency, just as the build does.
+            theme=(ROOT.parents[1]/'shared/card-theme.js').read_text().replace('export function','function')
+            self.page.add_script_tag(content=theme)
         if source.exists(): self.page.add_script_tag(content=source.read_text())
     def tearDown(self):
         self.page.close()
@@ -228,8 +232,8 @@ class BrowserTests(unittest.TestCase):
                 self.card.screenshot(path=str(out/f'{width}-{"dark" if dark else "light"}.png'))
                 fit=self.card.evaluate('(c)=>({width:c.clientWidth,scroll:c.shadowRoot.querySelector("ha-card").scrollWidth,heading:getComputedStyle(c.shadowRoot.querySelector("h2")).fontSize,padding:getComputedStyle(c.shadowRoot.querySelector(".content")).padding})')
                 self.assertLessEqual(fit['scroll'],fit['width'])
-                self.assertEqual(fit['heading'],'18px')
-                self.assertEqual(fit['padding'],'16px')
+                self.assertEqual(fit['heading'],'16px')
+                self.assertEqual(fit['padding'],'18px')
         self.page.evaluate("items[0].summary='Heel erg lange productnaam met aanvullende instructies voor de boodschappenlijst en ongebrokenwoord'.repeat(3);push()")
         self.card.get_by_role('button',name='Volgorde wijzigen').click()
         self.card.screenshot(path=str(out/'320-long-reorder.png'))
@@ -449,6 +453,30 @@ class BrowserTests(unittest.TestCase):
         self.card.get_by_role('button',name='Omhoog: Tomaten').tap()
         self.assertEqual(self.page.evaluate('calls.at(-1).type'),'todo/item/move')
         self.card.screenshot(path=str(ROOT/'tests/evidence/320-touch.png'))
+        self.assertEqual(self.errors,[])
+
+    def test_quiet_shopping_header_and_existing_edit_affordance(self):
+        self.mount("items[0].summary='Volkoren brood · 2 stuks';items[1].summary='Tomaten · 500 g'")
+        heading=self.card.locator('h2')
+        self.assertEqual(heading.evaluate('(e)=>getComputedStyle(e).fontSize'),'16px')
+        self.assertEqual(heading.evaluate('(e)=>getComputedStyle(e).fontWeight'),'600')
+        icon=self.card.locator('.title-icon')
+        self.assertEqual(icon.get_attribute('aria-hidden'),'true')
+        self.assertEqual(icon.evaluate('(e)=>getComputedStyle(e).boxShadow'),'none')
+        self.assertEqual(icon.bounding_box()['width'],20)
+        self.assertEqual(self.card.locator('[data-edit] .edit-hint[aria-hidden=true]').count(),3)
+        self.assertEqual(self.card.locator('[data-edit] .summary-text').all_text_contents(),['Volkoren brood · 2 stuks','Tomaten · 500 g','Koffie'])
+        self.assertEqual(self.errors,[])
+
+    def test_check_failure_preserves_confirmation_and_keyboard_focus(self):
+        self.mount("h.callService=(...args)=>{calls.push(args);return new Promise((resolve,reject)=>window.rejectCheck=reject)};void 0")
+        check=self.card.get_by_role('checkbox',name='Volkoren brood',exact=True)
+        check.focus();check.press('Space')
+        expect(check).to_be_disabled();expect(check).not_to_be_checked()
+        self.page.evaluate("rejectCheck(Error('Opslaan mislukt'))")
+        expect(check).to_be_enabled();expect(check).not_to_be_checked();expect(check).to_be_focused()
+        expect(self.card.get_by_role('status')).to_have_text('Opslaan mislukt')
+        self.assertEqual(self.page.evaluate('calls.at(-1)'),['todo','update_item',{'item':'a','status':'completed'},{'entity_id':'todo.test'}])
         self.assertEqual(self.errors,[])
 
 if __name__=='__main__': unittest.main(verbosity=2)

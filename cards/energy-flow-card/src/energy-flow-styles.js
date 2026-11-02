@@ -44,6 +44,9 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .flow-arrow{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.flow-route[data-active=false] .flow-arrow{opacity:.24}
 .header-region>[data-ui-metric]{grid-column:1/-1;grid-row:3}
 .flow-secondary{margin-top:12px}
+.content .flow-secondary .ui-metric-title{overflow-wrap:normal;word-break:normal}
+.toolbar .view-period>[data-view-button]{min-height:44px}
+@container(max-width:340px){.content .flow-secondary{grid-template-columns:minmax(0,1fr)}}
 .content[data-animated=false] .flow-dot,.content[data-view=history] .flow-dot{display:none}
 :host([data-motion-paused]) .flow-dot{animation-play-state:paused}
 .content[data-compact=true] .header-region{row-gap:12px}
