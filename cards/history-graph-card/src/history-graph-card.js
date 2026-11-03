@@ -469,10 +469,11 @@ export class HistoryGraphCard extends HTMLElement {
  _historyStyles(){return `
  :host{min-height:var(--history-required-height,0px)}
  ha-card{height:100%;min-height:var(--history-required-height,0px)}
- .card-header{display:flex;align-items:center;gap:4px 8px;margin:0 0 4px;position:relative}
- .card-header h2{font-size:16px;line-height:1.3;font-weight:600;flex:1 1 0;margin:0}
- .history-tools{margin-inline-start:auto;flex:none}
+ .card-header{display:flex;align-items:center;gap:12px 8px;margin:0 0 4px;position:relative}
+ .card-header h2{font-size:16px;line-height:24px;font-weight:600;flex:1 1 0;margin:0}
+ .history-tools{margin-inline-start:auto;flex:none;height:24px}
  .history-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+ .history-tools summary{position:relative;top:-10px}
  .history-tools summary::-webkit-details-marker{display:none}
  .history-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
  .history-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}

@@ -27,6 +27,8 @@ Entity IDs are examples. Bounds are optional; without them the color scale follo
 
 ## Add sensors to one total
 
+The colour legend places its minimum and maximum above a gradient bar spanning the full available card width, including on narrow cards and with long units.
+
 `entity` remains the primary sensor. Optional `sum_entities` lists **additional** sensor IDs; do not repeat the primary sensor. Choose **Sensoren optellen / Add sensors** in the native editor. All selected sensors must exist and have exactly the same current unit (including unitless sensors); the card does not convert units. Configure at most seven distinct additional sensors, eight contributors in total. Malformed IDs, duplicates, non-sensors and invalid types are rejected. An omitted or empty list preserves existing single-sensor behavior.
 
 ```yaml

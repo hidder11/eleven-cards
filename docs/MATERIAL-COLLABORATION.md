@@ -17,20 +17,17 @@ Checkout: `git fetch origin && git switch --track origin/feat/eleven-material-co
 Preview vanaf de repositoryroot: `python3 -m http.server 8080 --bind 127.0.0.1`, open daarna lokaal `/review/`.
 De preview heeft geen Home Assistant-login of verbinding met apparaten nodig. De autoafbeelding is uitsluitend previewmateriaal; geen productieafhankelijkheid.
 
-## Opnieuw gecontroleerd voor overdracht
+## Huidige controle en preview - 3 november 2026
 
-- `npm run check`: geslaagd.
-- Root Node-tests na build: 579 tests, 578 geslaagd, 1 bestaande fout in `tests/collection.test.mjs`: Heatmap sizing zonder shadowRoot (`getCardSize`, querySelector). Niet gerepareerd als onderdeel van deze snapshot.
-- Energy: 74 Node-tests en 20 Python-tests geslaagd.
-- History: 137 Node-tests geslaagd.
-- House-pilot opnieuw gebouwd: exacte oorspronkelijke bundlehash `052c520f4fc2fee3555678a77e62dcf61067e8938dd9ac31cbba598aee376930`.
-- `git diff --check`: geslaagd.
+- De hoofdpagina toont alle 18 bestaande kaarten in hun behouden beoordelingsgroepen, met een link per kaart naar de detailpagina.
+- Elke detailpagina toont drie configuraties van de productiekaart, inclusief de bijbehorende JSON. De losse ontwerpstudies zijn verwijderd.
+- Alle previewgegevens zijn fictief. Knoppen sturen geen opdrachten naar Home Assistant of echte apparaten.
+- `npm test`: 593 root-tests, 74 Energy-tests, 20 Python-tests en 137 History-tests geslaagd.
+- `npm run check` en `git diff --check`: geslaagd.
+- De productiebronnen en gegenereerde standalone- en collectiebundels zijn opnieuw gebouwd. De eerdere bron/bundelverschillen en genoemde Heatmap-testfout zijn opgelost.
+- De DOM-/layoutcontrole van de gallery en alle 54 configuraties slaagt, inclusief thema, mobiele breedte en een onbekende kaart. Deze controle maakt geen screenshots en gebruikt geen live Home Assistant.
 
-Let op: `npm test` bouwt eerst alles, stopt bij de root-testfout en voert daardoor Energy/History niet zelf uit; die zijn hierboven afzonderlijk uitgevoerd.
-
-## Open voor samenwerking
-
-Een volledige rebuild wijzigt momenteel vier bestaande previewbundles: History standalone, Energy Flow standalone/test en de collectie. Voor deze branch zijn bewust de oorspronkelijke previewbytes teruggezet. Dit is een open bron/build-synchronisatiepunt: vervang of publiceer de preview niet blind met een build zonder die verschillen te beoordelen. De bestaande browser-/visuele rapporten beschrijven eerdere lokale controles, niet een nieuwe volledige browsermatrix op deze branch.
+## Historische context
 
 Historische documenten en `scripts/verify-*.py` verwijzen soms naar lokale `qa-evidence` of werkmappen. Dat bewijs is niet meegepubliceerd en die verificaties zijn niet allemaal portable. Gebruik de normale bronnen/tests en bovenstaande controles als startpunt.
 
@@ -48,7 +45,7 @@ De collectie is opnieuw samengesteld met de nieuwe History/Bar-bundels. Dit neem
 
 Op verzoek geldt de informatie-well nu ook voor Staaf, Tijdlijn en Agenda. De specifieke mapping raakt alleen de sensor-/agendablokken in de informatiepopup. De Standaard-knopcorrectie blijft beperkt tot History. De browserrunner controleert nu 48 popupgevallen: vier kaarten × drie breedtes × native/Material × licht/donker. Alle gevallen slagen. De opnieuw uitgevoerde root-tests hebben dezelfde bestaande Heatmap-fout (578/579); History 137/137 en syntax-/whitespacecontroles slagen.
 
-[Vijf tabbladvarianten](../review/tab-variants.html) zijn afzonderlijke interactieve voorstellen die het bestaande `uiTabs`/`bindUITabs` gebruiken: verbonden strook, dossierlippen, paneelkop, compacte teksttabs en icoon/tekst. Gedeelde productiestijlen en tabbladgedrag zijn hiervoor niet gewijzigd. Start de lokale server zoals hierboven en open `/review/tab-variants.html`. De pagina leest het bestaande themabestand en kan native/Material en licht/donker tonen. DOM-/layoutcontrole slaagt voor alle 60 combinaties van vijf varianten × drie breedtes × twee stijlen × licht/donker, met pijltjestoetsen, Home/End, paneelkoppelingen, 44px-doelen, periodekeuze en overflowcontrole. Geen screenshots gemaakt; visuele gebruikerskeuze staat nog open. De openbare preview is niet bijgewerkt.
+De eerdere losse tabbladstudie is verwijderd. De gekozen tabbladstijl blijft beschikbaar in de productiekaarten en hun configuratievoorbeelden via de [reviewgallery](../review/index.html).
 
 Op verzoek zijn zes vervolgvoorstellen toegevoegd: 1A gelijke gecentreerde vakken, 1B gelijke links uitgelijnde vakken, 1C aaneengesloten segmenten, 4A teksttabs over de volle breedte, 4B een compacte tekstgroep en 4C teksttabs met verticale scheidingen. De nieuwe stroken gebruiken gelijke gridkolommen en expliciete tekstuitlijning; bij selectie blijft de tekst op dezelfde hoogte. De eerdere vijf voorstellen blijven uitklapbaar beschikbaar. De 72 nieuwe DOM-/layoutgevallen slagen voor drie breedtes en vier themacombinaties, inclusief gelijke kolommen/hoogte, tekstpassing, toetsenbordbediening en overflow. Alleen de lokale voorstelpagina is aangepast.
 

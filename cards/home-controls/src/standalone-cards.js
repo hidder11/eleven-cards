@@ -1,4 +1,5 @@
 import {cardThemeStyles} from '../../../shared/card-theme.js';
+import {uiSlider,syncUISlider,uiBarStyles} from '../../../shared/ui-bar.js';
 import {available,finite,actionRequest} from './control-utils.mjs';
 import {esc,icon,CSS,CSSescape} from './shared-ui.js';
 import {normalizeItem,isNL,safeColor,controlRequest,wasteRows,groupWaste,dayKey} from './standalone-utils.mjs';
@@ -57,10 +58,10 @@ class StandaloneCard extends HTMLElement{
   let body=this.kind==='actions'?this._actions(items):this.kind==='controls'?this._controls(items):this._waste(items);
   if(!items.length)body=`<div class="empty">${this.t('Voeg onderdelen toe via de kaartinstellingen.','Add items in the card settings.')}</div>`;
   const title=c.title??TITLES[this.kind][this.nl?0:1];
-  this.shadowRoot.innerHTML=`<style>${STYLES}${cardThemeStyles({controls:'.action,.device-controls button:not(.toggle.on)',selected:'.device-controls .toggle.on'})}${this.kind==='actions'?ACTION_STYLES:''}</style><ha-card><div class="content">${title?`<div class="heading"><h2>${esc(title)}</h2></div>`:''}${body}<div class="feedback ${this._error?'error':''}" role="status" aria-live="polite">${esc(this._message)}</div></div></ha-card>`;
+  this.shadowRoot.innerHTML=`<style>${STYLES}${uiBarStyles()}${cardThemeStyles({controls:'.action,.device-controls button:not(.toggle.on)',selected:'.device-controls .toggle.on'})}${this.kind==='actions'?ACTION_STYLES:''}</style><ha-card><div class="content">${title?`<div class="heading"><h2>${esc(title)}</h2></div>`:''}${body}<div class="feedback ${this._error?'error':''}" role="status" aria-live="polite">${esc(this._message)}</div></div></ha-card>`;
   this.shadowRoot.querySelectorAll('[data-info]').forEach(b=>b.addEventListener('click',()=>this.more(b.dataset.info)));
   this.shadowRoot.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>this.activate(Number(b.dataset.index),b.dataset.action)));
-  this.shadowRoot.querySelectorAll('input[data-level]').forEach(b=>{b.addEventListener('input',()=>{b.nextElementSibling.value=b.value+'%';});b.addEventListener('change',()=>this.activate(Number(b.dataset.level),'level',Number(b.value)));});
+  this.shadowRoot.querySelectorAll('input[data-level]').forEach(b=>{b.addEventListener('input',()=>{syncUISlider(b);b.nextElementSibling.value=b.value+'%';});b.addEventListener('change',()=>this.activate(Number(b.dataset.level),'level',Number(b.value)));});
   this.shadowRoot.querySelector('[data-retry]')?.addEventListener('click',()=>this._refresh(true));
   if(focus)this.shadowRoot.querySelector(`[data-key="${CSSescape(focus)}"]`)?.focus();
   if(this.kind==='actions'&&typeof ResizeObserver==='function'){
@@ -105,7 +106,7 @@ class StandaloneCard extends HTMLElement{
    controls=`<button class="toggle ${s?.state==='on'?'on':''}" type="button" data-index="${i}" data-action="toggle" data-key="${i}-toggle" aria-label="${esc(name+': '+this.t('Schakelen','Toggle'))}" aria-pressed="${s?.state==='on'}" ${!request('toggle')||this._pending?'disabled':''}>${s?.state==='on'?this.t('Uit','Off'):this.t('Aan','On')}</button>`;
   }
   const level=domain==='light'&&finite(a.brightness)?Math.round(Number(a.brightness)/255*100):domain==='fan'?a.percentage:domain==='cover'?a.current_position:null;
-  if(domain!=='cover'&&request('level',50))extra=`<label class="level"><input type="range" min="0" max="100" step="${domain==='fan'&&finite(a.percentage_step)&&Number(a.percentage_step)>0?esc(a.percentage_step):1}" value="${finite(level)?esc(level):0}" data-key="${i}-level" data-level="${i}" aria-label="${esc(name+': '+this.t('Niveau','Level'))}" ${this._pending?'disabled':''}><output>${finite(level)?esc(level)+'%':'—'}</output></label>`;
+  if(domain!=='cover'&&request('level',50))extra=`<label class="level">${uiSlider({value:finite(level)?Number(level):0,step:domain==='fan'&&finite(a.percentage_step)&&Number(a.percentage_step)>0?Number(a.percentage_step):1,disabled:this._pending,attrs:{'data-key':`${i}-level`,'data-level':String(i),'aria-label':name+': '+this.t('Niveau','Level')}})}<output>${finite(level)?esc(level)+'%':'—'}</output></label>`;
   return `<div class="device"><button type="button" class="identity" data-info="${esc(e.entity)}" data-key="${i}-info">${icon(e.icon||GLYPHS[domain]||'mdi:tune')}<span>${esc(name)}<small>${esc(status)}</small></span></button><div class="device-controls">${controls}</div>${extra}</div>`;
  }).join('');}
  _waste(items){

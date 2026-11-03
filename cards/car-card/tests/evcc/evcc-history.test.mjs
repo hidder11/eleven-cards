@@ -4,6 +4,20 @@ import {evccHistoryPoints,evccHistoryMethods,evccSessionWindow,evccHistoryArea} 
 const start=Date.parse('2026-10-21T10:00:00Z'), end=start+3600000;
 const row=(offset,state,id='sensor.power')=>({entity_id:id,state,last_changed:new Date(start+offset).toISOString()});
 
+test('history labels, readings and cursor use the same plot bounds',()=>{
+ const card=Object.assign({_entities:{power:'sensor.power'},_historyData:[{time:start,value:0},{time:(start+end)/2,value:1},{time:end,value:2}],_historyRange:{start,end},_hass:{language:'en',config:{time_zone:'UTC'}},shadowRoot:{querySelector:()=>null}},evccHistoryMethods);
+ const markup=card._historyMarkup(false),{x,y}=card._historyGeometry;
+ assert.deepEqual([x(start),x((start+end)/2),x(end)],[0,150,300]);
+ assert.deepEqual([y(2),y(1),y(0)],[8,60,112]);
+ assert.match(markup,/class="chart-scale"/);assert.match(markup,/class="grid-line grid-zero" d="M0 112H300"/);
+ const listeners={},cursor={setAttribute(name,value){this[name]=value;},removeAttribute(){}},dot={style:{},removeAttribute(){},setAttribute(){}},value={},heading={};
+ const tooltip={style:{},textContent:'Reading',querySelector:selector=>selector==='strong'?heading:value};
+ const plot={querySelector:selector=>({'.tooltip':tooltip,'.cursor':cursor,'.point':dot}[selector]),addEventListener:(event,handler)=>listeners[event]=handler,getBoundingClientRect:()=>({left:100,width:480})};
+ card.shadowRoot={querySelector:selector=>selector==='.plot'?plot:{}};card._bindHistory();
+ listeners.pointermove({clientX:340});assert.equal(card._historyIndex,1);assert.equal(cursor.d,'M150 8V112');assert.equal(dot.style.left,'50%');assert.equal(dot.style.top,'50%');
+ listeners.keydown({key:'End',preventDefault(){}});assert.equal(card._historyIndex,2);assert.equal(dot.style.left,'100%');assert.equal(value.textContent,'2 kW');
+});
+
 test('stepped area follows readings and closes each segment without bridging missing history',()=>{
  assert.equal(evccHistoryArea([[0,80],[10,40],[20,NaN],[30,60],[40,20]],100),'M 0 80 H 10 V 40 L 10 100 H 0 Z M 30 60 H 40 V 20 L 40 100 H 30 Z');
  assert.equal(evccHistoryArea([[0,NaN],[10,40],[20,NaN]],100),'');

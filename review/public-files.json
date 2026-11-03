@@ -6,6 +6,11 @@
   "cards/scene-engine-card/dist/eleven-scene-engine-card.js",
   "review/index.html",
   "review/gallery.js",
+  "review/theme.js",
   "review/ha-stub.js",
-  "review/assets/user-car.png"
+  "review/assets/user-car.png",
+  "review/fixtures.js",
+  "review/detail.html",
+  "review/detail.css",
+  "review/detail.js"
 ]

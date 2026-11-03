@@ -21,7 +21,8 @@ for(const language of ['nl','en'])for(const unavailable of [false,true])test(`Co
   'sensor.waste':{state:unavailable?'unavailable':'2026-11-03',attributes:{friendly_name:'Papier'}}}};
  for(const [tag,config] of [['eleven-controls-card',{entities:['light.living','climate.room']}],['eleven-waste-card',{entities:[{entity:'sensor.waste',source:'date'}]}]]){
   const a=before(tag),b=after(tag);for(const c of [a,b]){c.setConfig(config);c.hass=hass;}
-  const markup=html=>html.replace(/<style>[\s\S]*?<\/style>/g,'');
+  // Ignore the intentional shared-slider paint; compare every functional attribute.
+  const markup=html=>html.replace(/<style>[\s\S]*?<\/style>/g,'').replace(/<input\b([^>]*)>/g,(_,attrs)=>'<input '+(attrs.replace(/\sdata-ui-slider=""/g,'').replace(/\sstyle="--ui-bar-position:[^"]*"/g,'').match(/[^\s=]+(?:="[^"]*")?/g)||[]).sort().join(' ')+'>');
   assert.equal(markup(b.shadowRoot.innerHTML),markup(a.shadowRoot.innerHTML),tag);
  }
 });

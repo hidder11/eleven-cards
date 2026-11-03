@@ -1,6 +1,10 @@
 # Eleven Car (beta)
 
-A single vehicle card with optional EVCC integration. The vehicle image, header, eleven backgrounds and soft fade are shared between both modes. The standalone module includes the EVCC engine; no other card resource is needed.
+The percentage bar and EVCC solar-preference slider reuse the shared recessed bar component. The default track is 12px high; explicit `slim` and `line` settings retain 8px and 4px heights. The EVCC bar keeps its target marker and shows the selected broad, soft light band C only while charging with positive measured power, below the target, and online. Its fill remains the actual SOC; planned/waiting states do not animate. Reduced motion disables the band, and `animation_speed` still adjusts its tempo. The ordinary Car percentage bar remains static because it has no charging-state source.
+
+The EVCC charging-history plot groups its kW unit, value scale and time labels inside one themed recessed chart surface, matching History Graph. The title stays above the chart, and the plot has no separate inset shadow. Axis alignment, Recorder gaps and pointer/keyboard inspection remain shared with the existing history behavior.
+
+A single vehicle card with optional EVCC integration. The vehicle image, header, eleven backgrounds and soft fade are shared between both modes. Both modes use the same layout without a visible card title, like Weather; the configured title remains the accessible card name and vehicle image description. The standalone module includes the EVCC engine; no other card resource is needed.
 
 The visual editor starts with **Use EVCC integration**. When off, it offers a percentage and three custom readings. When on, it offers the loadpoint sensor, entity overrides and visible charging tabs. Settings for the other mode remain stored when you switch.
 
@@ -77,7 +81,7 @@ For example, `field_2_attribute: fuel_range`, `field_2_unit: km` and `field_2_de
 
 For a fixed percentage, omit `percentage_entity` and set `percentage: 65`. This only changes the card display; it does not write to a sensor. A configured percentage entity takes precedence, including when unavailable. Values are clamped to 0–100.
 
-Non-EVCC range appears under the title, in the same position as EVCC range. The **Range** editor section offers hide (`range_source: none`, default), entity (`entity`) or estimate (`calculated`). With EVCC enabled, the loadpoint's own range source is used instead; the custom settings remain stored.
+Non-EVCC range appears under the percentage, in the same position as EVCC range. The **Range** editor section offers hide (`range_source: none`, default), entity (`entity`) or estimate (`calculated`). With EVCC enabled, the loadpoint's own range source is used instead; the custom settings remain stored.
 
 For a remaining-range sensor:
 

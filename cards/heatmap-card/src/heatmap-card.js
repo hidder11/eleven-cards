@@ -287,7 +287,6 @@ export class HeatmapCard extends HTMLElement {
   _layoutMatrixLabels(){
     const root=this.shadowRoot,scroll=root.querySelector('.matrix-scroll');if(!scroll||!globalThis.getComputedStyle)return;
     const ctx=document.createElement('canvas').getContext('2d');if(!ctx)return;
-    const legend=root.querySelector('.legend');if(legend){let width=76;for(const value of legend.querySelectorAll('.legend-value')){ctx.font=getComputedStyle(value).font;width+=ctx.measureText(value.textContent).width;}legend.classList.toggle('wide-values',width>legend.clientWidth);}
     const labels=[...root.querySelectorAll('.day,.hours span')];let rowHeight=this._config.cell_height;
     for(const node of labels)rowHeight=Math.max(rowHeight,Math.ceil(parseFloat(getComputedStyle(node).fontSize)*1.4));
     const measure=node=>{ctx.font=getComputedStyle(node).font;return Math.ceil(ctx.measureText(node.dataset.visualCaption??node.dataset.caption??node.textContent).width);};
@@ -364,18 +363,19 @@ export class HeatmapCard extends HTMLElement {
       .cell:hover{box-shadow:inset 0 0 0 2px var(--primary-text-color,#20252b)}
       .missing{background:repeating-linear-gradient(135deg,transparent,transparent 3px,var(--divider-color,#ddd) 3px,var(--divider-color,#ddd) 5px);box-shadow:inset 0 0 0 1px var(--divider-color,#ddd)}.outside{opacity:.35}
       .partial:after{content:'';position:absolute;right:0;bottom:2px;width:min(4px,100%);height:4px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1px #20252b}
-      .legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--secondary-text-color,#666);margin:8px 0 12px;font-variant-numeric:tabular-nums}
-      .ramp{width:100px;height:10px;border-radius:3px;flex-shrink:1;background:${scale.gradient}}
-      .legend-value{min-width:min-content;max-width:100%}.scale-number{display:inline-block;white-space:nowrap}.scale-unit{overflow-wrap:anywhere}.legend.wide-values{flex-wrap:wrap}.legend.wide-values .ramp{order:3;flex-basis:100%}.legend-value:last-child{margin-inline-start:auto}
+      .legend{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:6px 8px;font-size:11px;color:var(--secondary-text-color,#666);margin:8px 0 12px;font-variant-numeric:tabular-nums}
+      .ramp{grid-column:1/-1;grid-row:1;width:100%;height:10px;border-radius:3px;background:${scale.gradient}}
+      .legend-value{min-width:min-content;max-width:100%}.scale-number{display:inline-block;white-space:nowrap}.scale-unit{overflow-wrap:anywhere}.legend-value{grid-row:2}.legend-value:last-child{margin-inline-start:auto}
       .tooltip{pointer-events:auto}.tooltip .tooltip-label{color:var(--secondary-text-color,#666)}.tooltip .tooltip-value{color:var(--primary-text-color,#20252b);font-style:normal}
       .status{font-size:12px;line-height:1.5;margin:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
       .retry{font:inherit;color:inherit;background:transparent;border:1px solid var(--divider-color,#ddd);border-radius:5px;min-height:44px;min-width:44px;padding:4px 10px;cursor:pointer}.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3)}
       @media(forced-colors:active){.cell{border:1px solid CanvasText}.missing{border-style:dashed}}
     ${cardThemeStyles({chartUI:true,plots:'.matrix-well',wells:'.insight-sensor[data-ui-detail-surface]',controls:'.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period],.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}${uiBalancedTabsStyles()}
-.content>.card-header{display:flex;align-items:center;gap:4px 8px;margin:0 0 4px;position:relative}
-.content>.card-header h2{font-size:16px;line-height:1.3;font-weight:600;flex:1 1 0;margin:0}
-.chart-tools{margin-inline-start:auto;flex:none}
+.content>.card-header{display:flex;align-items:center;gap:12px 8px;margin:0 0 4px;position:relative}
+.content>.card-header h2{font-size:16px;line-height:24px;font-weight:600;flex:1 1 0;margin:0}
+.chart-tools{margin-inline-start:auto;flex:none;height:24px}
 .chart-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+.chart-tools summary{position:relative;top:-10px}
 .chart-tools summary::-webkit-details-marker{display:none}
 .chart-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
 .chart-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}

@@ -38,6 +38,8 @@ Controls derive from actual capabilities: thermostat single setpoint up/down, co
 
 No optimistic device-state changes; buttons show actual HA state. Requests are guarded against duplicates while pending, errors are shown inline. Unavailable data displays explicitly and never becomes zero.
 
+Brightness and fan sliders use the same shared recessed 12px track and round thumb as EVCC's solar preference. Input previews update the filled track; the existing change handler sends the service request. Source steps, limits, pending/disabled behavior and native arrow-key operation are retained.
+
 ```yaml
 type: custom:eleven-controls-card
 title: Office

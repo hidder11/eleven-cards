@@ -1,4 +1,5 @@
 import {uiEscape} from '../../../../shared/ui-button.js';
+import {uiSlider,syncUISlider} from '../../../../shared/ui-bar.js';
 import {evccPercent, evccSolarRange, evccValidSolarValue} from './evcc-utils.js';
 
 const solarDutch = hass => String(hass?.locale?.language ?? hass?.language ?? 'en').startsWith('nl');
@@ -22,12 +23,12 @@ export const evccSolarMethods = {
   const value = this._pendingSolar?.value ?? this._solarDraft ?? current;
   const disabled = !range || this._offline() || !!this._pendingSolar || typeof this._hass.callService !== 'function';
   const label = dutch ? 'Zonnevoorkeur' : 'Solar preference';
-  return `<div class="solar-setting"><dl class="metrics solar-metric"><div><dt><label for="solar-share">${label}</label></dt><dd><output for="solar-share" data-solar-output>${this._config.show_controls ? this._solarValue(value) : this._reading('solar_share', dutch)}</output>${this._config.show_controls ? `<input id="solar-share" type="range" data-solar-share min="${range?.min ?? 0}" max="${range?.max ?? 100}" step="${range?.step ?? 10}" value="${value ?? 0}" aria-label="${label}" aria-valuetext="${uiEscape(value == null ? (dutch ? 'Niet beschikbaar' : 'Unavailable') : value + '%')}" aria-describedby="solar-preference-description"${disabled ? ' disabled' : ''}>` : ''}</dd></div></dl><span id="solar-preference-description" class="sr-only">${dutch ? 'Minimum aandeel zon' : 'Minimum solar share'}</span><p id="solar-hint" class="solar-hint" hidden>${uiEscape(evccSolarHint(value, dutch))}</p>${this._pendingSolar ? `<p class="notice" role="status">${dutch ? 'Solar share instellen…' : 'Setting solar share…'}</p>` : ''}${this._solarError ? `<p class="notice error" role="alert">${uiEscape(this._solarError)}</p>` : ''}</div>`;
+  return `<div class="solar-setting"><dl class="metrics solar-metric"><div><dt><label for="solar-share">${label}</label></dt><dd><output for="solar-share" data-solar-output>${this._config.show_controls ? this._solarValue(value) : this._reading('solar_share', dutch)}</output>${this._config.show_controls ? uiSlider({value:value??0,min:range?.min??0,max:range?.max??100,step:range?.step??10,disabled,attrs:{id:'solar-share','data-solar-share':'','aria-label':label,'aria-valuetext':value==null?(dutch?'Niet beschikbaar':'Unavailable'):value+'%','aria-describedby':'solar-preference-description'}}) : ''}</dd></div></dl><span id="solar-preference-description" class="sr-only">${dutch ? 'Minimum aandeel zon' : 'Minimum solar share'}</span><p id="solar-hint" class="solar-hint" hidden>${uiEscape(evccSolarHint(value, dutch))}</p>${this._pendingSolar ? `<p class="notice" role="status">${dutch ? 'Solar share instellen…' : 'Setting solar share…'}</p>` : ''}${this._solarError ? `<p class="notice error" role="alert">${uiEscape(this._solarError)}</p>` : ''}</div>`;
  },
  _bindSolar() {
   const input = this.shadowRoot.querySelector('[data-solar-share]');
   if (!input) return;
-  const progress = () => input.style.setProperty('--solar-position', ((Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min)) * 100) + '%');
+  const progress = () => syncUISlider(input);
   progress();
   input.addEventListener('input', progress);
   input.addEventListener('pointerdown', () => { if (!input.disabled) this._solarEditing = true; });

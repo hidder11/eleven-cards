@@ -110,10 +110,11 @@ export const TimelineView={
 ${cardHeaderStyles()}
 ${periodControlsStyles()}
 ${chartInsightStyles()}
-.content>.card-header{display:flex;align-items:center;gap:4px 8px;margin:0 0 12px;position:relative}
-.content>.card-header h2{font-size:16px;line-height:1.3;font-weight:600;flex:1 1 0;margin:0}
-.chart-tools{margin-inline-start:auto;flex:none}
+.content>.card-header{display:flex;align-items:center;gap:12px 8px;margin:0 0 12px;position:relative}
+.content>.card-header h2{font-size:16px;line-height:24px;font-weight:600;flex:1 1 0;margin:0}
+.chart-tools{margin-inline-start:auto;flex:none;height:24px}
 .chart-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+.chart-tools summary{position:relative;top:-10px}
 .chart-tools summary::-webkit-details-marker{display:none}
 .chart-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
 .chart-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}

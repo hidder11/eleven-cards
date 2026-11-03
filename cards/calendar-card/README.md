@@ -47,7 +47,7 @@ Calendar data comes from Home Assistant's `calendar/event/subscribe` WebSocket A
 
 The first appointment that starts in the future uses a slightly stronger title, without an extra background or outline. The marker advances automatically without replacing an open popup. A small warning in the legend identifies a calendar whose subscription failed or whose entity is unavailable; the other calendars remain usable.
 
-The calendar has its own day and month navigation. Graph timeframe synchronization is not applied to calendar events. The calendar layout uses Home Assistant theme colors and Dutch or English labels. Its day and month boundaries use the configured Home Assistant timezone, including 23 and 25-hour dates.
+The date button opens the same shared period popup as the graphs. Choose a day count (1, 3, 5, 7, 14 or 30 days), Today, This week, This month, or a custom range up to 366 days. Previous/Now/next navigate the selected window, including future dates; Now returns a custom selection to the configured view. Selection is local to the card and does not change YAML. The configured list, columns or month layout remains; month grids retain complete Monday-first week rows. Graph timeframe synchronization is not applied to calendar events. The calendar layout uses Home Assistant theme colors and Dutch or English labels. Its day and month boundaries use the configured Home Assistant timezone, including 23 and 25-hour dates.
 
 In a Home Assistant Sections view, resize the card vertically in the Layout tab. The heading and legend remain above a scrollable event area. All three views support the chosen height; masonry dashboards use the card's content estimate.
 
@@ -58,3 +58,7 @@ For a local browser preview with generated appointments, open [the test page](qa
 The visual editor now uses the same Compact layout switch in Appearance as Car, Weather and Energy. YAML accepts compact: true/false as well as the existing density: compact/expanded. An explicit compact value takes precedence on input; the editor saves the established density key to avoid conflicting persisted settings. Compact reduces event density while retaining the same 16 px outer padding as the other cards.
 
 The information popup uses one shared detail surface per calendar, with the appointment count and next appointment. All shared popups use 12px inner padding, including below the last detail surface.
+
+The day list uses the selected Material option A: a fixed time column beside each appointment, with a fine divider under each date. This applies to both density settings; compact still hides secondary event text. Existing `view: list` configurations use this layout automatically.
+
+The [calendar detail page](../../review/detail.html?card=calendar-card) shows three configurations of the production card: a two-day list, five day columns and a month overview. All examples use fictional appointments and preserve the existing navigation, calendar filters and event details.

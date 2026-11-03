@@ -1,5 +1,6 @@
 import {uiPrimaryValueStyles} from '../../../../shared/ui-primary-value.js';
 import {uiMetricStyles} from '../../../../shared/ui-metric.js';
+import {uiBarStyles} from '../../../../shared/ui-bar.js';
 import {evccGalleryStyles,galleryStatusStyles} from './evcc-gallery.js';
 import {evccBackgroundStyles} from './evcc-backgrounds.js';
 export function evccCardStyles() { return `
@@ -13,7 +14,6 @@ header{display:flex;align-items:center;justify-content:space-between;flex-wrap:w
 .car-name{font-size:12px;font-weight:600;overflow-wrap:anywhere;margin-bottom:2px;line-height:1.4;color:var(--secondary-text-color,#666)}.picture{min-width:0;display:grid;place-items:center;min-height:120px}.picture img{width:112%;max-width:460px;height:132px;margin-left:-10%;object-fit:contain;display:block;filter:drop-shadow(0 10px 7px #0002)}.picture ha-icon{--mdc-icon-size:86px;color:var(--secondary-text-color,#666)}.picture small{text-align:center;color:var(--secondary-text-color,#666);font-size:11px;overflow-wrap:anywhere}
 button{font:inherit;color:inherit;cursor:pointer;background:transparent;border:0;padding:0;text-align:start;min-height:24px;max-width:100%;overflow-wrap:anywhere}button:not(:disabled):hover{color:var(--primary-color,#2196f3)}button:focus-visible,.plot:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px;border-radius:3px}button:disabled{cursor:default}
 .eyebrow{display:block;color:var(--secondary-text-color,#666);font-size:11px;line-height:1.4}.battery-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0;min-width:0}.battery-value{font-size:44px;line-height:1.15;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.035em;min-width:0}.battery-meta{min-width:0;max-width:100%;text-align:start}.target,.range{display:flex;align-items:baseline;justify-content:flex-start;flex-wrap:wrap;gap:0 5px;font-size:11px;color:var(--secondary-text-color,#666)}.range>button{font-size:12px;font-weight:600;color:var(--primary-text-color,#20252b)}
-.battery-track,.solar-strip{height:5px;background:var(--secondary-background-color,#eee);border-radius:5px;position:relative;margin-right:1px}.battery-fill,.solar-strip span{height:100%;background:var(--primary-color,#2196f3);border-radius:inherit;display:block}.target-marker{position:absolute;top:-3px;height:11px;width:2px;background:var(--primary-text-color,#20252b);transform:translateX(-1px)}
 .status-line{display:flex;align-items:center;gap:8px;padding:10px 12px;border-left:2px solid var(--evcc-glow);border-radius:7px;background:linear-gradient(100deg,color-mix(in srgb,var(--evcc-glow) 10%,transparent),transparent);margin-bottom:12px}.status-line ha-icon{--mdc-icon-size:18px;flex:none;color:var(--evcc-glow)}.status-line strong{font-size:14px;font-weight:600}.status-line p{font-size:11px;line-height:1.4;margin:2px 0 0;color:var(--secondary-text-color,#666)}
 .live-readings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.live-readings>div{padding:10px 12px;background:var(--secondary-background-color,#eee);border-radius:7px;min-width:0}.live-value{font-size:24px;font-weight:650;line-height:1.35;font-variant-numeric:tabular-nums;letter-spacing:-.03em}.live-sub{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);display:block;overflow-wrap:anywhere}
 dl{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.metrics>div{min-width:0}.metrics dt{font-size:11px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere;line-height:1.4;margin-bottom:2px}.metrics dd{margin:0;min-width:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -50,7 +50,7 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content{--ui-metric-tone:var(--tone)}.charging-status{margin-top:16px}.content[data-density=compact] .charging-status{margin-top:12px}
 .charging-readings{margin:0}.car-stage .battery-row{margin-top:0}.car-stage header{margin-top:0;padding-top:8px}.content[data-density=compact] .car-stage .battery-row,.content[data-density=compact] .car-stage header{margin-top:0}.content[data-density=compact] .car-stage header{padding-top:6px}
 .header-region .ui-metric-value button{font:inherit;line-height:inherit;letter-spacing:inherit;min-height:0}.header-region .ui-metric-info button{font:inherit;line-height:inherit;min-height:0;vertical-align:baseline}
-.hero{padding-top:0}.battery-track,.battery-fill{border-radius:var(--ui-metric-radius,8px)}
+.hero{padding-top:0}
 .battery-row [data-ui-primary-value]{max-width:160px}
 /* Vehicle media follows the complete summary in both Auto and EVCC. */
 .car-stage{grid-template-columns:minmax(0,1fr);min-height:0}
@@ -67,7 +67,6 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .mode-options [data-ui-button]{min-height:44px;border-bottom:0;text-decoration:none}
 .mode-options [aria-pressed=true],.mode-options button[aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
 /* EVCC-only refinement: regular Auto keeps its approved renderer and paint. */
-.content[data-evcc]{--ui-primary-size:44px;--ui-primary-size-compact:44px}
 .content[data-evcc] h2{font-size:16px;font-weight:600}
 .content[data-evcc] .gallery-top{margin:0 0 12px;padding:0;background:none}
 .content[data-evcc] .hero{padding:0;margin:0}
@@ -75,24 +74,11 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content[data-evcc] .car-stage::before,.content[data-evcc] .car-stage::after{content:none}
 .content[data-evcc] .car-stage .battery-row{grid-column:1;grid-row:1;min-width:0;margin:0;z-index:1}
 .content[data-evcc] .battery-row [data-ui-primary-value]{max-width:100%;width:100%}
-.content[data-evcc] [data-ui-primary-value] .primary-value{font-size:44px;white-space:nowrap;flex-wrap:nowrap;letter-spacing:-.035em}
-.content[data-evcc] .primary-number{white-space:nowrap;display:inline-block}
-.content[data-evcc] .primary-label{overflow-wrap:normal;word-break:normal}
 .content[data-evcc] .car-stage .picture{position:relative;grid-column:2;grid-row:1;width:100%;height:112px;min-height:0;margin:0;inset:auto;overflow:hidden;z-index:0}
 .content[data-evcc] .picture img{position:absolute;width:100%;height:100%;left:calc(50% + var(--evcc-image-offset-x,0px));bottom:calc(-1 * var(--evcc-image-offset-y,0px));max-width:none;margin:0;object-fit:contain;filter:none;transform:translateX(-50%) scale(var(--evcc-image-scale,1));transform-origin:center center}
 .content[data-evcc] .picture ha-icon{--mdc-icon-size:64px}
 .content[data-evcc] .battery-meta{display:none}
-.content[data-evcc] .hero>.battery-track{margin:8px 0 0;height:8px;border-radius:999px;background:var(--secondary-background-color);box-shadow:var(--eleven-material-well,none)}
-.content[data-evcc][data-battery-style=line] .hero>.battery-track{height:4px}
-.content[data-evcc] .battery-fill,.content[data-evcc][data-battery-style=soft] .battery-fill{background:var(--accent-color,var(--primary-color));border-radius:inherit;box-shadow:none}
-.content[data-evcc] .target-marker{top:-2px;height:calc(100% + 4px);width:1px}
-/* EVCC breathing accent: solid fill, no stripes, sweep, glow or moving edge. */
-.content[data-evcc][data-battery-style] .battery-fill::before{content:none;inset:0;width:100%;filter:none;opacity:0;transform:none;box-shadow:none;background:var(--primary-text-color);animation:none}
-@media(prefers-reduced-motion:no-preference){
- .content[data-evcc][data-battery-style]:is([data-tone=charging],[data-tone=planned]) .battery-fill::before{content:'';animation:evcc-accent-breathe 2.4s ease-in-out infinite;animation-play-state:var(--power-motion,paused);animation-delay:var(--power-delay,0s)}
-}
-.content[data-evcc][data-theme=dark][data-battery-style] .battery-fill::before{background:var(--secondary-background-color);--evcc-breathe-peak:.42}
-@keyframes evcc-accent-breathe{0%,100%{opacity:0}50%{opacity:var(--evcc-breathe-peak,.26)}}
+.hero>.battery-progress{margin-top:8px}
 .content[data-evcc] .charging-status{margin-top:0}
 .content[data-evcc] [data-ui-metric]{background:var(--secondary-background-color);--ui-metric-tone:var(--secondary-text-color)}
 .content[data-evcc] .charging-status .ui-metric-icon{color:var(--status-accent)}
@@ -106,11 +92,6 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content[data-evcc] .mode-options [data-ui-button]{padding:8px 4px;font-size:13px}
 .content[data-evcc] .mode-options [data-ui-button][aria-pressed=true],.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));border-bottom:0;text-decoration:none;box-shadow:var(--eleven-material-selection-well,none)}
 .content[data-evcc] input[data-solar-share]{min-height:44px;accent-color:var(--accent-color,var(--primary-color))}
-.content[data-evcc] input[data-solar-share]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(var(--accent-color,var(--primary-color)),var(--accent-color,var(--primary-color))) left/var(--solar-position) 100% no-repeat,var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}
-.content[data-evcc] input[data-solar-share]::-moz-range-track{height:8px;border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none)}
-.content[data-evcc] input[data-solar-share]::-moz-range-progress{height:8px;border-radius:999px;background:var(--accent-color,var(--primary-color))}
-.content[data-evcc] input[data-solar-share]::-webkit-slider-thumb{margin-top:-7px;background:var(--ha-card-background,var(--card-background-color,#fff));border-color:var(--accent-color,var(--primary-color));box-shadow:var(--eleven-material-control-shadow,none)}
-.content[data-evcc] input[data-solar-share]::-moz-range-thumb{background:var(--ha-card-background,var(--card-background-color,#fff));border-color:var(--accent-color,var(--primary-color));box-shadow:var(--eleven-material-control-shadow,none)}
 .content[data-evcc] .evcc-number{display:inline-block;white-space:nowrap}
 .content[data-evcc] .ui-metric-icon{grid-row:1}
 .content[data-evcc] [data-ui-metric] .ui-metric-value{grid-column:1/-1}
@@ -118,4 +99,18 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content[data-evcc] [data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 1 88px;min-width:min-content;max-width:100%;overflow:visible;text-overflow:clip}
 .content[data-evcc] .car-stage[data-hero-stacked]{grid-template-columns:minmax(0,1fr)}
 .content[data-evcc] .car-stage[data-hero-stacked] .picture{grid-column:1;grid-row:2}
+/* Axes share the plot bounds, with a fixed label gutter at every card width. */
+.history .chart-head{justify-content:flex-start;gap:6px;margin-bottom:8px}
+.history{padding-top:0;border-top:0}
+.history .chart-head{font-size:12px}
+.history-chart{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:0;row-gap:4px;min-width:0;padding:8px 12px 8px 8px;box-sizing:border-box}
+.history-chart>.axis-unit{grid-column:1/-1;grid-row:1;color:var(--secondary-text-color);font-size:10px;font-weight:600;line-height:1.2}
+.chart-scale{grid-column:1;grid-row:2;position:relative;min-width:0}
+.chart-scale .axis-y{left:auto;right:8px;text-align:end}
+.history-chart>.plot{grid-column:2;grid-row:2;min-width:0}
+.history-chart>.chart-axis{grid-column:2;grid-row:3;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:0;margin:0;line-height:1.4}
+.history-chart>.chart-axis>span{min-width:0;overflow-wrap:anywhere}
+.history-chart>.chart-axis>span:nth-child(2){text-align:center}
+.history-chart>.chart-axis>span:last-child{text-align:end}
+${uiBarStyles()}
 `; }

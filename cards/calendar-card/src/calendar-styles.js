@@ -76,11 +76,12 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 :host,ha-card,.content{height:auto;min-height:100%}
 .calendar-body{flex:none;overflow:visible;min-width:0}
 .header,.compact .header{gap:12px;margin-bottom:12px;align-items:center;flex-wrap:nowrap}
-.header h2{font-size:16px;font-weight:600;line-height:1.4;min-width:0;overflow-wrap:anywhere}
+.header h2{font-size:16px;font-weight:600;line-height:24px;min-width:0;overflow-wrap:anywhere}
 .header svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .header{position:relative}
-.calendar-tools{margin-inline-start:auto;flex:none}
+.calendar-tools{margin-inline-start:auto;flex:none;height:24px}
 .calendar-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+.calendar-tools summary{position:relative;top:-10px}
 .calendar-tools summary::-webkit-details-marker{display:none}
 .calendar-tools summary svg{width:22px;height:22px;stroke-width:3}
 .calendar-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
@@ -102,12 +103,13 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .legend-item[aria-pressed=false] .dot{opacity:.45}
 .legend-item[aria-pressed=true]{color:var(--eleven-material-selection-color,color-mix(in srgb,var(--accent-color,var(--primary-color)) 40%,var(--primary-text-color)));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);transform:translateY(1px)}
 .legend-item[aria-pressed=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
-.list-day+.list-day,.compact .list-day+.list-day{margin-top:12px;padding-top:12px}
+.list-day+.list-day,.compact .list-day+.list-day{border-top:0;margin-top:16px;padding-top:0}
 .day-heading,.compact .day-heading{margin-bottom:8px;flex-wrap:wrap;gap:6px 10px}
 .day-title{font-size:13px;line-height:1.4}.day-title time,.weather{font-size:12px}
-.list-event,.compact .list-event{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px}
-.list-event>.event-time,.compact .list-event>.event-time{flex:0 1 5.8em;min-width:min-content;font-size:12px;line-height:1.5;padding-top:7px;overflow-wrap:normal}
-.list-event .event-button,.compact .list-event .event-button{flex:1 1 12em;font-size:13px;min-height:44px!important;padding:6px 4px 6px 10px!important}
+.day-list .day-heading{padding-bottom:6px;border-bottom:1px solid var(--divider-color)}
+.list-event,.compact .list-event{display:grid;grid-template-columns:64px minmax(0,1fr);gap:8px;align-items:start;padding:4px 0;font-size:12px}
+.list-event>.event-time,.compact .list-event>.event-time{min-width:0;font-size:11px;line-height:1.5;padding-top:7px;overflow-wrap:normal}
+.list-event .event-button,.compact .list-event .event-button{font-size:13px;min-height:44px!important;padding:6px 4px 6px 9px!important}
 .event-button .event-title,.column .event-title{font-size:13px;line-height:1.45;white-space:normal;overflow:visible;text-overflow:clip}
 .compact .list-event .event-title{white-space:normal;overflow:visible;text-overflow:clip}
 .event-button .event-meta,.column .event-meta{font-size:12px;line-height:1.45;margin-top:3px}
@@ -120,13 +122,17 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .popup-date time,.popup-date-range time{min-width:0;overflow-wrap:anywhere}
 .content [data-ui-popup] [data-ui-button]{min-height:44px;min-width:44px;box-sizing:border-box}
 .popup-field-label{font-size:12px}.popup-location,.popup-description{font-size:13px;line-height:1.5}
-${cardThemeStyles({wells:'.calendar-info [data-ui-detail-surface]',controls:'.info-button',surfaces:'[data-ui-popup],.tooltip,[data-ui-detail-surface]'})}
+${cardThemeStyles({periodUI:true,wells:'.calendar-info [data-ui-detail-surface]',controls:'.info-button,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'[data-ui-popup],.tooltip,[data-ui-detail-surface]'})}
 /* Match chart legends: functional swatches and plain labels. */
 .legend,.compact .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0 0 12px;font-size:12px}
 .legend-item{padding:4px 0;gap:6px;min-width:0;justify-content:flex-start;border:0;border-radius:4px;background:transparent;box-shadow:none;color:var(--secondary-text-color);font-weight:400;line-height:1.3}
-.legend-item[aria-pressed=true],.legend-item[aria-pressed=true]:hover,.legend-item[aria-pressed=false],.legend-item[aria-pressed=false]:hover{background:transparent;box-shadow:none}
+.legend-item[aria-pressed=true],.legend-item[aria-pressed=true]:hover,.legend-item[aria-pressed=false],.legend-item[aria-pressed=false]:hover{background:transparent;box-shadow:none;color:var(--secondary-text-color)}
 .legend-item .dot{width:9px;height:9px;border-radius:3px}
 .navigation{flex-wrap:nowrap}
-.navigation .range{flex:1 1 auto;min-width:0;padding:8px;white-space:normal;overflow-wrap:anywhere;line-height:1.35;border:0}
-${segmentedControlStyles('.navigation','.navigation-actions>[data-nav]',{last:'.navigation-actions>[data-nav]:last-child',dividers:'.navigation-actions>[data-nav]'})}
+.navigation .range{display:flex;align-items:center;flex:1 1 auto;min-width:0;padding:8px 12px;box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;line-height:1.35;border:0}
+.navigation>.period-controls{flex:1 1 auto;min-width:0}
+.navigation>.period-controls>.period-trigger{width:100%;padding:4px 6px;font-size:12px;justify-content:space-between}
+.navigation>[data-period]{flex:none;font-size:12px}
+.period-menu .period-options [data-ui-button]{min-width:0;min-height:44px}
+${segmentedControlStyles('.navigation','.navigation>.period-controls>.period-trigger,.navigation>[data-period]',{first:'.navigation>.period-controls>.period-trigger',dividers:'.navigation>[data-period]'})}
 `;}

@@ -42,3 +42,17 @@ test('subtitle and unit are optional and compact values remain informational',()
  assert.ok(!html.includes('tabindex'));
  assert.ok(html.includes('data-density="compact"'));
 });
+
+test('uniform compositions retain the same content, escaping and independent sensor actions',()=>{
+ for(const unitPosition of ['raised','center','baseline']){
+  const html=uiPrimaryValue({layout:'uniform',unitPosition,value:62,unit:'%',subtitle:'284 km <range>',entity:'sensor.battery',subtitleEntity:'sensor.range',compact:true});
+  assert.ok(html.includes('data-primary-layout="uniform"'));
+  assert.ok(html.includes(`data-unit-position="${unitPosition}"`));
+  assert.ok(html.includes('data-density="compact"'));
+  assert.equal((html.match(/<button /g)||[]).length,2);
+  assert.ok(html.includes('>62</button><small>%</small>'));
+  assert.ok(html.includes('284 km &lt;range&gt;</button>'));
+ }
+ assert.ok(!uiPrimaryValue({value:62,unit:'%'}).includes('data-primary-layout'));
+ assert.ok(!uiPrimaryValue({layout:'uniform',unitPosition:'bad" onclick="evil',value:62}).includes('onclick'));
+});

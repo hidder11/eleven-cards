@@ -85,11 +85,6 @@ export const weatherCalmStyles=`
 [data-ui-metric]{background:var(--secondary-background-color,transparent)}
 .content .hero{min-height:124px}
 .content[data-compact=true] .hero{min-height:100px}
-.hero .temperature .primary-value{font-size:48px;flex-wrap:nowrap;white-space:nowrap;overflow-wrap:normal;gap:5px}
-.content[data-compact=true] .hero .temperature .primary-value{font-size:40px}
-.hero .primary-number{overflow-wrap:normal;word-break:normal;max-width:none}
-.hero .primary-value small{margin-top:6px;white-space:nowrap}
-.hero .temperature .primary-label{border:0;padding:0;font-size:12px;overflow-wrap:normal;word-break:normal}
 .content .hero[data-wide-reading=true]{padding-bottom:116px;min-height:0}
 .content .hero[data-wide-reading=true] .temperature{max-width:100%}
 .content[data-icon-style] .hero[data-wide-reading=true]>.art{top:auto;bottom:0;height:110px}
@@ -100,8 +95,6 @@ export const weatherCalmStyles=`
 [data-ui-metric] .ui-metric-title,[data-ui-metric] .ui-metric-info{font-size:12px;overflow-wrap:normal;word-break:normal}
 [data-ui-metric] .ui-metric-icon{transform:none;width:20px;height:20px}
 [data-ui-metric] .ui-metric-value{white-space:nowrap;overflow-wrap:normal;word-break:normal}
-.weather-status[data-condition=true] .ui-metric-value{white-space:normal;overflow-wrap:normal;word-break:normal;font-size:22px;font-weight:600}
-.weather-status[data-condition=true] .ui-metric-title{padding-bottom:2px}
 .weather-status{min-height:44px}
 .ui-metric-unit{font-size:12px;white-space:nowrap}
 [data-ui-tabs] [role=tab]:focus-visible,.retry:focus-visible,button[data-ui-metric]:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}

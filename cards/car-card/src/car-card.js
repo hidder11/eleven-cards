@@ -1,6 +1,7 @@
 import {cardThemeStyles} from '../../../shared/card-theme.js';
 import {uiPrimaryValue} from '../../../shared/ui-primary-value.js';
 import {uiMetric} from '../../../shared/ui-metric.js';
+import {uiBar} from '../../../shared/ui-bar.js';
 import {uiEscape} from '../../../shared/ui-button.js';
 import {uiButtonStyles} from '../../../shared/ui-button.js';
 import {uiTabsStyles,bindUITabs,uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';
@@ -41,12 +42,9 @@ export class CarCard extends EvccCard {
   return id?`<button type="button" data-entity="${uiEscape(id)}" aria-label="${uiEscape(label+': '+value)}">${markup}</button>`:markup;}
  _extraSignature(){return this._config.custom_tabs.flatMap(tab=>tab.entities.map(row=>this._hass?.states?.[row.entity]));}
  _extraStyles(){return `
-  .content[data-battery-style=slim] .battery-track,.content[data-battery-style=soft] .battery-track{height:8px}
-  .content[data-battery-style=line] .battery-track{height:4px}
-  .content:is([data-battery-style=slim],[data-battery-style=soft],[data-battery-style=line]) .target-marker{top:-2px;height:calc(100% + 4px);width:1px}
-  .content[data-battery-style=soft] .battery-fill{background:color-mix(in srgb,var(--primary-color) 65%,var(--secondary-background-color));box-shadow:0 0 8px color-mix(in srgb,var(--primary-color) 18%,transparent)}
-  .content[data-battery-style=soft] .battery-fill::before{filter:opacity(.45)}
-  .content[data-battery-style=line] .battery-fill::before{background:linear-gradient(100deg,transparent,#ffffff99,transparent)}
+  .hero>.battery-progress{margin-top:10px}
+  .content[data-battery-style=slim] .battery-progress{--ui-bar-height:8px}
+  .content[data-battery-style=line] .battery-progress{--ui-bar-height:4px}
  `;}
  _applyPresentation(){
   const content=this.shadowRoot.querySelector('.content');if(!content)return;
@@ -82,7 +80,7 @@ export class CarCard extends EvccCard {
   const value=carFieldReading(entity,this._hass,config,i);
   const plain=carFieldReading(entity,this._hass,{...config,['field_'+i+'_show_unit']:false},i),split=value.startsWith(plain);
   const numeric=plain!=='\u2014'&&Number.isFinite(Number(config['field_'+i+'_attribute']?entity?.attributes?.[config['field_'+i+'_attribute']]:entity?.state));
-  return uiMetric({title:label,value:plain==='\u2014'?null:split?plain:value,valueContent:plain==='\u2014'?'':`<span class="${numeric?'car-number':'car-text'}">${uiEscape(split?plain:value)}</span>`,unit:split?value.slice(plain.length).trim():'',icon:config['field_'+i+'_icon']||(i===2?'mdi:map-marker-distance':'mdi:counter'),compact:config.compact,action:!!id,attrs:{class:i===1?'car-status':'car-field','data-entity':id||'','data-car-field':String(i)}});
+  return uiMetric({title:label,value:plain==='\u2014'?null:split?plain:value,valueContent:plain==='\u2014'?'':`<span class="${numeric?'car-number':'car-text'}">${uiEscape(split?plain:value)}</span>`,unit:split?value.slice(plain.length).trim():'',icon:config['field_'+i+'_icon']||(i===2?'mdi:map-marker-distance':'mdi:counter'),compact:config.compact,action:!!id,attrs:{class:i===1?'car-status':'car-field','data-value-kind':numeric?'number':'text','data-entity':id||'','data-car-field':String(i)}});
  }
  _fitCarReadings(){
   this._carLayoutObserver?.disconnect();
@@ -130,22 +128,11 @@ export class CarCard extends EvccCard {
   this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${evccCardStyles()}${this._extraStyles()}
    /* Regular Auto only: EVCC keeps its independent presentation. */
    :host,ha-card{height:auto;min-height:0}.content{height:auto;overflow:visible}
-   .car-heading{margin:0 0 16px;font-size:16px;font-weight:600;line-height:1.4;overflow-wrap:break-word}
    .gallery-top{margin:0;padding:0;background:none}.hero{margin:0;padding:0}
    .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;padding:0;min-height:0}
    .car-stage .battery-row{grid-column:1;grid-row:1;align-items:stretch}
-   .content .hero>.battery-track{width:100%;box-sizing:border-box;margin:10px 0 0;height:12px;border-radius:999px;overflow:hidden;background:var(--secondary-background-color);box-shadow:var(--eleven-material-well,none)}
-   .content[data-battery-style=slim] .hero>.battery-track,.content[data-battery-style=soft] .hero>.battery-track{height:10px}
-   .content[data-battery-style=line] .hero>.battery-track{height:4px}
-   .content .hero>.battery-track .battery-fill{border-radius:inherit;background:var(--accent-color,var(--primary-color));box-shadow:none}
-   .content .hero>.battery-track .battery-fill::before{content:none;animation:none}
    .car-stage::before,.car-stage::after{content:none}
    .battery-row [data-ui-primary-value]{max-width:100%}
-   .content{--ui-primary-size:44px;--ui-primary-unit-size:16px}
-   .content[data-density=compact]{--ui-primary-size:36px;--ui-primary-unit-size:14px}
-   [data-ui-primary-value] .primary-value{overflow-wrap:normal;flex-wrap:nowrap;align-items:baseline}
-   .primary-value .primary-number{overflow-wrap:normal;white-space:nowrap;min-height:44px;min-width:44px}
-   .primary-value small{margin:0}.battery-value .primary-label{border:0;padding:0;margin-top:0;font-size:12px;line-height:1.4;overflow-wrap:break-word;min-height:44px;display:flex;align-items:center}
    .car-stage .picture{position:relative;inset:auto;grid-column:2;grid-row:1;width:100%;height:auto;aspect-ratio:3.05;min-height:0;margin:0;overflow:hidden}
    .car-stage .picture img{position:absolute;inset:0;left:var(--evcc-image-offset-x,0px);bottom:auto;top:var(--evcc-image-offset-y,0px);width:100%;height:100%;max-width:none;margin:0;object-fit:contain;transform:scale(var(--evcc-image-scale,1));transform-origin:center;filter:none}
    .car-stage[data-hero-stacked]{grid-template-columns:minmax(0,1fr)}
@@ -153,8 +140,6 @@ export class CarCard extends EvccCard {
    .content[data-density=compact] .car-stage .picture{height:auto;aspect-ratio:3.5}
    .car-stage .picture:has(ha-icon),.car-stage .picture:has(img[hidden]){min-height:88px;aspect-ratio:auto}
    .picture small{font-size:12px;line-height:1.4;overflow-wrap:break-word}.picture:has(img[hidden]) small{padding:12px}
-   .content .battery-fill,.content[data-battery-style=soft] .battery-fill{box-shadow:none}
-   .content[data-tone] .battery-fill::before{content:none;animation:none}
    .car-status,.content[data-density=compact] .car-status{margin-top:0}
    .car-readings{margin-top:12px;row-gap:12px;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr))}
    [data-ui-metric]{background:var(--secondary-background-color);padding:12px;min-height:44px;row-gap:4px}
@@ -164,20 +149,18 @@ export class CarCard extends EvccCard {
    [data-ui-metric] .car-number{display:inline-block;white-space:nowrap;overflow-wrap:normal;word-break:normal}
    [data-ui-metric] .ui-metric-unit{font-size:12px;line-height:1.4;margin:0;white-space:normal;overflow-wrap:break-word}
    [data-ui-metric] .ui-metric-icon{color:var(--secondary-text-color);transform:none;width:22px;height:22px}
-   .car-status .ui-metric-value{font-size:18px;font-weight:600}
    .content[data-density=compact] [data-ui-metric]{padding:10px}
-   .content[data-density=compact] .car-status .ui-metric-value{font-size:18px}
    .content .header-scene{padding-bottom:0}.car-readings:empty{display:none}
    .content button[data-entity],.metrics button{min-height:44px}
    .content button:focus-visible{outline-color:var(--accent-color,var(--primary-color))}
    .metrics{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}.metrics dt{font-size:12px;overflow-wrap:break-word}.metrics dd{overflow-wrap:break-word}.metrics button{overflow-wrap:break-word}
   ${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
-   <h2 class="car-heading">${uiEscape(title)}</h2><div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
+   <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
     ${offline?`<p class="notice warning" role="status">${nl?'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.':'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>`:''}
-    <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}
+    <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({layout:'uniform',value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}
     </div>
      <div class="picture">${image?`<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:`<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>${this._hasVehicleImage()?`<small>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:''}`}</div>
-    </div><div class="battery-track" ${percent==null?`aria-label="${nl?'Percentage niet beschikbaar':'Percentage unavailable'}"`:`role="progressbar" aria-label="Percentage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"`}><div class="battery-fill" style="width:${percent??0}%"></div></div></div>
+   </div>${uiBar({value:percent,label:percent==null?(nl?'Percentage niet beschikbaar':'Percentage unavailable'):(nl?'Accuniveau':'Battery level'),attrs:{class:'battery-progress'}})}</div>
    </div></div>
    ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:${fields.length}">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;
   const content=this.shadowRoot.querySelector('.content');content.style.setProperty('--evcc-image-scale',String(config.image_scale/100));content.style.setProperty('--evcc-image-offset-y',config.image_offset_y+'px');content.scrollTop=scroll;
