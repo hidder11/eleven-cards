@@ -1,5 +1,5 @@
-﻿import {applyReviewTheme} from './theme.js';
-import {configs,createFixture,cardType} from './fixtures.js';
+import {applyReviewTheme} from './theme.js';
+import {configs,createFixture,cardType,calendarPreviewFixture} from './fixtures.js';
 const selected=new URLSearchParams(location.search).get('card'),entry=configs.find(([name])=>name===selected);
 const example=(title,description,changes={},states={})=>({title,description,changes,states});
 const programs=[{id:'eco',name:'Eco 40–60',minutes:150,kwh:1},{id:'short',name:'Kort',minutes:60,kwh:.7}];
@@ -29,9 +29,9 @@ const catalog={
   example('Eén dag','Een korter overzicht over de laatste 24 uur.',{hours_to_show:24}),
   example('Temperatuur over vier weken','Een andere meetwaarde met een langere periode.',{entity:'sensor.temperature',hours_to_show:672})],
  'calendar-card':[
-  example('Lijst voor twee dagen','De bestaande agendaweergave.'),
-  example('Dagen naast elkaar','Vijf dagen in afzonderlijke kolommen.',{view:'columns',days_to_show:5}),
-  example('Maandoverzicht','Een kalender met de maand als uitgangspunt.',{view:'month'})],
+  {...example('Maandoverzicht','Het verdiepte raster met zacht gekleurde afspraken en een subtiele markering voor vandaag.',{view:'month'}),id:'month'},
+  {...example('Daglijst','Zeven dagen onder elkaar met tijdkolom, verdiepte dagvlakken en dezelfde afspraakstijl.',{view:'list',days_to_show:7}),id:'list'},
+  {...example('Dagkolommen','Vijf dagen naast elkaar met dezelfde dagvlakken en gekleurde afspraken.',{view:'columns',days_to_show:5}),id:'columns'}],
  'weather-card':[
   example('Weer met verwachting','De bestaande weerkaart met alle standaardgegevens.'),
   example('Compact, alleen per uur','Kleinere waarden en alleen de uurverwachting.',{compact:true,tabs:['hourly']}),
@@ -82,11 +82,12 @@ if(!entry){
  document.querySelector('#title').textContent='Kaart niet gevonden';document.querySelector('#intro').textContent='Ga terug naar het overzicht en kies een kaart.';document.querySelector('.settings').hidden=true;
 }else{
  const [name,title,base,chart]=entry;document.title=title+' — configuraties | Eleven Material';document.querySelector('#title').textContent=title+' · configuraties';document.querySelector('#intro').textContent='Drie configuraties van de bestaande kaart. Elke configuratie staat naast een werkend voorbeeld met fictieve gegevens.';document.querySelector('#back').href='./#card-'+name;
+ if(name==='calendar-card'){const nav=document.createElement('nav');nav.className='view-links';nav.setAttribute('aria-label','Agendaweergaven');for(const [id,text] of [['month','Maand'],['list','Lijst'],['columns','Dagkolommen']]){const a=document.createElement('a');a.href='#'+id;a.textContent=text;nav.append(a);}document.querySelector('header>div').append(nav);document.querySelector('#width').value='640';document.documentElement.style.setProperty('--preview-width','640px');}
  for(const sample of catalog[name]){
-  const section=document.createElement('section');section.className='example';const heading=document.createElement('h2');heading.textContent=sample.title;const text=document.createElement('p');text.textContent=sample.description;
-  const layout=document.createElement('div');layout.className='example-layout';const frame=document.createElement('div');frame.className='card-frame';const card=document.createElement(cardType(name).slice(7));card.dataset.card=name;if(chart)card.dataset.chart='true';if(name==='calendar-card')card.style.height='480px';frame.append(card);
+  const section=document.createElement('section');section.className='example';if(sample.id)section.id=sample.id;const heading=document.createElement('h2');heading.textContent=sample.title;const text=document.createElement('p');text.textContent=sample.description;
+  const layout=document.createElement('div');layout.className='example-layout';const frame=document.createElement('div');frame.className='card-frame';const card=document.createElement(cardType(name).slice(7));card.dataset.card=name;if(chart)card.dataset.chart='true';frame.append(card);
   const details=document.createElement('details');details.className='configuration';details.open=true;const summary=document.createElement('summary');summary.textContent='Configuratie (JSON)';const pre=document.createElement('pre'),code=document.createElement('code');const config={type:cardType(name),title,...structuredClone(base),...structuredClone(sample.changes)};if(sample.changes.entities&&config.series_options){const ids=config.entities.map(e=>typeof e==='string'?e:e.entity);config.series_options=config.series_options.filter(s=>ids.includes(s.entity));}code.textContent=JSON.stringify(config,null,2);pre.append(code);details.append(summary,pre);layout.append(frame,details);section.append(heading,text,layout);document.querySelector('main').append(section);
-  card.setConfig(config);const hass=createFixture(name,sample.states);card.hass=hass;records.push({name,card,hass});detailExamples.push({card,config,title:sample.title});
+  card.setConfig(config);const hass=name==='calendar-card'?calendarPreviewFixture(createFixture(name,sample.states)):createFixture(name,sample.states);card.hass=hass;records.push({name,card,hass});detailExamples.push({card,config,title:sample.title});
  }
 }
 let dark=false;

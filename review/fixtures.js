@@ -52,3 +52,16 @@ export function createFixture(name,extraStates={}){
  }
  return local;
 }
+
+// Rich fictional appointments shared by the three calendar configurations.
+export function calendarPreviewFixture(hass){
+ const original=hass.connection.subscribeMessage;
+ return {...hass,connection:{...hass.connection,subscribeMessage:async(callback,request)=>{
+  if(request.type!=='calendar/event/subscribe')return original(callback,request);
+  let active=true;const start=Date.parse(request.start),end=Date.parse(request.end),day=86400000;
+  const names=['Projectoverleg','Tandarts','Boodschappen halen','Sporten','Lunch met familie','Werkafspraak met een langere titel'];
+  const events=[];for(let t=start+12*3600000,i=0;t<end;t+=3*day,i++)events.push({summary:names[i%names.length],start:new Date(t).toISOString(),end:new Date(t+3600000).toISOString()});
+  const today=new Date().toISOString().slice(0,10);for(let i=0;i<4;i++){const t=Date.parse(today+'T09:00:00Z')+i*2*3600000;if(t>=start&&t<end)events.push({summary:names[i],start:new Date(t).toISOString(),end:new Date(t+3600000).toISOString()});}
+  queueMicrotask(()=>{if(active)callback({events});});return()=>{active=false;};
+ }}};
+}
