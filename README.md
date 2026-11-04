@@ -58,7 +58,7 @@ The collection module contains the twelve cards listed above. The following loca
 | **Scenes & actions** | Buttons for scenes and scripts, with optional confirmation. | [Standalone controls](cards/home-controls/README.md) - `cards/home-controls/dist/eleven-home-controls-card.js` |
 | **Controls** | Thermostat and light controls. | [Standalone controls](cards/home-controls/README.md) - same module as Scenes & actions |
 | **Waste** | Upcoming waste collection dates. | [Standalone controls](cards/home-controls/README.md) - same module as Scenes & actions |
-| **Room** | Room lighting, temperature and dashboard navigation. | [Room documentation](cards/room-card/README.md) - `cards/room-card/dist/eleven-room-card.js` |
+| **Room** | Room scenes, lighting, temperature, humidity and dashboard navigation. | [Room documentation](cards/room-card/README.md) - `cards/room-card/dist/eleven-room-card.js` |
 | **Appliance Planner** | Tariff-based advice for an appliance run before a deadline. | [Planner documentation](cards/appliance-planner/README.md) - `cards/appliance-planner/dist/eleven-appliance-planner.js` |
 | **Scene Engine** | Effective scene request, active requests and optional reset. | [Scene Engine documentation](cards/scene-engine-card/frontend/README.md) - `cards/scene-engine-card/dist/eleven-scene-engine-card.js` |
 
@@ -164,7 +164,7 @@ Show the next collection dates from configured waste sensors, with separate name
 
 ### Room
 
-Summarise a room with its light state and temperature. Open the room dashboard from its name or the primary light's more-info dialog from the light button. [Configuration and options](cards/room-card/README.md).
+Summarise a room with compact scene controls, light state, temperature and optional humidity. Open the room dashboard from its name or the primary light's more-info dialog from the light button. [Configuration and options](cards/room-card/README.md).
 
 ![Room card with fictional data](docs/images/room-card.png)
 

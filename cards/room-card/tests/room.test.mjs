@@ -18,3 +18,17 @@ test('ruimte vat alleen expliciete unieke lampen samen en verbergt geen uitval',
  assert.equal(mod.roomStatus(['light.b'],states).label,'Licht uit');
  assert.equal(mod.roomStatus(['light.c'],states).label,'1 niet beschikbaar');
 });
+
+test('optional scenes preserve order, deduplicate and reject invalid entities',()=>{
+ assert.deepEqual(mod.normalizeRoom({name:'Kamer'}).scenes,[]);
+ assert.deepEqual(mod.normalizeRoom({name:'Kamer',scenes:['scene.evening','scene.movie','scene.evening']}).scenes,['scene.evening','scene.movie']);
+ for(const scenes of ['scene.evening',['light.living'],[{}],['scene.bad" onclick="test']])assert.throws(()=>mod.normalizeRoom({name:'Kamer',scenes}));
+});
+
+test('humidity is optional, localized, preserves zero and hides invalid measurements',()=>{
+ assert.equal(mod.humidityText({state:'46.5'}),'46,5 %');
+ assert.equal(mod.humidityText({state:'46.5'},'en-US'),'46.5 %');
+ assert.equal(mod.humidityText({state:'0'}),'0 %');
+ assert.equal(mod.humidityText({state:'100'}),'100 %');
+ for(const state of [undefined,{state:null},...['',' ','unknown','unavailable','NaN','-1','101'].map(state=>({state}))])assert.equal(mod.humidityText(state),'');
+});

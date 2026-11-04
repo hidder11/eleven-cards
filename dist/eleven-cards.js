@@ -1300,9 +1300,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -1319,12 +1320,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -1349,13 +1369,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -3846,9 +3878,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -3865,12 +3898,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -3895,13 +3947,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -6195,9 +6259,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -6214,12 +6279,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -6244,13 +6328,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -7881,9 +7977,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -7900,12 +7997,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -7930,13 +8046,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -8989,9 +9117,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -9008,12 +9137,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -9038,13 +9186,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -11725,9 +11885,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -11744,12 +11905,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -11774,13 +11954,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -13917,9 +14109,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -13936,12 +14129,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -13966,13 +14178,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -15461,9 +15685,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -15480,12 +15705,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -15510,13 +15754,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -16893,9 +17149,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -16912,12 +17169,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -16942,13 +17218,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -19307,9 +19595,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -19326,12 +19615,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -19356,13 +19664,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -21673,9 +21993,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -21692,12 +22013,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -21722,13 +22062,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -22303,9 +22655,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -22322,12 +22675,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -22352,13 +22724,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);

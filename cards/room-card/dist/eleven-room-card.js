@@ -330,9 +330,10 @@ const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
 // class retains its DOM patching, subscriptions, action handlers and editor.
 const withCardBackground=Base=>class extends Base{
  static get backgroundBaseCard(){return Base;}
- set hass(hass){super.hass=hass;this._syncElevenBackground();}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
  setConfig(config){
+  this._captureElevenBackgroundPlayback();
   super.setConfig(config);
   this._elevenBackgroundConfig={...config};
   this._syncElevenBackground();
@@ -349,12 +350,31 @@ const withCardBackground=Base=>class extends Base{
   this._syncElevenBackground();
  }
  disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
   super.disconnectedCallback?.();
  }
  setCardBackground(background){
   this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
@@ -379,13 +399,25 @@ const withCardBackground=Base=>class extends Base{
   if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
    if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
   }
-  this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
-  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  this._captureElevenBackgroundPlayback();
   this._elevenBackgroundSignature=signature;
-  if(!settings.enabled)return;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
   const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
-  this._elevenBackgroundLayer=template.content.firstElementChild;host.prepend(this._elevenBackgroundLayer);
-  if(this.isConnected)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
@@ -505,7 +537,10 @@ function normalizeRoom(c={}){
  if(c.navigation_path&&!/^\/(?!\/)[a-zA-Z0-9_\-/]+$/.test(c.navigation_path))throw Error('Gebruik een lokaal dashboardpad');
  const lights=[...new Set(c.lights??[])];
  if(lights.some(id=>!/^light\.[a-z0-9_]+$/.test(id)))throw Error('Kies alleen lampen');
- return {...c,name:String(c.name),icon:c.icon||'mdi:home-outline',lights};
+ if(c.scenes!=null&&!Array.isArray(c.scenes))throw Error('Kies een lijst met scenes');
+ const scenes=[...new Set(c.scenes??[])];
+ if(scenes.some(id=>typeof id!=='string'||!/^scene\.[a-z0-9_]+$/.test(id)))throw Error('Kies alleen scenes');
+ return {...c,name:String(c.name),icon:c.icon||'mdi:home-outline',lights,scenes,show_scene_names:c.show_scene_names===true};
 }
 function temperatureText(s,locale='nl-NL'){
  if(!s||s.state==null||String(s.state).trim()===''||!Number.isFinite(Number(s.state)))return '';
@@ -519,41 +554,65 @@ function roomStatus(ids=[],states={}){
  return {total,on,unavailable,label};
 }
 
+function humidityText(state,locale='nl-NL'){
+ if(state?.state==null||String(state.state).trim()==='')return '';
+ const value=Number(state.state);if(!Number.isFinite(value)||value<0||value>100)return '';
+ return temperatureText({...state,attributes:{...state.attributes,unit_of_measurement:'%'}},locale);
+}
+
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 class RoomCard extends HTMLElement{
  constructor(){super();this.attachShadow({mode:'open'});}
  static getConfigForm(){return {schema:[
   {name:'name',required:true,selector:{text:{}}},
   {name:'icon',selector:{icon:{}}},
+  {name:'scenes',selector:{entity:{domain:'scene',multiple:true}}},
+  {name:'show_scene_names',selector:{boolean:{}}},
   {name:'lights',selector:{entity:{domain:'light',multiple:true}}},
   {name:'temperature_entity',selector:{entity:{domain:'sensor',device_class:'temperature'}}},
+  {name:'humidity_entity',selector:{entity:{domain:'sensor',device_class:'humidity'}}},
   {name:'navigation_path',selector:{text:{}}},
   {name:'note',selector:{text:{}}}
- ],computeLabel:s=>({name:'Ruimtenaam',icon:'Icoon',lights:'Lampen (geen groepen én hun leden)',temperature_entity:'Temperatuursensor',navigation_path:'Pad naar ruimtepagina',note:'Toelichting / testkoppeling'}[s.name]??s.name)};}
+ ],computeLabel:s=>({name:'Ruimtenaam',icon:'Icoon',scenes:'Scenes',show_scene_names:'Tekst bij sceneknoppen',lights:'Lampen (geen groepen én hun leden)',temperature_entity:'Temperatuursensor',humidity_entity:'Luchtvochtigheidssensor',navigation_path:'Pad naar ruimtepagina',note:'Toelichting / testkoppeling'}[s.name]??s.name)};}
  static getStubConfig(){return {name:'Nieuwe ruimte',icon:'mdi:home-outline',lights:[]};}
- setConfig(c){this._config=normalizeRoom(c);this._render();}
+ setConfig(c){this._config=normalizeRoom(c);this._sceneError=false;this._render();}
  set hass(h){this._hass=h;this._render();}get hass(){return this._hass;}
  getCardSize(){return 2;}
  getGridOptions(){return {columns:6,min_columns:6,rows:'auto',min_rows:2};}
  _moreInfo(entityId){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId},bubbles:true,composed:true}));}
+ async _activateScene(entity){
+  const hass=this._hass,state=hass?.states?.[entity];
+  if(this._scenePending||!this._config.scenes.includes(entity)||!state||state.state==='unavailable'||hass.connected===false||!hass.callService)return;
+  this._scenePending=true;this._sceneError=false;this._render();
+  try{await hass.callService('scene','turn_on',{entity_id:entity});}catch{this._sceneError=true;}
+  finally{this._scenePending=false;const restore=!this.shadowRoot.activeElement;this._render();if(restore)[...this.shadowRoot.querySelectorAll('[data-scene]')].find(button=>button.dataset.scene===entity)?.focus();}
+ }
  _render(){
   if(!this._config)return;
   const c=this._config,s=roomStatus(c.lights,this._hass?.states),temp=temperatureText(this._hass?.states?.[c.temperature_entity],this._hass?.locale?.language||'nl-NL');
-  const focused=this.shadowRoot.activeElement?.className;
-  this.shadowRoot.innerHTML=`<style>
+  const humidity=humidityText(this._hass?.states?.[c.humidity_entity],this._hass?.locale?.language||'nl-NL');
+  const focused=this.shadowRoot.activeElement?.className,focusedScene=this.shadowRoot.activeElement?.dataset?.scene;
+  const dutch=!this._hass?.language||this._hass.language.startsWith('nl');
+  const scenes=c.scenes.length?`<div class="scene-row"><span class="scene-label">Scenes</span><div class="scene-actions" role="group" aria-label="Scenes" aria-busy="${Boolean(this._scenePending)}">${c.scenes.map(entity=>{const state=this._hass?.states?.[entity],name=state?.attributes?.friendly_name||entity,icon=state?.attributes?.icon||'mdi:palette-outline';return uiButton({content:`<ha-icon icon="${esc(icon)}" aria-hidden="true"></ha-icon>${c.show_scene_names?`<span>${esc(name)}</span>`:''}`,label:name,title:name,variant:'surface',className:'scene-button room-button',disabled:Boolean(this._scenePending)||!state||state.state==='unavailable'||this._hass?.connected===false||!this._hass?.callService,attrs:{'data-scene':entity}});}).join('')}</div></div>`:'';
+  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}
    :host{display:block;min-width:0;height:100%}ha-card{display:block;box-sizing:border-box;height:100%;overflow:hidden;background:var(--ha-card-background,var(--card-background-color));color:var(--primary-text-color);border-radius:var(--ha-card-border-radius,16px)}
    .room{padding:var(--eleven-card-padding,16px);min-height:132px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;font-family:inherit}
-   .head{display:flex;align-items:center;justify-content:space-between;gap:8px}.room-icon{color:var(--primary-color);--mdc-icon-size:24px}.temp{font-size:13px;font-variant-numeric:tabular-nums;color:var(--secondary-text-color)}
+   .head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.climate{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:4px 10px;margin-inline-start:auto;min-width:0;max-width:100%;font-size:13px;font-variant-numeric:tabular-nums;color:var(--secondary-text-color)}.temp,.humidity{white-space:nowrap}
    a,.identity{color:inherit;text-decoration:none;min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;border-radius:4px}a:focus-visible,button:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
-   .name{font-size:16px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}.note{font-size:11px;color:var(--secondary-text-color);line-height:1.4;overflow-wrap:anywhere}
-   .status{display:flex;align-items:center;gap:6px;font-size:12px;line-height:1.45;color:var(--secondary-text-color);overflow-wrap:anywhere;min-width:0}.status ha-icon{--mdc-icon-size:17px;flex-shrink:0}.status.warning{color:var(--primary-text-color)}.status.warning ha-icon{color:var(--warning-color,var(--primary-text-color))}
-   footer{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto}button{appearance:none;flex-shrink:0;display:grid;place-items:center;min-width:44px;min-height:44px;border:0;border-radius:12px;background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer}button.on{background:var(--primary-color);color:var(--text-primary-color,#fff)}button:disabled{opacity:.45;cursor:default}button ha-icon{--mdc-icon-size:20px}
-  ${cardThemeStyles({controls:'.control:not(.on)',selected:'.control.on'})}</style><ha-card><div class="room"><div class="head"><ha-icon class="room-icon" icon="${esc(c.icon)}"></ha-icon>${temp?`<span class="temp">${esc(temp)}</span>`:''}</div>
+   .name{font-size:18px;font-weight:650;line-height:1.25;letter-spacing:-.01em;overflow-wrap:anywhere}.note{position:relative;display:block;padding-inline-start:8px;font-size:12px;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);line-height:1.4;overflow-wrap:anywhere}.note::before{content:'';position:absolute;inset-inline-start:0;top:2px;width:2px;height:12px;border-radius:1px;background:var(--accent-color,var(--primary-color,#2196f3))}
+   .status{display:flex;align-items:center;gap:6px;font-size:12px;line-height:1.45;color:var(--secondary-text-color);overflow-wrap:anywhere;min-width:0}
+   footer{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto}.room-button{appearance:none;box-sizing:border-box;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;width:36px;height:36px;min-width:36px;min-height:36px;padding:2px 6px;border:0;border-radius:var(--eleven-material-radius-button,9px);background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit;font-size:12px;font-weight:400;line-height:1.4;cursor:pointer}.room-button.on{background:var(--primary-color);color:var(--text-primary-color,#fff)}.room-button:disabled{opacity:.45;cursor:default}.room-button ha-icon{--mdc-icon-size:16px;flex:none;width:16px;height:16px}
+   .scene-row{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px}.scene-label{font-size:12px;line-height:1.45;color:var(--secondary-text-color)}.scene-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;min-width:0}.scene-actions .scene-button{max-width:100%}.scene-actions .scene-button:has(span){width:auto;padding-inline:8px}.scene-button span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.scene-error{margin:0;font-size:12px;line-height:1.4;color:var(--error-color)}
+  ${cardThemeStyles({controls:'.control:not(.on),.scene-button',selected:'.control.on'})}.room-button{border-radius:var(--eleven-material-radius-button,9px)}</style><ha-card><div class="room"><div class="head">
   ${c.navigation_path?`<a class="identity" href="${esc(c.navigation_path)}" aria-label="Open ${esc(c.name)}">`:'<div class="identity">'}<span class="name">${esc(c.name)}</span>${c.note?`<span class="note">${esc(c.note)}</span>`:''}${c.navigation_path?'</a>':'</div>'}
-  <footer><span class="status ${s.unavailable?'warning':''}">${s.unavailable?'<ha-icon icon="mdi:alert-circle-outline"></ha-icon>':''}${esc(s.label)}</span>${s.total?`<button class="control ${s.on?'on':''}" type="button" aria-label="Bedien verlichting ${esc(c.name)}" ${s.unavailable===s.total?'disabled':''}><ha-icon icon="mdi:lightbulb-outline"></ha-icon></button>`:''}</footer></div></ha-card>`;
+  ${temp||humidity?`<div class="climate">${temp?`<span class="temp" aria-label="${dutch?'Temperatuur':'Temperature'} ${esc(temp)}">${esc(temp)}</span>`:''}${humidity?`<span class="humidity" aria-label="${dutch?'Luchtvochtigheid':'Humidity'} ${esc(humidity)}">${esc(humidity)}</span>`:''}</div>`:''}</div>
+  ${scenes}${this._sceneError?`<p class="scene-error" role="alert">${dutch?'Scene kon niet worden gestart. Probeer opnieuw.':'Could not activate scene. Try again.'}</p>`:''}
+  <footer><span class="status">${esc(s.label)}</span>${s.total?`<button class="control room-button ${s.on?'on':''}" type="button" aria-label="Bedien verlichting ${esc(c.name)}" ${s.unavailable===s.total?'disabled':''}><ha-icon icon="mdi:lightbulb-outline"></ha-icon></button>`:''}</footer></div></ha-card>`;
   const link=this.shadowRoot.querySelector('a');if(link)link.onclick=e=>{if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();history.pushState(null,'',c.navigation_path);window.dispatchEvent(new Event('location-changed'));};
-  const control=this.shadowRoot.querySelector('button');if(control)control.onclick=()=>this._moreInfo(c.lights.find(id=>!['unknown','unavailable'].includes(this._hass?.states?.[id]?.state)&&this._hass?.states?.[id])||c.lights[0]);
-  if(focused)this.shadowRoot.querySelector('.'+focused.split(' ')[0])?.focus();
+  const control=this.shadowRoot.querySelector('.control');if(control)control.onclick=()=>this._moreInfo(c.lights.find(id=>!['unknown','unavailable'].includes(this._hass?.states?.[id]?.state)&&this._hass?.states?.[id])||c.lights[0]);
+  for(const button of this.shadowRoot.querySelectorAll('[data-scene]'))button.onclick=()=>this._activateScene(button.dataset.scene);
+  if(focusedScene)[...this.shadowRoot.querySelectorAll('[data-scene]')].find(button=>button.dataset.scene===focusedScene)?.focus();
+  else if(focused)this.shadowRoot.querySelector('.'+focused.split(' ')[0])?.focus();
  }
 }
 
