@@ -35,3 +35,7 @@ Miniature step lines have independent vertical scales per sensor and no cross-se
 ## Development
 
 Edit `src/`, not `dist/`. Run `node cards/overview-card/scripts/build.mjs`, `node --test cards/overview-card/tests/*.test.mjs`, then the root regression suite. Design and installation scope are recorded in `../../docs/OVERVIEW-BETA-PLAN.md`.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

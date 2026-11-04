@@ -33,6 +33,9 @@ export const configs=[
  ['shopping-card','Boodschappen',{entity:'todo.shopping'},false],
 ];
 
+// One shared background configuration for all overview and detail cards.
+configs.forEach(row=>{row[2].card_background={variant:'isobars',coverage:'header',height:240,colorMode:'accent',transparency:65,animated:true};});
+
 export const cardType=name=>'custom:eleven-'+(name==='car-evcc'?'car-card':name);
 export function createFixture(name,extraStates={}){
  const local={...hass,states:{...structuredClone(hass.states),...structuredClone(extraStates)},themes:{darkMode:false}};

@@ -1,3 +1,4 @@
+import {withCardBackground} from '../../../shared/card-background.js';
 import {cardThemeStyles} from '../../../shared/card-theme.js';
 /* Eleven Scene Engine — local proposal, no dependencies or automatic actions. */
 const text = (value, fallback = '—') => value === null || value === undefined || value === '' ? fallback : String(value);
@@ -140,6 +141,6 @@ export class ElevenSceneEngineCard extends HTMLElement {
     } finally { this._pending = false; this._render(); }
   }
 }
-if (!customElements.get('eleven-scene-engine-card')) customElements.define('eleven-scene-engine-card',ElevenSceneEngineCard);
+if (!customElements.get('eleven-scene-engine-card')) customElements.define('eleven-scene-engine-card',withCardBackground(ElevenSceneEngineCard));
 window.customCards = window.customCards || [];
 if (!window.customCards.some(c=>c.type === 'eleven-scene-engine-card')) window.customCards.push({type:'eleven-scene-engine-card',name:'Eleven Scene Engine',description:'Actieve scene, aanvragen en een bevestigde reset.',preview:false});

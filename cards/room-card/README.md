@@ -25,3 +25,11 @@ node --check cards/room-card/dist/eleven-room-card.js
 Standalone output: `cards/room-card/dist/eleven-room-card.js`. Installed locally at `/local/eleven-cards/eleven-room-card.js` with a hash query string. Not included in the collection bundle or any published HACS release yet. Do not add a second resource for the same card.
 
 Supported mobile viewport: 360px and wider. Default width is six of twelve section columns, auto height; every interactive target is at least 44px high. Long labels wrap. Native HA light/dark themes tested at 360px, 390px and 1280px. This local beta currently uses Dutch labels; existing cards remain unchanged.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.
+
+## Configuration examples
+
+The [room detail gallery](../../review/detail.html?card=room-card) shows five working configurations: a living room with two lights, a bedroom with temperature, a compact office, a kitchen with an unavailable light, and an unconfigured guest room. All reuse the production card and shared theme, with Atmospheric flow in a fading 240 px top section. The examples use fictitious entities.

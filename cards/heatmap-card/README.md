@@ -163,3 +163,7 @@ npm run check
 ```
 
 [Synthetic QA page](qa/index.html) exercises statistics, raw history with gaps, consumption, empty/error/retry states, a form fixture, language, themes and narrow cards. **Popups controleren** runs fourteen browser checks covering hover, static cells, scale placement, dismissal, refresh preservation and mutual exclusion of the header popups. **Kleurkeuze controleren** runs five checks covering the editor's RGB update contract and rendered color scale. **Gegevens controleren** runs seventeen checks covering sources, converted units, empty counters, failure/recovery, calendar navigation, annual layout and timezone changes. **Editor controleren** exercises native group contracts, focus/expansion retention, visibility, dimensions, color-stop add/edit/remove, mode switching, validation/recovery, optional bounds and language. **Groepering controleren** checks all four native aggregation options, matrix labels/columns, preserved consumption totals, hover and raw-history averages. The separate aggregation dropdown also allows manual comparison. It contains no real household data and the form fixture is not Home Assistant's real editor.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

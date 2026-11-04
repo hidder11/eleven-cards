@@ -5,7 +5,7 @@ import vm from 'node:vm';
 export function loadCards(){
  const elements=new Map();
  class Element{
-  attachShadow(){return this.shadowRoot={innerHTML:'',activeElement:null,querySelectorAll:()=>[],querySelector:()=>null};}
+  attachShadow(){return this.shadowRoot={innerHTML:'',activeElement:null,querySelectorAll:()=>[],querySelector:selector=>['.native','summary','.settings'].includes(selector)?{replaceChildren(){}}:null,addEventListener(){}};}
   dispatchEvent(event){(this.events??=[]).push(event);return true;}
  }
  class FixedDate extends Date{

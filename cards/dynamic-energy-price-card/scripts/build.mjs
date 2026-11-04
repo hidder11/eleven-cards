@@ -21,14 +21,16 @@ if (!importPattern.test(cardSource)) {
   throw new Error('Expected price-utils import was not found in the card source.');
 }
 
+const backgroundSource=(await Promise.all(['ui-button.js','ui-card-background.js','card-background.js'].map(file=>readFile(resolve(root,'../../shared/'+file),'utf8')))).map(source=>source.replace(/^import .*;\s*$/gm,'').replace(/^export /gm,'')).join('\n');
 const themeSource=(await readFile(resolve(root,'../../shared/card-theme.js'),'utf8')).replace(/^export /gm,'');
 const bundledUtils = utilsSource.replace(/^export\s+/gm, '');
 const bundledLocalization = localizationSource.replace(/^export\s+/gm, '');
 const bundledCard = cardSource.replace(importPattern, '').replace(/^import .* from ['"][^'"]+['"];\s*/gm, '');
+const backgroundCard=bundledCard.replace("customElements.define('eleven-dynamic-energy-price-card', DynamicEnergyPriceCard)","customElements.define('eleven-dynamic-energy-price-card',withCardBackground(DynamicEnergyPriceCard))");
 const banner = '// Eleven Dynamic Energy Price Card — standalone dashboard bundle\n';
 
 await mkdir(dirname(outputPath), { recursive: true });
 const temporaryPath = resolve(dirname(outputPath), `.energy-${process.pid}.tmp`);
-await writeFile(temporaryPath, `${banner}(()=>{\n"use strict";\n${themeSource}\n${surfaceSource.replace(/^export /gm, '')}\n${graphSource.replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '')}\n${periodsSource.replace(/^export /gm, '')}\n${bundledUtils}\n${bundledLocalization}\n${bundledCard}\n})();\n`, 'utf8');
+await writeFile(temporaryPath, `${banner}(()=>{\n"use strict";\n${themeSource}\n${surfaceSource.replace(/^export /gm, '')}\n${graphSource.replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '')}\n${periodsSource.replace(/^export /gm, '')}\n${bundledUtils}\n${bundledLocalization}\n${backgroundSource}\n${backgroundCard}\n})();\n`, 'utf8');
 await rename(temporaryPath, outputPath);
 console.log(`Built ${outputPath}`);

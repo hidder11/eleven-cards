@@ -163,3 +163,7 @@ A horizontal image offset of 0 centers the vehicle in the full card, in both cus
 Car, Energy and Weather share all eleven backgrounds and the exact same localized editor names, including Animated/Static labels: lanes, halo, ribbon, prism-glass, eclipse, aurora, clouds, isobars, hologram, ink and terrain. Existing YAML IDs stay unchanged. New patterns use the shared header renderer, intensity, animation toggle and reduced-motion behavior.
 
 Information surfaces use the shared matte relief from shared/ui-surface.js, matching Energy, Car (including EVCC), Weather and Camera. Cross-card computed-style and narrow-layout checks are available in shared/qa/surface-consistency.html.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

@@ -12,5 +12,17 @@
   "review/fixtures.js",
   "review/detail.html",
   "review/detail.css",
-  "review/detail.js"
+  "review/detail.js",
+  "review/backgrounds.html",
+  "review/backgrounds.css",
+  "review/backgrounds.js",
+  "shared/ui-card-background.js",
+  "shared/ui-button.js",
+  "shared/ui-primary-value.js",
+  "shared/ui-metric.js",
+  "shared/ui-surface.js",
+  "shared/ui-bar.js",
+  "review/background-cards.html",
+  "review/background-cards.css",
+  "review/background-cards.js"
 ]

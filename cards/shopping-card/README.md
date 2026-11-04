@@ -45,3 +45,7 @@ All browser mutations use synthetic JavaScript `hass`, service and WS boundaries
 The card uses `connection.subscribeMessage` (`todo/item/subscribe`) and cleans up both resolved and still-pending subscriptions on removal or entity/connection changes. Generation checks ignore stale callbacks and mutation completions. Ordinary hass/subscription updates preserve drafts, keyboard focus and selection. Initial loading, empty, unavailable, error and retry states are explicit. Failed additions keep captured product names without clearing newer drafts. Edit/remove/reorder retain their existing request lock.
 
 The request contract was inspected in the supplied official frontend `todo.ts` and native card source. The supplied source is a development-branch fallback, not verified byte-for-byte against HA 2026.10.4. A direct core tag/source lookup also returned 404; live compatibility still requires the parent-owned HA verification.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

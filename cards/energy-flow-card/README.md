@@ -149,3 +149,7 @@ Car, Energy and Weather share all eleven backgrounds and the exact same localize
 The Grid Import/Export detail surfaces use the same background tint as Home and the Solar ratio blocks. All information surfaces and diagram endpoints use the shared matte relief from shared/ui-surface.js, also used by Car, EVCC, Weather and Camera. The previous flat style and alternative depth treatments remain available in qa/surface-depth.html; option 4 is the selected production style. Cross-card checks are in shared/qa/surface-consistency.html.
 
 Other uses the same home accent for its surface tint and proportion bar as individual devices (Overig in Dutch). Historical detail requests include battery charge/discharge statistics. Other costs stay unavailable when hourly measurements exceed the home total or the summed hourly remainder differs from the displayed period remainder by more than 0.01 kWh; this prevents inflated residual costs. Storage energy affects the home balance, while the tariff remains an estimate of consumption value rather than actual battery acquisition cost.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

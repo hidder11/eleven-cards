@@ -17,12 +17,13 @@ test('modern Controls renders per-curtain names with friendly-name and entity fa
  assert.match(html,/Niet beschikbaar/);
 });
 
-test('modern cards retain their shared editor and independent mode-free stubs',()=>{
+test('modern cards retain their shared editor and independent mode-free stubs',async()=>{
  const {elements}=loadCards();
  for(const kind of ['actions','controls','waste']){
-  const Card=elements.get(`eleven-${kind}-card`),editor=Card.getConfigElement(),stub=Card.getStubConfig();
-  assert.ok(editor instanceof elements.get('eleven-controls-editor'));
-  assert.equal(editor.kind,kind);
+  const Card=elements.get(`eleven-${kind}-card`),editor=await Card.getConfigElement(),stub=Card.getStubConfig();
+  assert.ok(editor instanceof elements.get('eleven-card-background-editor'));
+  assert.ok(editor._nativeEditor instanceof elements.get('eleven-controls-editor'));
+  assert.equal(editor._nativeEditor.kind,kind);
   assert.equal(stub.type,`custom:eleven-${kind}-card`);
   assert.equal('mode' in stub,false);
   assert.equal(typeof Card.getConfigForm,'undefined','legacy mode editor is gone');

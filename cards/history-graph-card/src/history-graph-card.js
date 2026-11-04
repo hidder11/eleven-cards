@@ -1,3 +1,4 @@
+import {withCardBackground} from '../../../shared/card-background.js';
 import {timeframeSyncConfig,connectTimeframeSync,disconnectTimeframeSync} from '../../../shared/periods.js';
 import {validateConfig,loadHistorySeries,historyEntityIds,seriesSourceIds,historyUrl,decodeHistory,seriesMetadata,graphAxes,valueAt,numericState,stepPath,gradientColor,aggregateSeries,displayPoints,connectGapPoints,editorConfig,cardConfig,seriesAppearance,updateSeriesRow,removeSeriesRow,lineStyleSources} from './history-utils.js';
 import {language,text,number,time,escapeHtml,frontendHass} from './localization.js';
@@ -329,7 +330,7 @@ export class HistoryGraphCard extends HTMLElement {
   const previousChart=this.shadowRoot.querySelector('.chart');if(previousChart)previousChart.onblur=null;
   const toolsHadFocus=this.shadowRoot.activeElement?.matches?.('.history-tools summary');
   // Bar shares the information wells; the Default button correction stays History-only.
-  const historyOnly=this.constructor===HistoryGraphCard;
+  const historyOnly=(this.constructor.backgroundBaseCard??this.constructor)===HistoryGraphCard;
   this.shadowRoot.innerHTML=`<style>${this._styles()}${cardThemeStyles({chartUI:true,plots:'.chart',wells:'.insight-sensor[data-ui-detail-surface]',controls:'.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period],.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]'+(historyOnly?',.period-default [data-ui-button=surface]':''),surfaces:'.tooltip,[data-ui-popup]'})}${this._calmChartLayout?this._historyStyles():''}${uiBalancedTabsStyles()}</style><ha-card lang="${lang}"><div class="card-content">${controls}${content}</div></ha-card>`;
   this._updateGraphTheme();bindPeriodControls(this);bindChartInsights(this);
   const tools=this.shadowRoot.querySelector('.history-tools');if(tools)tools.onkeydown=e=>{if(e.key==='Escape'&&!e.target.closest?.('[popover]')){e.preventDefault();tools.open=false;tools.querySelector('summary').focus();}};
@@ -425,7 +426,7 @@ export class HistoryGraphCard extends HTMLElement {
  }
   // The shared header still supplies every existing action and its semantics.
   // Bar explicitly opts into this arrangement; other companions remain unchanged.
- get _calmChartLayout(){return this.constructor===HistoryGraphCard;}
+ get _calmChartLayout(){return (this.constructor.backgroundBaseCard??this.constructor)===HistoryGraphCard;}
  _historyHeader(options){
   const label=options.language.startsWith('nl')?'Grafiekopties':'Graph tools';
   const open=this.shadowRoot.querySelector('.history-tools')?.open;
@@ -524,7 +525,7 @@ export class HistoryGraphCard extends HTMLElement {
  @media(max-width:480px){.card-content{padding:12px 12px 10px}}
  `;}
 }
-if(!customElements.get('eleven-history-graph-card'))customElements.define('eleven-history-graph-card',HistoryGraphCard);
+if(!customElements.get('eleven-history-graph-card'))customElements.define('eleven-history-graph-card',withCardBackground(HistoryGraphCard));
 window.customCards=window.customCards??[];
 if(!window.customCards.some(card=>card.type==='eleven-history-graph-card'))window.customCards.push({type:'eleven-history-graph-card',name:'Eleven History Graph Card',get description(){return language(frontendHass())==='nl'?'Sensorhistorie met een eigen y-as per eenheid':'Sensor history with an independent y-axis per unit';}});
 import {cardThemeStyles} from '../../../shared/card-theme.js';

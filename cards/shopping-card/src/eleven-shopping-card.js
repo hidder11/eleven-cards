@@ -178,7 +178,7 @@ class ShoppingEditor extends HTMLElement {
   }
 }
 if(!customElements.get('eleven-shopping-card-editor'))customElements.define('eleven-shopping-card-editor',ShoppingEditor);
-if(!customElements.get('eleven-shopping-card'))customElements.define('eleven-shopping-card',ShoppingCard);
+if(!customElements.get('eleven-shopping-card'))customElements.define('eleven-shopping-card',withCardBackground(ShoppingCard));
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==='eleven-shopping-card'))window.customCards.push({type:'eleven-shopping-card',name:'Eleven Shopping Card',description:'A calm, compact shopping list for any todo entity.',preview:true});
 })();

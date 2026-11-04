@@ -270,6 +270,10 @@ export class CalendarCard extends HTMLElement{
   const content=`<div class="calendar-info"><div class="insight-sensors">${rows}</div></div>`;
   return uiPopup({id:'calendar-info',className:'insight-popup',title:dutch?'Gegevens':'Data information',closeLabel:label('close',dutch),content});
  }
+ _monthPeriods(range,dutch){
+  this._periodMenuOpen=false;this._periodMenuPending=false;
+  return {picker:`<span class="range">${escapeCalendarHtml(this._rangeLabel(range))}</span>`,navigation:[['previous',-1,dutch?'Vorige maand':'Previous month'],['now',0,dutch?'Huidige maand':'Current month'],['next',1,dutch?'Volgende maand':'Next month']].map(([key,direction,title])=>uiButton({text:key==='now'?(dutch?'Nu':'Now'):'',content:key==='now'?undefined:cardHeaderIcon(key),label:title,title,attrs:{'data-period':key,'data-month-direction':direction}})).join('')};
+ }
  _cleanupUI(){disconnectPeriodControls(this,true);globalThis.document?.removeEventListener?.('pointerdown',this._toolsOutside);for(const controller of this._popupControllers){controller.close();controller.disconnect();}this._popupControllers=[];}
  _render(){
   if(!this._config)return;
@@ -277,7 +281,7 @@ export class CalendarCard extends HTMLElement{
   const active=this.shadowRoot.activeElement,focusCalendar=active?.dataset?.calendar,focusEvent=active?.dataset?.calendarEvent,focusInfo=active?.hasAttribute?.('data-info'),focusRetry=active?.hasAttribute?.('data-retry');
   const toolsOpen=Boolean(this.shadowRoot.querySelector('.calendar-tools')?.open),focusTools=active?.matches?.('.calendar-tools summary');
   const openInfo=this.shadowRoot.querySelector('#calendar-info:popover-open,#calendar-info[data-fallback-open]'),infoPopupFocus=Boolean(openInfo?.contains(active));
-  this._periodAdapter=calendarPeriodAdapter(this);const periods=periodControls(this,dutch?'nl':'en',{tabVariant:'card'});
+  this._periodAdapter=calendarPeriodAdapter(this);const periods=this._view==='month'?this._monthPeriods(range,dutch):periodControls(this,dutch?'nl':'en',{tabVariant:'card'});
   this._renderKey=renderKey;
   this._cleanupUI();
   if(this._emptyConfig){this._displayEvents=[];this._updateNextEvent();this.shadowRoot.innerHTML=`<style>${calendarCardStyles()}</style><ha-card><div class="content"><div class="status">${label('select',dutch)}</div></div></ha-card>`;return;}
@@ -298,7 +302,10 @@ export class CalendarCard extends HTMLElement{
   const calendarBody=this.shadowRoot.querySelector('.calendar-body');if(calendarBody)calendarBody.scrollTop=scrollTop;
   this._updateNextEvent();
   bindUILegend(this,{selector:'[data-calendar]',getId:button=>button.dataset.calendar,hint:label('soloHint',dutch),toggle:id=>this._toggleCalendar(id),isolate:id=>this._toggleCalendarIsolation(id)});
-  bindPeriodControls(this);
+  if(this._view==='month'){
+   for(const button of this.shadowRoot.querySelectorAll('[data-month-direction]'))button.onclick=()=>{const key=button.dataset.period;this._periodAdapter.move(Number(button.dataset.monthDirection));this.shadowRoot.querySelector(`[data-period="${key}"]`)?.focus({preventScroll:true});};
+   if(active?.dataset.period)this.shadowRoot.querySelector(`[data-period="${active.dataset.period}"]`)?.focus({preventScroll:true});
+  }else bindPeriodControls(this);
   if(focusCalendar)this._focusLegend(focusCalendar);
   else if(focusEvent){const target=[...this.shadowRoot.querySelectorAll('[data-calendar-event]')].find(e=>e.dataset.calendarEvent===focusEvent);(target??this.shadowRoot.querySelector('.calendar-tools summary'))?.focus({preventScroll:true});}
   else if(focusInfo||focusRetry||focusTools)this.shadowRoot.querySelector(focusInfo&&toolsOpen?'[data-info]':'.calendar-tools summary')?.focus({preventScroll:true});

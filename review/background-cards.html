@@ -1,0 +1,15 @@
+<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gekozen achtergronden op kaarten | Eleven Material</title><link rel="stylesheet" href="detail.css"><link rel="stylesheet" href="background-cards.css"></head><body>
+<header><div><a href="./">Alle kaarten</a><h1>Vijf achtergronden op verschillende kaarten</h1><p>Opties 1, 4, 7, 9B en 8 op de bestaande Historie-, Auto-, Agenda-, Weer-, Energiestromen- en EVCC-kaarten. Alle gegevens en acties zijn fictief.</p><p>Bij 7 staat de gloed stil; de lichtaccenten volgen de lijnen. Het raster van 8 loopt door tot bovenaan de kaart.</p></div><button id="mode" type="button" aria-pressed="false">Donker thema</button></header>
+<form class="preview-settings" aria-label="Voorbeeldinstellingen">
+<label>Achtergrond<select id="variant"><option value="all">Alle vijf achtergronden</option></select></label>
+<label>Kaart<select id="card-type"><option value="all">Alle kaarten</option></select></label>
+<label>Agendaweergave<select id="calendar-view"><option value="list">Daglijst</option><option value="month">Maandoverzicht</option></select></label>
+<label>Bereik<select id="coverage"><option value="card">Hele kaart</option><option value="header">Bovenste strook</option></select></label>
+<label id="height-control" hidden>Hoogte (px)<input id="background-height" type="number" min="24" max="2000" step="1" value="240" aria-describedby="height-help"><small id="height-help">Vloeit onderaan zacht uit.</small></label>
+<label>Kleurbron<select id="color-mode"><option value="accent">Thema-accent</option><option value="custom">Eigen kleuren</option><option value="dynamic">Statuskleur van de kaart</option></select></label>
+<fieldset id="palette" hidden><legend>Eigen kleuren</legend><label>Kleur 1<input type="color" value="#4db6ac"></label><label>Kleur 2<input type="color" value="#7287ed"></label><label>Kleur 3<input type="color" value="#c77dbd"></label></fieldset>
+<label>Transparantie<span class="range-input"><input id="transparency" type="range" min="0" max="100" value="55"><output id="transparency-value" for="transparency">55%</output></span></label>
+<label class="motion"><input id="animated" type="checkbox" checked>Achtergrondanimatie</label>
+</form><nav class="view-links" aria-label="Gekozen achtergronden"></nav><main></main>
+<p class="note"><a href="backgrounds.html">Alle eerdere achtergrondvarianten vergelijken</a></p>
+<script src="ha-stub.js"></script><script src="../dist/eleven-cards.js"></script><script type="module" src="background-cards.js"></script></body></html>

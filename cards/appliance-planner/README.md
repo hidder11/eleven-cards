@@ -96,3 +96,7 @@ Browser QA (requires Playwright Python and `AGENT_BROWSER_EXECUTABLE_PATH`):
 ```
 
 It creates/stops a loopback-only temporary server and writes screenshots/results under `qa-evidence/appliance-planner/` at the collection root. All tariffs, programs, Lovelace interfaces and integration replies in that fixture are explicitly **synthetic**. This is component/browser verification, not a live-provider or household dashboard test. Native date/time widgets follow browser/OS formatting; result times remain localized 24-hour HA-zone times. Ambiguous/nonexistent DST inputs are rejected. Linked separate-device transfer sequences and field-proven appliance recognition are not implemented.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

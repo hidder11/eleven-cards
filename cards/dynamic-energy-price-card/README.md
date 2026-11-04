@@ -420,3 +420,7 @@ Do not edit the generated bundle directly. Serve this card directory and open `/
 ## License
 
 MIT
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

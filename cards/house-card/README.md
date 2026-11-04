@@ -120,3 +120,7 @@ python cards/house-card/tests/browser-house.py
 ```
 
 Use your Playwright Python environment and installed Chromium. If needed, set `BROWSER_EXECUTABLE=/path/to/chrome`; no browser binary is committed. Browser-house generates synthetic float buffers/manifests in memory and serves this repository on an ephemeral loopback port. It checks both cameras, four phases, light/dark, real state mapping, compositor invariance, editor construction, aliases, duplicate loads, 320px layout, DPR cap, reduced motion, offscreen/disconnect/reconnect and explicit-only service actions. Node tests cover checksums/compression/cache/lazy loading, solar selection, binding semantics, status escaping, actual paint commands, long-session snow and integrated wind clocks. This is **offline component QA, not authenticated native Lovelace or live HA validation**. Actual household assets and native HA editor/integration still require separate authorized verification.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

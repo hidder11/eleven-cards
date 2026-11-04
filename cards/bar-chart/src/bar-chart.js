@@ -1,3 +1,4 @@
+import {withCardBackground} from '../../../shared/card-background.js';
 import {HistoryGraphCard,HistoryGraphEditor} from '../../history-graph-card/src/history-graph-card.js';
 import {editorConfig,graphAxes,yAxis,alignZeroAxes,alignGridAxes,periodBounds,valueAt,aggregateSeries,displayPoints} from '../../history-graph-card/src/history-utils.js';
 import {language,frontendHass} from '../../history-graph-card/src/localization.js';
@@ -223,6 +224,6 @@ export class BarChartCard extends HistoryGraphCard {
 `;
  }
 }
-if(!customElements.get('eleven-bar-chart'))customElements.define('eleven-bar-chart',BarChartCard);
+if(!customElements.get('eleven-bar-chart'))customElements.define('eleven-bar-chart',withCardBackground(BarChartCard));
 window.customCards=window.customCards??[];
 if(!window.customCards.some(c=>c.type==='eleven-bar-chart'))window.customCards.push({type:'eleven-bar-chart',name:'Eleven Bar Chart',get description(){return local('Vertical sensor history bars, based on Eleven History.','Verticale staven van sensorhistorie, gebaseerd op Eleven History.');}});

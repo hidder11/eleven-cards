@@ -51,3 +51,7 @@ Reset vraagt altijd bevestiging, toont het exacte doel en waarschuwt voor een mo
 ## Beperkingen
 
 Alle QA gebruikt synthetische data en mocks. Geen echte HA runtime, grafische editor, rechtenmodel, echte reset/rebuild of resourcelevering geverifieerd. Licht/donker gecontroleerd met lokale HA-themawaarden, niet met alle mogelijke gebruikersthema's. Chrome/Chromium getest; andere browsers niet. Ontwerp is een voorstel, nog geen gebruikersgoedkeuring.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../../README.md#shared-card-background) for options and legacy compatibility.

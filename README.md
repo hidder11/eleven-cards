@@ -2,6 +2,26 @@
 
 Home Assistant dashboard cards for energy, sensor history, calendars, weather, vehicles and everyday controls.
 
+## Shared card background
+
+Every built card has a **Card background / Kaartachtergrond** section in its visual editor, including the separate local beta cards. Choose Aurora sky, Silk Flow, Atmospheric flow, Ink bloom or Holographic grid; theme accent, up to three custom colours or the card's status colour; transparency; animation; and coverage of the whole card or the top X pixels. A top section fades at its lower edge, and decoration stays within the theme's rounded card corners. New configurations default to Atmospheric flow over the top 240 px with 65% transparency. Existing background YAML stays usable.
+
+Add the same object to any card configuration:
+
+```yaml
+card_background:
+  variant: isobars # aurora, ribbon, ink-bloom, hologram
+  colorMode: accent # custom or dynamic
+  colors: ['#4db6ac', '#7287ed', '#c77dbd'] # used in custom mode
+  transparency: 65
+  coverage: header # card for the full surface
+  height: 240
+  animated: true
+```
+
+Use `card_background: false` to turn it off. Dynamic colours use the calling card's status tone where available and otherwise fall back to the Home Assistant accent. Animation respects reduced motion and pauses outside the viewport. See the [shared component documentation](shared/README.md#animated-card-background) and the [interactive overview](review/index.html).
+
+
 ## Cards
 
 | Card | What it shows | Configuration |
@@ -21,7 +41,7 @@ Home Assistant dashboard cards for energy, sensor history, calendars, weather, v
 
 ![Eleven Dynamic Energy Price Card preview](cards/dynamic-energy-price-card/docs/images/revised-default-dark-desktop.png)
 
-All twelve cards include a visual editor and follow Home Assistant's light/dark theme. House currently retains its approved Dutch chrome; the other cards follow Dutch/English frontend language. Energy, History, Timeline and Bar Chart support synchronized hover across cards. History, Bar Chart and Timeline also share a compact period picker and a single group for previous/next, Now and zoom controls in the header, with rolling windows and local calendar days, weeks, months, quarters and years. These three cards also indicate zoom, support isolating one entity and provide an information icon beside History with compact per-sensor source and unit information. History and Bar Chart include per-sensor min/max/average for the viewed range; Delta Bar Chart adds sums in the same popup. Calendar reuses the shared period popup for day counts, calendar periods and custom ranges, while keeping its own date navigation and Home Assistant timezone; it does not join graph timeframe synchronization.
+All twelve cards include a visual editor and follow Home Assistant's light/dark theme. House currently retains its approved Dutch chrome; the other cards follow Dutch/English frontend language. Energy, History, Timeline and Bar Chart support synchronized hover across cards. History, Bar Chart and Timeline also share a compact period picker and a single group for previous/next, Now and zoom controls in the header, with rolling windows and local calendar days, weeks, months, quarters and years. These three cards also indicate zoom, support isolating one entity and provide an information icon beside History with compact per-sensor source and unit information. History and Bar Chart include per-sensor min/max/average for the viewed range; Delta Bar Chart adds sums in the same popup. Calendar list and column views reuse the shared period popup for day counts, calendar periods and custom ranges, while Month view offers only previous month, Now and next month. Calendar keeps its own date navigation and Home Assistant timezone; it does not join graph timeframe synchronization.
 
 Car combines the vehicle and EVCC cards. Enable EVCC integration to show charging data and choose the Controls, Session and EVCC tabs; disable it to choose your own percentage and three entity readings. Compact changes density independently of visible tabs. The standalone EVCC card has been removed. Migrate existing `custom:eleven-evcc-card` dashboards to `custom:eleven-car-card` with `evcc_enabled: true`; retain the entity mappings and other settings. The Climate prototype has also been removed.
 

@@ -1,3 +1,4 @@
+import {withCardBackground} from '../../../shared/card-background.js';
 import {cardThemeStyles} from '../../../shared/card-theme.js';
 import {uiSlider,syncUISlider,uiBarStyles} from '../../../shared/ui-bar.js';
 import {available,finite,actionRequest} from './control-utils.mjs';
@@ -157,7 +158,7 @@ class ControlsEditor extends HTMLElement{
   this.shadowRoot.querySelector('.add').onclick=()=>{this.emit({...this._config,[key]:[...(this._config[key]||[]),{entity:''}]});this.render();};
  }
 }
-for(const [tag,cls] of [['eleven-controls-editor',ControlsEditor],[TYPES.actions,ActionsCard],[TYPES.controls,ControlsCard],[TYPES.waste,WasteCard]])if(!customElements.get(tag))customElements.define(tag,cls);
+for(const [tag,cls] of [['eleven-controls-editor',ControlsEditor],[TYPES.actions,ActionsCard],[TYPES.controls,ControlsCard],[TYPES.waste,WasteCard]])if(!customElements.get(tag))customElements.define(tag,tag.endsWith('-editor')?cls:withCardBackground(cls));
 // Home Assistant retains this array by reference: never replace it.
 window.customCards=window.customCards||[];
 // Clean stale picker metadata only; the retired element and mode editor are not implemented.
