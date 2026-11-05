@@ -71,6 +71,8 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Browser smoke test
         run: python tests/browser-smoke.py
+      - name: All-card cold-start render and migration regressions (synthetic HA)
+        run: python tests/browser-all-cards-render.py
       - name: Record release provenance
         run: |
           if ! test -s themes/eleven_material.yaml; then

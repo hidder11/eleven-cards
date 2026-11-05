@@ -62,6 +62,27 @@ test('collection repairs a pre-existing pilot picker without replacing its const
   assert.notEqual(registry.get('eleven-house-card'), card);
 });
 
+test('actual legacy pilot registrations require removing the old resource before the collection', () => {
+  const legacy = read('tests/fixtures/legacy-material-house-registrations.js');
+  for (const legacyFirst of [true, false]) {
+    const {registry, window, context} = runtime();
+    for (const name of ['ElevenHouseCardEditor', 'ElevenHouseCard', 'HouseStylePreview', 'HouseStylePreviewEditor', 'MaterialHouseCard', 'MaterialHouseEditor']) context[name] = class {};
+    if (legacyFirst) {
+      vm.runInContext(legacy, context);
+      const originalPilot = registry.get('eleven-material-house');
+      vm.runInContext(read('dist/eleven-cards.js'), context);
+      assert.equal(registry.get('eleven-material-house'), originalPilot);
+      assert.deepEqual(Array.from(window.customCards, card => card.type).sort(), [...types].sort());
+    } else {
+      vm.runInContext(read('dist/eleven-cards.js'), context);
+      assert.throws(() => vm.runInContext(legacy, context), /duplicate eleven-material-house/);
+      assert.equal(window.customCards.length, 20, 'The unguarded old resource also restores its private baseline picker');
+    }
+  }
+  const readme = read('README.md');
+  assert.match(readme, /old\/unpackaged Material House standalone must be removed or replaced before loading the collection/i);
+});
+
 test('pilot source registration is idempotent and exposes exactly its public picker entry', () => {
   const {registry, window, context} = runtime();
   context.HouseStylePreview = class {};
