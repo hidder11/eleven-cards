@@ -34,11 +34,13 @@ async def main():
             await c.locator('#program').select_option('short');await page.wait_for_function('window.card.result&&!window.card.loading')
             assert await page.evaluate('window.card.result.kwh')==.6
             await c.locator('[data-day]').nth(1).click();await page.wait_for_function('window.card.result&&!window.card.loading')
-            assert (await c.locator('#deadline-date').input_value())=='2026-10-29'
-            results.append('program dropdown and Tomorrow shortcut automatically recompute')
-            await c.locator('#deadline-time').fill('23:00');await c.locator('#deadline-time').dispatch_event('change');await page.wait_for_function('window.card.result&&!window.card.loading')
-            assert await page.evaluate("window.card.form.deadline==='2026-10-29T23:00'")
-            results.append('native date/time change recomputes; full date and average/cost/savings rendered')
+            assert await page.evaluate('window.card.form.day')=='2026-10-29'
+            assert await page.evaluate('window.card.form.deadline')=='2026-10-30T00:00'
+            assert await page.evaluate('window.card.payload().deadline')=='2026-10-29T23:00:00.000Z'
+            results.append('program dropdown and Tomorrow end-of-day shortcut automatically recompute')
+            assert await c.locator('#deadline-date,#deadline-time,input[type=date],input[type=time]').count()==0
+            assert 'Klaar vóór einde van' in await c.locator('ha-card').inner_text()
+            results.append('no date/time selection; full date and average/cost/savings rendered')
             await page.evaluate('window.showCard()');await page.wait_for_function('window.card.result')
             assert not await c.locator('#advice-details').evaluate('(el)=>el.open')
             await c.locator('#appliance').select_option('combi');await page.wait_for_function('window.card.result&&!window.card.loading')
@@ -186,11 +188,11 @@ async def main():
             results.append('insufficient priced duration shows error, no invented tariffs or advice')
             await page.evaluate('window.hassFixture.states["sensor.prices"].attributes.prices=window.rows;window.showCard()')
             await page.wait_for_function('window.card.result')
-            await c.locator('#deadline-time').focus()
-            await page.evaluate('window.deadlineNode=window.card.shadowRoot.querySelector("#deadline-time");window.card.recompute()')
+            await c.locator('#day-0').focus()
+            await page.evaluate('window.card.recompute()')
             await page.wait_for_function('window.card.result&&!window.card.loading')
-            assert await page.evaluate('window.deadlineNode===window.card.shadowRoot.querySelector("#deadline-time")&&window.card.shadowRoot.activeElement===window.deadlineNode')
-            results.append('deadline DOM node and keyboard focus survive asynchronous recomputation')
+            assert await page.evaluate('window.card.shadowRoot.activeElement?.id==="day-0"')
+            results.append('day-selection keyboard focus survives asynchronous recomputation')
             await page.evaluate('window.originalWS=window.hassFixture.callWS;window.hassFixture.callWS=async r=>{if(r.operation==="preview")throw Object.assign(Error("Synthetic disconnected backend"),{code:"not_loaded"});return window.originalWS(r);};window.showCard("linked")')
             await page.wait_for_function('window.card.result&&!window.card.loading')
             assert await c.locator('#save-plan').count()==0

@@ -6,7 +6,8 @@ Part of [Eleven Cards](../../README.md). This is a local beta, installed for loc
 
 ## Standalone advice
 
-- Choose an appliance and program with visible buttons. Change the ready-before date/time or Today/Tomorrow; advice recalculates automatically.
+- Choose an appliance and program from the labeled selectors, then choose **Today** or **Tomorrow**. Advice recalculates automatically; there is no date or time field.
+- The appliance must finish by the end of the selected day in Home Assistant's time zone. The deadline is the following local midnight, including the final minute of the selected day and respecting daylight-saving transitions. If the program no longer fits today, choose Tomorrow; the card never silently extends the deadline.
 - Each program specifies elapsed minutes and **total kWh**. Standalone consumption is uniform, never a generated or measured profile.
 - Advice shows start/end with full local dates, estimated cost, consumption-weighted average ct/kWh, fixed price classification and savings against starting now.
 - If the immediate run is not completely priced, comparison is unavailable. If future prices are incomplete, a fully priced feasible run is still required and advice is provisional. Gaps never become free energy.
@@ -87,15 +88,15 @@ npm test
 npm run check
 ```
 
-The generated independent module is `dist/eleven-appliance-planner.js` in this card directory; the root collection bundle includes it. No external runtime dependency on Energy.
+The generated independent module is `dist/eleven-appliance-planner.js` in this card directory. Load this standalone module; the twelve-card root collection bundle does not include the appliance planner. No external runtime dependency on Energy.
 
 Browser QA (requires Playwright Python and `AGENT_BROWSER_EXECUTABLE_PATH`):
 
 ```sh
-/opt/data/workspace/eleven-appliance-planner/.venv/bin/python cards/appliance-planner/tests/browser_qa.py
+python cards/appliance-planner/tests/browser_qa.py
 ```
 
-It creates/stops a loopback-only temporary server and writes screenshots/results under `qa-evidence/appliance-planner/` at the collection root. All tariffs, programs, Lovelace interfaces and integration replies in that fixture are explicitly **synthetic**. This is component/browser verification, not a live-provider or household dashboard test. Native date/time widgets follow browser/OS formatting; result times remain localized 24-hour HA-zone times. Ambiguous/nonexistent DST inputs are rejected. Linked separate-device transfer sequences and field-proven appliance recognition are not implemented.
+It creates/stops a loopback-only temporary server and writes screenshots/results under `qa-evidence/appliance-planner/` at the collection root. All tariffs, programs, Lovelace interfaces and integration replies in that fixture are explicitly **synthetic**. This is component/browser verification, not a live-provider or household dashboard test. Result times use localized 24-hour HA-zone times. The selected calendar date survives updates; after midnight, yesterday's Tomorrow becomes Today. Expired advice is refreshed before saving. Linked separate-device transfer sequences and field-proven appliance recognition are not implemented.
 
 ## Shared card background
 
