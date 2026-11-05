@@ -31,9 +31,10 @@ export function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
 [data-ui-metric][data-density=compact] .ui-metric-icon{width:20px;height:20px;border-radius:6px;transform:translate(2px,-2px)}
 [data-ui-metric][data-density=compact] .ui-metric-icon svg,[data-ui-metric][data-density=compact] .ui-metric-icon ha-icon{width:16px;height:16px;--mdc-icon-size:16px}
 [data-ui-metric][data-density=compact] .ui-metric-value{font-size:20px}
+[data-ui-metric][data-value-kind=text] .ui-metric-value{font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-.03em;white-space:normal;overflow-wrap:break-word}
 [data-ui-metric][data-density=compact] .ui-metric-info{margin-top:4px;padding-top:4px}
 [data-ui-metric][data-unavailable=true]{--_metric-tone:var(--secondary-text-color,#626a78)}
-button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:hover{filter:brightness(1.04)}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:not(:disabled):hover{background:color-mix(in srgb,var(--secondary-background-color,#eee) 94%,var(--primary-text-color,#20252b));color:var(--primary-text-color,#20252b);filter:none}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
 [data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
 [data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
 @supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}

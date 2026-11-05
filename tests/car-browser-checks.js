@@ -11,10 +11,10 @@ async function carChecks(){
   car.setConfig({...config,compact});evcc.setConfig({...evccConfig,compact});
   const er=selector=>evcc.shadowRoot.querySelector(selector).getBoundingClientRect(),style=selector=>getComputedStyle(q(selector)),es=selector=>getComputedStyle(evcc.shadowRoot.querySelector(selector));
   check('no overflow '+width+compact+darkMode,q('.content').scrollWidth<=q('.content').clientWidth);
-  check('EVCC scene height '+width+compact+darkMode,Math.abs(rect('.car-stage').height-er('.car-stage').height)<.1);
+  check('Auto and EVCC reserve separate summary and vehicle regions '+width+compact+darkMode,rect('.picture').top>=rect('.battery-row').bottom&&er('.picture').top>=er('.battery-row').bottom);
   check('EVCC header position '+width+compact+darkMode,!q('h2')&&!evcc.shadowRoot.querySelector('h2')&&Math.abs((rect('.battery-value').top-rect('.header-scene').top)-(er('.battery-value').top-er('.header-scene').top))<.1);
   check('EVCC background fade '+width+compact+darkMode,style('.header-background').maskImage===es('.header-background').maskImage);
-  const values=car.shadowRoot.querySelectorAll('.car-readings .ui-metric-value');check('metric alignment '+width+compact+darkMode,Math.abs(values[0].getBoundingClientRect().top-values[1].getBoundingClientRect().top)<.1);
+  const values=car.shadowRoot.querySelectorAll('.car-readings .ui-metric-value');check('responsive metric grouping '+width+compact+darkMode,Array.from(values).every(value=>getComputedStyle(value).overflowWrap==='normal'&&value.scrollWidth<=value.clientWidth)&&(width<=340?values[1].getBoundingClientRect().top>values[0].getBoundingClientRect().bottom:Math.abs(values[0].getBoundingClientRect().top-values[1].getBoundingClientRect().top)<.1));
   const height=rect('.car-stage').height;car.setConfig({...config,compact,image_scale:300,image_offset_y:60});check('zoom keeps fixed height '+width+compact+darkMode,height===rect('.car-stage').height);
   const img=rect('img'),picture=rect('.picture'),cardBox=rect('ha-card');
   check('car image defaults to card center '+width+compact+darkMode,Math.abs((img.left+img.right-cardBox.left-cardBox.right)/2)<.1);check('image stays centered '+width+compact+darkMode,Math.abs((img.left+img.right)/2-(picture.left+picture.right)/2)<.1);
@@ -25,7 +25,7 @@ async function carChecks(){
  car.setConfig(config);car.hass={...hass,states:{...hass.states,'sensor.fuel':{state:'unavailable'},'sensor.range':{state:'0',attributes:{unit_of_measurement:'km'}}}};
  check('unavailable percentage does not become zero',!q('[role=progressbar]')&&q('.battery-value').textContent.includes('\u2014'));check('zero reading is visible',q('.car-readings').textContent.includes('0 km'));
  car.setConfig({...config,field_2_label:'Een heel lang gegevenslabel dat meerdere regels in beslag neemt',field_3_label:'Km'});car.style.width='260px';
- const values=car.shadowRoot.querySelectorAll('.car-readings .ui-metric-value');check('long labels retain aligned values',Math.abs(values[0].getBoundingClientRect().top-values[1].getBoundingClientRect().top)<.1);
+ const values=car.shadowRoot.querySelectorAll('.car-readings .ui-metric-value');check('long labels retain grouped unbroken values',values[1].getBoundingClientRect().top>values[0].getBoundingClientRect().bottom&&Array.from(values).every(value=>getComputedStyle(value).overflowWrap==='normal'&&value.scrollWidth<=value.clientWidth));
  car.setConfig({...config,title:'<img src=x onerror=alert(1)>',field_2_label:'<script>bad</script>'});check('labels escaped',!q('header img')&&!q('.car-readings script'));
  car.setConfig(config);car.hass={...hass,connected:false};check('offline readings identified',q('.notice').textContent.includes('Geen verbinding'));
  car.hass=hass;q('img').dispatchEvent(new Event('error'));check('broken image has fallback',q('img').hidden&&!q('.picture small').hidden);

@@ -8,6 +8,73 @@ function energyFlowSelectedPrice(host,direction){
  return id?{configured:true,price:energyFlowCurrentPrice({priceEntity:id},host._hass)}:{configured:false,price:null};
 }
 
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false,periodUI=chartUI}={}) {
+ // Segmented groups own their paint; descendants pressing must not press the group.
+ if(chartUI)controls=controls.split(',').filter(selector=>!['.zoom-controls','.chart-links'].includes(selector.trim())).join(',');
+ if(periodUI)controls=[controls,'.period-default [data-ui-button=surface]'].filter(Boolean).join(',');
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${wells?`:is(${wells}):is([data-ui-detail-surface]){background:var(--secondary-background-color,#eee)}`:''}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${periodUI?`
+.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>[data-period]{position:relative;flex:none}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:4px 6px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+${segmentedControlStyles('.chart-controls','.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period]',{first:'.chart-controls>.period-controls>.period-trigger'})}
+${segmentedControlStyles('.zoom-controls','.zoom-controls>[data-zoom]')}
+${segmentedControlStyles('.chart-links','.chart-links>.history-link,.chart-links>.insight-control>.insight-trigger',{last:'.chart-links>.insight-control>.insight-trigger'})}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
+// A single raised group with separate native button press states; no parent :active.
+function segmentedControlStyles(group,buttons,{first=`:is(${group})>:is(button,a):first-child`,last=`:is(${group})>:is(button,a):last-child`,dividers=`:is(${group})>:not(:first-child)`}={}){return `
+${group}{gap:0;align-items:stretch;background:var(--eleven-material-control-background,var(--secondary-background-color,#eee));box-shadow:var(--eleven-material-control-shadow,var(--eleven-surface-shadow,none));border-radius:var(--eleven-material-radius-button,9px)}
+:is(${buttons}){position:relative;align-self:stretch;height:auto;padding:2px 6px;background:transparent;box-shadow:none;border:0;border-radius:0;min-height:36px;min-width:36px;font-size:12px;box-sizing:border-box}
+:is(${buttons}) svg{width:14px;height:14px}
+${first?`:is(${buttons}):is(${first}){border-start-start-radius:var(--eleven-material-radius-button,9px);border-end-start-radius:var(--eleven-material-radius-button,9px)}`:''}
+${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-material-radius-button,9px);border-end-end-radius:var(--eleven-material-radius-button,9px)}`:''}
+:is(${dividers}){position:relative}
+:is(${dividers})::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--divider-color,#ddd) 55%,transparent);pointer-events:none;z-index:1}
+:is(${buttons}):disabled{opacity:1;color:color-mix(in srgb,var(--primary-text-color,#20252b) 35%,transparent);cursor:default}
+:is(${buttons}):not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none}
+:is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
+:is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+@media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -45,24 +112,476 @@ function uiButtonStyles(){return `
 `;}
 
 
+const CARD_BACKGROUNDS=Object.freeze([
+ {value:'aurora',label:'Aurora sky',description:'Langzaam golvende lichtgordijnen met kleine sterren.'},
+ {value:'lanes',label:'Energy Lanes',description:'Diagonale banen met een rustige lichtstroom.'},
+ {value:'halo',label:'Halo orbit',description:'Dunne ringen die langzaam om elkaar bewegen.'},
+ {value:'ribbon',label:'Silk Flow',description:'Zachte linten die langs de kaart glijden.'},
+ {value:'eclipse',label:'Eclipse',description:'Een zwevende cirkel met een verlichte rand.'},
+ {value:'clouds',label:'Cloud layers',description:'Drie transparante wolkenlagen met verschillende snelheden.'},
+ {value:'isobars',label:'Atmospheric flow',description:'Fijne contourlijnen met bewegende lichtaccenten.'},
+ {value:'hologram',label:'Holographic grid',description:'Een perspectiefraster met een zachte scanlijn.'},
+ {value:'ink',label:'Liquid ink',description:'Organische kleurvelden die rustig van vorm veranderen.'},
+ {value:'terrain',label:'Relief map',description:'Gelaagde hoogtelijnen die langzaam verschuiven.'},
+ {value:'aurora-curtains',family:'aurora',code:'1A',label:'Aurora curtains',description:'Smallere, verticale lichtgordijnen met een rustige zijwaartse golf.'},
+ {value:'aurora-horizon',family:'aurora',code:'1B',label:'Aurora horizon',description:'Brede lichtbogen laag op de kaart, met meer open ruimte bovenin.'},
+ {value:'ribbon-pleats',family:'ribbon',code:'4A',label:'Silk pleats',description:'Fijn gevouwen linten met meerdere zachte randen.'},
+ {value:'ribbon-sweep',family:'ribbon',code:'4B',label:'Silk sweep',description:'Twee brede, diagonale linten die in tegengestelde richting bewegen.'},
+ {value:'isobars-stream',family:'isobars',code:'7A',label:'Open jetstream',description:'Ruim uit elkaar liggende luchtstromen met lange bewegende accenten.'},
+ {value:'isobars-vortex',family:'isobars',code:'7B',label:'Atmospheric vortex',description:'Gesloten druklijnen die rustig rond een centrum rechts draaien.'},
+ {value:'ink-marble',family:'ink',code:'9A',label:'Ink marble',description:'Vloeibare kleuraders met een fijnere, gemarmerde structuur.'},
+ {value:'ink-bloom',family:'ink',code:'9B',label:'Ink bloom',description:'Drie zachte inktbloemen die langzaam openen en samenvloeien.'},
+ {value:'hologram-dots',family:'hologram',code:'8A',label:'Holographic dots',description:'Een ruimtelijk puntenraster met een brede lichtgolf.'},
+ {value:'hologram-hex',family:'hologram',code:'8B',label:'Holographic honeycomb',description:'Een bewegend honingraatraster met een rustige diagonale scan.'},
+ {value:'caustics',code:'11',label:'Caustic light',description:'Gebroken licht op water: een netwerk van vervormende lichtcellen.'},
+ {value:'stardrift',code:'12',label:'Stardrift',description:'Losse lichtsporen die langzaam diagonaal door de kaart trekken.'},
+ {value:'dunes',code:'13',label:'Quiet dunes',description:'Drie golvende duinsilhouetten die zacht langs elkaar schuiven.'},
+ {value:'moire',code:'14',label:'Moire silk',description:'Twee fijne lijnweefsels die langzaam kruisen en nieuwe patronen vormen.'},
+ {value:'constellation',code:'15',label:'Constellation',description:'Een open netwerk van lichtpunten met accenten langs de verbindingen.'}
+
+].map(Object.freeze));
+const backgroundHex=value=>typeof value==='string'&&/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value)?value:null;
+function normalizeCardBackground(input={}){
+ const source=input&&typeof input==='object'?input:{};
+ const number=source.transparency==null?65:Number(source.transparency);
+ const height=source.height==null?240:Number(source.height);
+ return {variant:CARD_BACKGROUNDS.some(item=>item.value===source.variant)?source.variant:'aurora',colorMode:['accent','custom','dynamic'].includes(source.colorMode)?source.colorMode:'accent',colors:Array.isArray(source.colors)?source.colors.map(backgroundHex).filter(Boolean).slice(0,3):[],transparency:Number.isFinite(number)?Math.min(100,Math.max(0,number)):65,animated:source.animated!==false,coverage:source.coverage==='header'?'header':'card',height:Number.isFinite(height)?Math.min(2000,Math.max(24,Math.round(height))):240};
+}
+// Purely decorative markup. The calling card decides which status colour to supply.
+function uiCardBackground(input={}, {statusColor}={}){
+ const config=normalizeCardBackground(input),accent='var(--accent-color,var(--primary-color,#03a9f4))';
+ const colors=config.colorMode==='custom'&&config.colors.length?config.colors:config.colorMode==='dynamic'&&backgroundHex(statusColor)?[statusColor]:[accent];
+ const palette=Array.from({length:3},(_,i)=>colors[i%colors.length]);
+ const style=palette.map((color,i)=>`--ui-bg-${i+1}:${color}`).join(';')+`;--ui-bg-opacity:${(100-config.transparency)/100};--ui-bg-height:${config.height}px`;
+ const family=CARD_BACKGROUNDS.find(item=>item.value===config.variant).family??config.variant;
+ const curves=cardBackgroundGeometry(config.variant,family);
+ const stars=(family==='aurora'&&config.variant!=='aurora-horizon'||config.variant==='stardrift')?Array.from({length:16},(_,i)=>`<b style="left:${i*37%100}%;top:${i*19%80}%;animation-delay:${-i*.7}s"></b>`).join(''):'';
+ return `<div${uiAttributes({'data-ui-card-background':config.variant,'data-ui-background-family':family,'data-ui-background-coverage':config.coverage,'data-animated':String(config.animated),'aria-hidden':'true',style})}><i></i><i></i><i></i>${curves}${stars}</div>`;
+
+}
+
+function cardBackgroundGeometry(variant,family){
+ let paths='';
+ if(family==='isobars'){
+  const count=variant==='isobars-stream'?6:9;
+  paths=Array.from({length:count},(_,i)=>variant==='isobars-vortex'?`<path d="M${330-i*23} 150C${260-i*23} ${40-i*13} ${510+i*12} ${45-i*16} ${525+i*21} 150S${380-i*18} ${290+i*16} ${330-i*23} 150Z"/>`:`<path d="M-60 ${i*38}C95 ${i*25-80} 260 ${i*30+140} 390 ${i*27+30}S580 ${i*38-50} 660 ${i*35+20}"/>`).join('');
+ }else if(variant==='hologram'){
+  paths=Array.from({length:19},(_,i)=>{const x=-240+i*60;return `<path d="M${x} 0L${300+(x-300)*1.6} 320"/>`;}).join('');
+  paths+='<g class="ui-bg-grid-rows">'+[0,18,42,74,116,170,238,320,400].map(y=>`<path d="M-400 ${y}H1000"/>`).join('')+'</g>';
+ }else if(variant==='hologram-hex'){
+  paths=Array.from({length:48},(_,i)=>{const x=i%8*88+(Math.floor(i/8)%2)*44,y=Math.floor(i/8)*54;return `<path d="M${x} ${y-32}l28 16v32l-28 16-28-16v-32Z"/>`;}).join('');
+ }else if(variant==='caustics'){
+  paths=Array.from({length:35},(_,i)=>{const x=i%7*100,y=Math.floor(i/7)*85;return `<path d="M${x} ${y}q45 -35 100 0q-35 35 0 85q-60 -30 -100 0q30 -45 0 -85Z"/>`;}).join('');
+ }else if(variant==='constellation'){
+  const points=[[20,60],[110,100],[180,35],[275,125],[360,55],[475,90],[570,25],[80,225],[210,270],[330,210],[440,280],[565,200]];
+  paths='<path d="M20 60L110 100L180 35L275 125L360 55L475 90L570 25M110 100L80 225L210 270L275 125L330 210L440 280L565 200L475 90M330 210L360 55"/>';
+  paths+=points.map(([x,y],i)=>`<circle cx="${x}" cy="${y}" r="${i%3+1.5}" style="animation-delay:${-i*.6}s"/>`).join('');
+ }
+ return paths?`<svg viewBox="0 0 600 320" preserveAspectRatio="none" focusable="false">${paths}</svg>`:'';
+}
+
+function uiCardBackgroundStyles(){return `
+/* Explicit radius also works through ha-card slots, where inherit follows the slot.
+   The parent keeps its theme surface; only the decorative layer clips and fades. */
+[data-ui-background-host]{position:relative;isolation:isolate}
+:where([data-ui-background-host]>:not([data-ui-card-background])){position:relative;z-index:1}
+[data-ui-background-host]>[data-ui-card-background]{position:absolute;inset:0;z-index:0;overflow:hidden;border-radius:var(--ui-background-radius,var(--ha-card-border-radius,12px));clip-path:inset(0 round var(--ui-background-radius,var(--ha-card-border-radius,12px)));pointer-events:none;user-select:none;contain:paint;opacity:var(--ui-bg-opacity,.35);color:var(--ui-bg-1);--ui-bg-a:color-mix(in srgb,var(--ui-bg-1) 65%,transparent);--ui-bg-b:color-mix(in srgb,var(--ui-bg-2) 55%,transparent);--ui-bg-c:color-mix(in srgb,var(--ui-bg-3) 50%,transparent)}
+[data-ui-background-coverage=header]{max-height:var(--ui-bg-height,240px);mask-image:linear-gradient(to bottom,#000 0%,#000 55%,transparent 100%)}
+[data-ui-card-background]>i{position:absolute;display:block;pointer-events:none;animation:ui-bg-drift 18s ease-in-out infinite alternate}
+[data-ui-card-background]>i:nth-child(2){animation-delay:-7s;animation-duration:23s}
+[data-ui-card-background]>i:nth-child(3){animation-delay:-13s;animation-duration:29s}
+[data-ui-background-family=aurora]>i{inset:-30%;border-radius:50%;background:conic-gradient(from 70deg at 50% 90%,transparent 0deg,var(--ui-bg-a) 17deg,transparent 65deg);filter:blur(16px);transform:rotate(-18deg)}
+[data-ui-background-family=aurora]>i:nth-child(2){background:conic-gradient(from 230deg at 50% 10%,transparent,var(--ui-bg-b) 25deg,transparent 70deg)}
+[data-ui-background-family=aurora]>i:nth-child(3){background:radial-gradient(ellipse at 80% 5%,var(--ui-bg-c),transparent 60%)}
+[data-ui-background-family=aurora]>b{position:absolute;width:2px;height:2px;border-radius:50%;background:var(--ui-bg-3);animation:ui-bg-star 5s ease-in-out infinite alternate}
+[data-ui-card-background=lanes]>i{inset:-50%;background:linear-gradient(135deg,transparent 30%,var(--ui-bg-a) 30.2% 42%,transparent 42.2% 55%,var(--ui-bg-b) 55.2% 61%,transparent 61.2%);animation:ui-bg-lanes 16s ease-in-out infinite alternate}
+[data-ui-card-background=lanes]>i:nth-child(2){background:repeating-linear-gradient(135deg,transparent 0 42px,var(--ui-bg-c) 43px,transparent 44px 90px);opacity:.35}
+[data-ui-card-background=lanes]>i:nth-child(3){display:none}
+[data-ui-card-background=halo]>i{width:80%;height:95%;right:-20%;top:-20%;border:1px solid var(--ui-bg-a);border-radius:50%;box-shadow:0 0 0 20px color-mix(in srgb,var(--ui-bg-2) 12%,transparent),0 0 0 45px color-mix(in srgb,var(--ui-bg-3) 8%,transparent);animation:ui-bg-orbit 22s ease-in-out infinite alternate}
+[data-ui-card-background=halo]>i:nth-child(2){right:5%;top:25%;width:65%;height:65%;border-color:var(--ui-bg-b);box-shadow:none}
+[data-ui-card-background=halo]>i:nth-child(3){display:none}
+[data-ui-background-family=ribbon]>i{width:150%;height:85%;top:15%;left:-20%;border-radius:50%;border-top:1px solid var(--ui-bg-a);background:linear-gradient(var(--ui-bg-a),transparent 60%);transform:rotate(-20deg);animation:ui-bg-ribbon 19s ease-in-out infinite alternate}
+[data-ui-background-family=ribbon]>i:nth-child(2){top:30%;background:linear-gradient(var(--ui-bg-b),transparent 60%)}
+[data-ui-background-family=ribbon]>i:nth-child(3){top:45%;background:linear-gradient(var(--ui-bg-c),transparent 60%)}
+[data-ui-card-background=eclipse]>i{width:80%;aspect-ratio:1;right:-10%;top:-20%;border-radius:50%;background:radial-gradient(circle,transparent 52%,var(--ui-bg-a) 54%,var(--ui-bg-b) 57%,transparent 66%);animation:ui-bg-orbit 26s ease-in-out infinite alternate}
+[data-ui-card-background=eclipse]>i:nth-child(2){inset:0;width:auto;aspect-ratio:auto;background:radial-gradient(ellipse at 90% 0,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=eclipse]>i:nth-child(3){display:none}
+[data-ui-card-background=clouds]>i{inset:-25%;background:radial-gradient(ellipse at 20% 25%,var(--ui-bg-a),transparent 45%),radial-gradient(ellipse at 80% 65%,var(--ui-bg-b),transparent 40%);filter:blur(12px);animation:ui-bg-clouds 24s ease-in-out infinite alternate}
+[data-ui-card-background=clouds]>i:nth-child(2){transform:rotate(160deg);opacity:.7}
+[data-ui-card-background=clouds]>i:nth-child(3){background:radial-gradient(ellipse at 60% 50%,var(--ui-bg-c),transparent 55%);opacity:.6}
+[data-ui-background-family=isobars]>i{inset:0;background:radial-gradient(ellipse at 80% 10%,var(--ui-bg-b),transparent 65%);animation:none}
+[data-ui-background-family=isobars]>i:not(:first-child){display:none}
+[data-ui-background-family=isobars]>svg{position:absolute;inset:-10%;width:120%;height:120%;fill:none;stroke:var(--ui-bg-1);stroke-width:1;opacity:.5}
+[data-ui-background-family=isobars] path:nth-child(2n){stroke:var(--ui-bg-2);stroke-dasharray:30 230;stroke-width:2;animation:ui-bg-front 14s linear infinite}
+[data-ui-background-family=hologram]{perspective:380px}
+[data-ui-background-family=hologram]>i:first-child{inset:-50%;background:repeating-linear-gradient(0deg,transparent 0 34px,var(--ui-bg-a) 35px,transparent 36px),repeating-linear-gradient(90deg,transparent 0 34px,var(--ui-bg-b) 35px,transparent 36px);transform:rotateX(50deg);animation:ui-bg-grid 24s linear infinite}
+[data-ui-background-family=hologram]>i:nth-child(2){inset:-50% 0;background:linear-gradient(transparent 35%,var(--ui-bg-c) 50%,transparent 65%);animation:ui-bg-scan 14s ease-in-out infinite alternate}
+[data-ui-background-family=hologram]>i:nth-child(3){display:none}
+[data-ui-background-family=ink]>i{width:110%;height:130%;left:-20%;top:-40%;border-radius:36% 64% 55% 45%;background:radial-gradient(ellipse,var(--ui-bg-a),transparent 65%);filter:blur(14px);animation:ui-bg-ink 24s ease-in-out infinite alternate}
+[data-ui-background-family=ink]>i:nth-child(2){left:20%;top:0;background:radial-gradient(ellipse,var(--ui-bg-b),transparent 65%)}
+[data-ui-background-family=ink]>i:nth-child(3){left:40%;top:-20%;background:radial-gradient(ellipse,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=terrain]>i{inset:-50%;border-radius:42%;background:repeating-radial-gradient(ellipse at 65% 35%,transparent 0 17px,var(--ui-bg-a) 18px,transparent 19px 35px);animation:ui-bg-terrain 30s ease-in-out infinite alternate}
+[data-ui-card-background=terrain]>i:nth-child(2){inset:-30%;opacity:.3;background:repeating-radial-gradient(ellipse at 20% 70%,transparent 0 25px,var(--ui-bg-b) 26px,transparent 27px 50px)}
+[data-ui-card-background=terrain]>i:nth-child(3){inset:0;background:radial-gradient(ellipse at 90% 0,var(--ui-bg-c),transparent 65%)}
+/* The selected grid spans the full card, including its upper edge. */
+[data-ui-card-background=hologram]{perspective:none}
+[data-ui-card-background=hologram]>i:first-child{display:none}
+[data-ui-card-background=hologram]>i:nth-child(2){opacity:.25}
+[data-ui-card-background=hologram]>svg{position:absolute;inset:0;width:100%;height:100%;fill:none;stroke:var(--ui-bg-1);stroke-width:.8;opacity:.5}
+[data-ui-card-background=hologram] .ui-bg-grid-rows{stroke:var(--ui-bg-2);animation:ui-bg-grid-rows 24s ease-in-out infinite alternate}
+@keyframes ui-bg-grid-rows{to{transform:translateY(-18px)}}
+/* Alternatives reuse their family's structure and palette. */
+[data-ui-card-background=aurora-curtains]>i{inset:-35% -20%;border-radius:35%;background:repeating-conic-gradient(from 18deg at 50% 110%,transparent 0deg 12deg,var(--ui-bg-a) 16deg,transparent 23deg 40deg);filter:blur(10px);animation:ui-bg-curtains 24s ease-in-out infinite alternate}
+[data-ui-card-background=aurora-curtains]>i:nth-child(2){background:repeating-conic-gradient(from -12deg at 50% 100%,transparent 0deg 18deg,var(--ui-bg-b) 23deg,transparent 31deg 48deg);opacity:.65}
+[data-ui-card-background=aurora-curtains]>i:nth-child(3){background:radial-gradient(ellipse at 90% 0,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=aurora-horizon]>i{inset:35% -25% -65%;border-radius:50%;background:radial-gradient(ellipse at 50% 50%,transparent 36%,var(--ui-bg-a) 43%,transparent 55%);filter:blur(9px);animation:ui-bg-horizon 28s ease-in-out infinite alternate}
+[data-ui-card-background=aurora-horizon]>i:nth-child(2){inset:20% -30% -80%;background:radial-gradient(ellipse,transparent 40%,var(--ui-bg-b) 46%,transparent 56%)}
+[data-ui-card-background=aurora-horizon]>i:nth-child(3){inset:50% -20% -50%;background:radial-gradient(ellipse,transparent 35%,var(--ui-bg-c) 45%,transparent 55%)}
+[data-ui-card-background=ribbon-pleats]>i{height:110%;top:5%;border-top:1px solid var(--ui-bg-a);background:repeating-linear-gradient(180deg,var(--ui-bg-a) 0,transparent 9px 23px,var(--ui-bg-b) 24px,transparent 25px 48px);opacity:.65;animation:ui-bg-pleats 28s ease-in-out infinite alternate}
+[data-ui-card-background=ribbon-pleats]>i:nth-child(2){top:20%;background:repeating-linear-gradient(180deg,var(--ui-bg-b),transparent 12px 32px);opacity:.35}
+[data-ui-card-background=ribbon-pleats]>i:nth-child(3){display:none}
+[data-ui-card-background=ribbon-sweep]>i{width:175%;height:70%;left:-30%;top:-10%;border-radius:45%;transform:rotate(35deg);background:linear-gradient(180deg,var(--ui-bg-a),transparent 75%);animation:ui-bg-sweep 25s ease-in-out infinite alternate}
+[data-ui-card-background=ribbon-sweep]>i:nth-child(2){top:60%;transform:rotate(-30deg);background:linear-gradient(180deg,var(--ui-bg-b),transparent 75%);animation-direction:alternate-reverse}
+[data-ui-card-background=ribbon-sweep]>i:nth-child(3){display:none}
+[data-ui-card-background=isobars-stream]>svg{width:140%;left:-20%;opacity:.45;animation:ui-bg-stream 30s ease-in-out infinite alternate}
+[data-ui-card-background=isobars-stream] path{stroke-width:.8}
+[data-ui-card-background=isobars-stream] path:nth-child(2n){stroke-width:2;stroke-dasharray:100 400;animation:ui-bg-jetstream 21s linear infinite}
+[data-ui-card-background=isobars-vortex]>svg{inset:-15%;width:130%;height:130%;transform-origin:70% 50%;animation:ui-bg-vortex 38s ease-in-out infinite alternate}
+[data-ui-card-background=isobars-vortex] path:nth-child(2n){stroke-dasharray:55 360;animation-duration:26s}
+[data-ui-card-background=ink-marble]>i{inset:-50%;width:auto;height:auto;border-radius:40%;filter:blur(5px);background:repeating-conic-gradient(from 35deg at 65% 40%,transparent 0deg 20deg,var(--ui-bg-a) 24deg,transparent 30deg 44deg,var(--ui-bg-b) 47deg,transparent 53deg 85deg);animation:ui-bg-marble 35s ease-in-out infinite alternate}
+[data-ui-card-background=ink-marble]>i:nth-child(2){inset:-20%;background:repeating-conic-gradient(from 150deg at 70% 50%,transparent 0deg 35deg,var(--ui-bg-c) 40deg,transparent 47deg 90deg);opacity:.5}
+[data-ui-card-background=ink-marble]>i:nth-child(3){display:none}
+[data-ui-card-background=ink-bloom]>i{width:85%;height:110%;left:30%;top:-30%;border-radius:60% 40% 65% 35%;filter:blur(7px);background:radial-gradient(ellipse at 60% 50%,var(--ui-bg-a),transparent 65%);animation:ui-bg-bloom 24s ease-in-out infinite alternate}
+[data-ui-card-background=ink-bloom]>i:nth-child(2){left:0;top:25%;background:radial-gradient(ellipse,var(--ui-bg-b),transparent 65%);animation-direction:alternate-reverse}
+[data-ui-card-background=ink-bloom]>i:nth-child(3){left:60%;top:10%;background:radial-gradient(ellipse,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=hologram-dots]>i:first-child{background:radial-gradient(circle,var(--ui-bg-a) 1.4px,transparent 2px) 0 0/24px 24px;transform:rotateX(45deg) rotateZ(-12deg);animation:ui-bg-dots 30s linear infinite}
+[data-ui-card-background=hologram-dots]>i:nth-child(2){background:radial-gradient(ellipse at 60% 50%,var(--ui-bg-b),transparent 55%);animation-duration:20s}
+[data-ui-card-background=hologram-hex]>i:first-child{display:none}
+[data-ui-card-background=hologram-hex]>svg{position:absolute;inset:-10%;width:120%;height:120%;fill:none;stroke:var(--ui-bg-1);stroke-width:.8;opacity:.45;animation:ui-bg-hex 32s ease-in-out infinite alternate}
+[data-ui-card-background=hologram-hex] path:nth-child(3n){stroke:var(--ui-bg-2)}
+[data-ui-card-background=hologram-hex]>i:nth-child(2){inset:-50%;background:linear-gradient(120deg,transparent 40%,var(--ui-bg-c) 50%,transparent 60%);animation:ui-bg-hexscan 26s ease-in-out infinite alternate}
+/* Five new patterns. */
+[data-ui-card-background=caustics]>svg{position:absolute;inset:-15%;width:130%;height:130%;fill:none;stroke:var(--ui-bg-1);stroke-width:1.3;opacity:.4;animation:ui-bg-caustics 27s ease-in-out infinite alternate}
+[data-ui-card-background=caustics] path:nth-child(3n){stroke:var(--ui-bg-2);stroke-width:2}
+[data-ui-card-background=caustics]>i{inset:-20%;background:radial-gradient(ellipse at 80% 10%,var(--ui-bg-c),transparent 65%);animation:ui-bg-clouds 32s ease-in-out infinite alternate}
+[data-ui-card-background=caustics]>i:not(:first-child){display:none}
+[data-ui-card-background=stardrift]>b{position:absolute;width:2px;height:2px;border-radius:50%;background:var(--ui-bg-1);animation:ui-bg-stardrift 22s linear infinite}
+[data-ui-card-background=stardrift]>b::before{content:'';position:absolute;width:52px;height:1px;left:0;top:0;transform-origin:left;transform:rotate(35deg);background:linear-gradient(90deg,transparent,var(--ui-bg-2))}
+[data-ui-card-background=stardrift]>b:nth-of-type(3n){animation-duration:31s;opacity:.5}
+[data-ui-card-background=stardrift]>i{inset:0;background:radial-gradient(ellipse at 80% 0,var(--ui-bg-c),transparent 70%)}
+[data-ui-card-background=stardrift]>i:not(:first-child){display:none}
+[data-ui-card-background=dunes]>i{width:160%;height:95%;left:-25%;top:65%;border-radius:55% 65% 0 0;transform:rotate(-12deg);background:linear-gradient(var(--ui-bg-a),transparent 80%);animation:ui-bg-dunes 32s ease-in-out infinite alternate}
+[data-ui-card-background=dunes]>i:nth-child(2){top:48%;left:10%;transform:rotate(14deg);background:linear-gradient(var(--ui-bg-b),transparent 75%);animation-direction:alternate-reverse}
+[data-ui-card-background=dunes]>i:nth-child(3){top:80%;left:-50%;background:linear-gradient(var(--ui-bg-c),transparent 75%)}
+[data-ui-card-background=moire]>i{inset:-80%;background:repeating-linear-gradient(90deg,transparent 0 7px,var(--ui-bg-a) 7.5px,transparent 8px 15px);transform:rotate(25deg);opacity:.45;animation:ui-bg-weave 40s ease-in-out infinite alternate}
+[data-ui-card-background=moire]>i:nth-child(2){background:repeating-linear-gradient(90deg,transparent 0 9px,var(--ui-bg-b) 9.5px,transparent 10px 19px);transform:rotate(-18deg);animation-direction:alternate-reverse}
+[data-ui-card-background=moire]>i:nth-child(3){inset:0;background:radial-gradient(ellipse at 90% 20%,var(--ui-bg-c),transparent 65%);opacity:.6;animation:ui-bg-drift 30s ease-in-out infinite alternate}
+[data-ui-card-background=constellation]>svg{position:absolute;inset:0;width:100%;height:100%;fill:none;stroke:var(--ui-bg-1);stroke-width:.8;opacity:.6}
+[data-ui-card-background=constellation] path{stroke-dasharray:80 200;animation:ui-bg-network 24s linear infinite}
+[data-ui-card-background=constellation] circle{fill:var(--ui-bg-2);stroke:none;animation:ui-bg-star 8s ease-in-out infinite alternate}
+[data-ui-card-background=constellation]>i{inset:0;background:radial-gradient(ellipse at 80% 40%,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=constellation]>i:not(:first-child){display:none}
+@keyframes ui-bg-curtains{to{transform:translate(8%,6%) skewX(12deg) scale(1.1)}}
+@keyframes ui-bg-horizon{to{transform:translate(-5%,-15%) scale(1.15,.9)}}
+@keyframes ui-bg-pleats{to{transform:translate(4%,8%) rotate(-6deg) scaleY(.9)}}
+@keyframes ui-bg-sweep{to{transform:translate(10%,15%) rotate(15deg)}}
+@keyframes ui-bg-stream{to{transform:translate(7%,-6%) rotate(4deg)}}
+@keyframes ui-bg-jetstream{to{stroke-dashoffset:-500}}
+@keyframes ui-bg-vortex{to{transform:rotate(20deg) scale(.95)}}
+@keyframes ui-bg-marble{to{transform:rotate(25deg) scale(1.15,.9);border-radius:60% 40% 50% 50%}}
+@keyframes ui-bg-bloom{to{transform:translate(-10%,12%) scale(1.2,.8);border-radius:35% 65% 40% 60%}}
+@keyframes ui-bg-dots{from{transform:rotateX(45deg) rotateZ(-12deg) translateY(-24px)}to{transform:rotateX(45deg) rotateZ(-12deg) translateY(0)}}
+@keyframes ui-bg-hex{to{transform:translate(-5%,8%) rotate(6deg)}}
+@keyframes ui-bg-hexscan{to{transform:translate(20%,-5%)}}
+@keyframes ui-bg-caustics{to{transform:translate(4%,5%) scale(1.12,.88) skewX(8deg)}}
+@keyframes ui-bg-stardrift{from{transform:translate(50px,35px);opacity:0}20%{opacity:.8}80%{opacity:.6}to{transform:translate(-100px,-70px);opacity:0}}
+@keyframes ui-bg-dunes{to{transform:translate(8%,-6%) rotate(-3deg)}}
+@keyframes ui-bg-weave{to{transform:translate(3%,2%) rotate(8deg)}}
+@keyframes ui-bg-network{to{stroke-dashoffset:-280}}
+
+@keyframes ui-bg-drift{to{transform:translate(8%,12%) rotate(10deg) scale(1.12)}}
+@keyframes ui-bg-star{from{opacity:.15}to{opacity:.85}}
+@keyframes ui-bg-lanes{to{transform:translate(12%,-12%)}}
+@keyframes ui-bg-orbit{to{transform:translate(-12%,18%) rotate(25deg)}}
+@keyframes ui-bg-ribbon{to{transform:translate(5%,12%) rotate(5deg)}}
+@keyframes ui-bg-clouds{to{transform:translate(15%,-10%) scale(1.2)}}
+@keyframes ui-bg-front{to{stroke-dashoffset:-260}}
+@keyframes ui-bg-grid{from{transform:rotateX(50deg) translateY(-36px)}to{transform:rotateX(50deg) translateY(0)}}
+@keyframes ui-bg-scan{to{transform:translateY(25%)}}
+@keyframes ui-bg-ink{to{transform:translate(15%,10%) rotate(40deg) scale(1.18);border-radius:64% 36% 35% 65%}}
+@keyframes ui-bg-terrain{to{transform:translate(5%,8%) rotate(18deg) scale(1.08)}}
+[data-ui-card-background][data-animated=false],[data-ui-card-background][data-animated=false] *{animation:none!important}
+[data-ui-card-background][data-motion-paused],[data-ui-card-background][data-motion-paused] *{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){[data-ui-card-background],[data-ui-card-background] *{animation:none!important}}
+`;}
+// Observe a stable card container, so re-rendering its decorative layer is safe.
+function observeCardBackgroundMotion(container){
+ const doc=container?.ownerDocument;if(!doc)return ()=>{};
+ let visible=true;
+ const update=()=>{for(const layer of (container.shadowRoot??container).querySelectorAll('[data-ui-card-background]'))layer.toggleAttribute('data-motion-paused',doc.hidden||!visible);};
+ const Observer=doc.defaultView?.IntersectionObserver;
+ const observer=Observer?new Observer(entries=>{visible=entries.some(entry=>entry.isIntersecting);update();}):null;
+ observer?.observe(container);doc.addEventListener('visibilitychange',update);update();
+ return ()=>{observer?.disconnect();doc.removeEventListener('visibilitychange',update);};
+}
+
+
+
+// Retain legacy YAML when the new object is absent. Unsupported legacy designs
+// continue to use their original renderer until the user chooses a shared style.
+function cardBackgroundSettings(config={}){
+ const input=config.card_background;
+ if(input===false)return {...normalizeCardBackground({variant:'isobars',coverage:'header'}),enabled:false,legacy:false};
+ if(input&&typeof input==='object'&&!Array.isArray(input))return {...normalizeCardBackground({variant:'isobars',coverage:'header',...input}),enabled:input.enabled!==false,legacy:false};
+ const legacy=typeof config.background==='string'&&!CARD_BACKGROUNDS.some(row=>row.value===config.background)&&config.background!=='none';
+ const strength=Number(config.background_strength);
+ return {...normalizeCardBackground({variant:config.background??'isobars',coverage:'header',transparency:config.background_strength!=null&&Number.isFinite(strength)?100-strength:65,animated:config.animate_background!==false}),enabled:config.background!=='none',legacy};
+}
+
+const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
+[data-ui-background-host] :is(.header-background,.scene-background){display:none!important}
+`;
+
+// Wrap registrations rather than replacing each card's renderer. The original
+// class retains its DOM patching, subscriptions, action handlers and editor.
+const withCardBackground=Base=>class extends Base{
+ static get backgroundBaseCard(){return Base;}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
+ get hass(){return super.hass;}
+ setConfig(config){
+  this._captureElevenBackgroundPlayback();
+  super.setConfig(config);
+  this._elevenBackgroundConfig={...config};
+  this._syncElevenBackground();
+ }
+ connectedCallback(){
+  super.connectedCallback?.();
+  this._elevenBackgroundObserver?.disconnect();
+  const root=this.shadowRoot;
+  if(root&&globalThis.MutationObserver){
+   this._elevenBackgroundObserver=new MutationObserver(()=>this._syncElevenBackground());
+   // Attribute changes include live status/theme changes in patched card DOM.
+   this._elevenBackgroundObserver.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['data-kind','data-tone','data-state','data-dark','data-theme','data-color']});
+  }
+  this._syncElevenBackground();
+ }
+ disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
+  this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
+  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  super.disconnectedCallback?.();
+ }
+ setCardBackground(background){
+  this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
+ }
+ _syncElevenBackground(){
+  const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
+  const settings=cardBackgroundSettings(this._elevenBackgroundConfig);
+  if(settings.legacy){
+   host.removeAttribute('data-ui-background-host');
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
+  host.setAttribute('data-ui-background-host','');
+  if(!root.querySelector('style[data-ui-background-styles]')){
+   const style=document.createElement('style');style.dataset.uiBackgroundStyles='';style.textContent=cardBackgroundHostStyles;root.append(style);
+  }
+  const hass=this._hass??this.hass,entity=this._elevenBackgroundConfig.entity??this._elevenBackgroundConfig.percentage_entity;
+  const unavailable=['unknown','unavailable'].includes(hass?.states?.[entity]?.state);
+  const background={...settings,animated:settings.animated&&hass?.connected!==false&&hass?.connection?.connected!==false&&!unavailable};
+  // Cards already own their state-to-tone mapping. Read only their computed,
+  // hex-valued tone, never configuration or sensor text as a CSS fragment.
+  const content=host.querySelector('.content,[data-tone],.room')??host;
+  const statusColor=this.cardBackgroundStatusColor?.()??globalThis.getComputedStyle?.(content).getPropertyValue('--tone').trim();
+  const signature=JSON.stringify([background,statusColor]);
+  if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
+   if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
+  }
+  this._captureElevenBackgroundPlayback();
+  this._elevenBackgroundSignature=signature;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
+  const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+ }
+ static async getConfigElement(){
+  if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
+  const editor=document.createElement('eleven-card-background-editor');
+  if(super.getConfigElement)editor.nativeEditor=await super.getConfigElement();
+  else if(super.getConfigForm){
+   if(!customElements.get('ha-form')&&window.loadCardHelpers){
+    const helpers=await window.loadCardHelpers(),entities=await helpers.createCardElement({type:'entities',entities:[]});
+    await entities.constructor.getConfigElement();await customElements.whenDefined('ha-form');
+   }
+   editor.nativeForm=super.getConfigForm();
+  }
+  return editor;
+ }
+};
+
+// Hide superseded fields in native forms while keeping all other schema data.
+function cardBackgroundEditorSchema(schema){
+ if(!Array.isArray(schema))return schema;
+ let changed=false;const result=[];
+ for(const field of schema){
+  if(['background','background_strength','animate_background'].includes(field.name)){changed=true;continue;}
+  const children=cardBackgroundEditorSchema(field.schema);
+  if(children!==field.schema){result.push({...field,schema:children});changed=true;}else result.push(field);
+ }
+ return changed?result:schema;
+}
+
+class ElevenCardBackgroundEditor extends HTMLElement{
+ constructor(){
+  super();this.attachShadow({mode:'open'});
+  this.shadowRoot.innerHTML=`<style>
+:host{display:block;color:var(--primary-text-color);font:inherit}details{border:1px solid var(--divider-color,#ddd);border-radius:8px;margin:0 0 16px}summary{cursor:pointer;min-height:44px;box-sizing:border-box;padding:12px 16px;font-weight:500}.settings{display:grid;gap:12px;padding:0 16px 16px}label{display:flex;flex-direction:column;gap:6px;font-size:14px}label.check{flex-direction:row;align-items:center;min-height:44px}input,select{font:inherit;color:inherit;box-sizing:border-box;max-width:100%;min-height:44px;border:1px solid var(--divider-color,#ddd);border-radius:8px;background:var(--card-background-color,#fff);padding:8px}input[type=checkbox]{min-height:20px;width:20px;height:20px;accent-color:var(--accent-color,var(--primary-color))}input[type=range]{width:100%;accent-color:var(--accent-color,var(--primary-color));padding:0;border:0}input[type=color]{width:64px;padding:4px}.colors{display:flex;gap:8px;flex-wrap:wrap}.help{color:var(--secondary-text-color);font-size:12px;margin:0;line-height:1.5}input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}[hidden]{display:none!important}
+</style><details><summary></summary><div class="settings"></div></details><div class="native"></div>`;
+  this.shadowRoot.addEventListener('change',event=>this._changeBackground(event));
+  this.shadowRoot.addEventListener('config-changed',event=>{
+   if(event.target===this)return;
+   event.stopPropagation();
+   const background=this._config?.card_background;
+   // Native editors emit a complete replacement, including deleted fields.
+   // Retain only the setting owned by this wrapper, never old native keys.
+   this._config={...event.detail.config};
+   if(background!==undefined)this._config.card_background=background;
+   this._syncNativeBackgroundFields();this._emitBackgroundConfig();
+  });
+ }
+ connectedCallback(){this._observeNativeBackgroundFields();}
+ disconnectedCallback(){this._nativeBackgroundObserver?.disconnect();this._nativeBackgroundObserver=null;}
+ _observeNativeBackgroundFields(){
+  this._nativeBackgroundObserver?.disconnect();
+  if(this.isConnected&&this._nativeEditor?.shadowRoot&&globalThis.MutationObserver){
+   this._nativeBackgroundObserver=new MutationObserver(()=>this._syncNativeBackgroundFields());
+   this._nativeBackgroundObserver.observe(this._nativeEditor.shadowRoot,{childList:true,subtree:true});
+  }
+  this._syncNativeBackgroundFields();
+ }
+ _syncNativeBackgroundFields(){
+  if(!this._config)return;
+  const legacy=cardBackgroundSettings(this._config).legacy;this._nativeBackgroundSchemas??=new WeakMap();
+  const forms=this._nativeEditor?.shadowRoot?.querySelectorAll('ha-form')??[];
+  for(const form of [...forms,...(this._nativeEditor?.tagName==='HA-FORM'?[this._nativeEditor]:[])]){
+   const saved=this._nativeBackgroundSchemas.get(form);
+   if(legacy){if(saved&&form.schema===saved.filtered)form.schema=saved.original;continue;}
+   if(saved&&form.schema===saved.filtered)continue;
+   const filtered=cardBackgroundEditorSchema(form.schema);
+   if(filtered!==form.schema){this._nativeBackgroundSchemas.set(form,{original:form.schema,filtered});form.schema=filtered;}
+  }
+ }
+ set nativeEditor(editor){this._nativeEditor=editor;this.shadowRoot.querySelector('.native').replaceChildren(editor);if(this._hass)editor.hass=this._hass;if(this._config)editor.setConfig(this._config);this._observeNativeBackgroundFields();}
+ set nativeForm(form){
+  // Cards using Home Assistant's schema-only editor retain all native fields.
+  const editor=document.createElement('ha-form');editor.schema=form.schema;editor.computeLabel=form.computeLabel;editor.computeHelper=form.computeHelper;
+  editor.setConfig=config=>{editor.data=config;};
+  editor.addEventListener('value-changed',event=>{event.stopPropagation();this._config={...this._config,...event.detail.value};this._emitBackgroundConfig();});
+  this.nativeEditor=editor;
+ }
+ setConfig(config){this._config={...config};this._nativeEditor?.setConfig(config);this._renderBackgroundSettings();this._syncNativeBackgroundFields();}
+ set hass(hass){const changed=this._language!==String(hass?.locale?.language??hass?.language??'en').slice(0,2);this._hass=hass;this._language=String(hass?.locale?.language??hass?.language??'en').slice(0,2);if(this._nativeEditor)this._nativeEditor.hass=hass;if(changed)this._renderBackgroundSettings();this._syncNativeBackgroundFields();}
+ get hass(){return this._hass;}
+ _emitBackgroundConfig(){this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:{...this._config}},bubbles:true,composed:true}));}
+ _renderBackgroundSettings(){
+  if(!this._config)return;
+  const nl=this._language==='nl',s=cardBackgroundSettings(this._config),t=(d,e)=>nl?d:e;
+  const choices=['aurora','ribbon','isobars','ink-bloom','hologram'].map(value=>CARD_BACKGROUNDS.find(row=>row.value===value));
+  if(!s.legacy&&!choices.some(row=>row.value===s.variant))choices.push(CARD_BACKGROUNDS.find(row=>row.value===s.variant));
+  this.shadowRoot.querySelector('summary').textContent=t('Kaartachtergrond','Card background');
+  const pickerColor=index=>{const color=(s.colors.length?s.colors[index%s.colors.length]:['#4db6ac','#7287ed','#c77dbd'][index]);return color.length<=5?'#'+color.slice(1,4).split('').map(c=>c+c).join(''):color.slice(0,7);};
+  const option=(value,label,selected)=>`<option value="${uiEscape(value)}"${selected?' selected':''}>${uiEscape(label)}</option>`;
+  this.shadowRoot.querySelector('.settings').innerHTML=`
+<label class="check"><input data-bg="enabled" type="checkbox"${s.enabled?' checked':''}>${t('Achtergrond tonen','Show background')}</label>
+<label>${t('Weergave','Style')}<select data-bg="variant">${s.legacy?option('legacy',t('Bestaande achtergrond','Existing background'),true):''}${choices.map(row=>option(row.value,row.label,!s.legacy&&s.variant===row.value)).join('')}</select></label>
+<label>${t('Kleurbron','Colour source')}<select data-bg="colorMode">${[['accent',t('Home Assistant-accent','Home Assistant accent')],['custom',t('Eigen kleuren','Custom colours')],['dynamic',t('Statuskleur van de kaart','Card status colour')]].map(([v,l])=>option(v,l,s.colorMode===v)).join('')}</select></label>
+<div class="colors" data-colors${s.colorMode!=='custom'?' hidden':''}>${[0,1,2].map((i)=>`<label>${t('Kleur','Colour')} ${i+1}<input type="color" data-bg="color-${i}" value="${uiEscape(pickerColor(i))}"></label>`).join('')}</div>
+<label>${t('Transparantie','Transparency')} <span><output>${s.transparency}%</output><input data-bg="transparency" type="range" min="0" max="100" value="${s.transparency}"></span></label>
+<label>${t('Bereik','Coverage')}<select data-bg="coverage">${option('card',t('Hele kaart','Whole card'),s.coverage==='card')}${option('header',t('Bovenste strook','Top section'),s.coverage==='header')}</select></label>
+<label data-height${s.coverage!=='header'?' hidden':''}>${t('Hoogte (px)','Height (px)')}<input data-bg="height" type="number" min="24" max="2000" step="1" value="${s.height}"></label>
+<p class="help">${t('De bovenste strook vloeit onderaan zacht uit. Dynamische kleuren volgen de kaartstatus wanneer de kaart die aanbiedt.','The top section fades smoothly at the bottom. Dynamic colours follow the card status when available.')}</p>
+<label class="check"><input data-bg="animated" type="checkbox"${s.animated?' checked':''}>${t('Achtergrond animeren','Animate background')}</label>`;
+ }
+ _changeBackground(event){
+  const field=event.target.dataset.bg;if(!field)return;
+  const current=cardBackgroundSettings(this._config),next={...current};delete next.legacy;
+  if(field.startsWith('color-'))next.colors=[...this.shadowRoot.querySelectorAll('input[type=color]')].map(input=>input.value);
+  else next[field]=event.target.type==='checkbox'?event.target.checked:['height','transparency'].includes(field)?Number(event.target.value):event.target.value;
+  if(field==='colorMode'&&next.colorMode==='custom'&&!next.colors.length)next.colors=[...this.shadowRoot.querySelectorAll('input[type=color]')].map(input=>input.value);
+  this._config={...this._config,card_background:{...normalizeCardBackground(next),enabled:next.enabled}};
+  if(current.legacy){this.shadowRoot.querySelector('option[value=legacy]')?.remove();this.shadowRoot.querySelector('[data-bg=variant]').value=next.variant;}
+  if(field==='height')event.target.value=this._config.card_background.height;
+  // Update dependent controls without replacing the focused control.
+  this.shadowRoot.querySelector('[data-colors]').hidden=next.colorMode!=='custom';
+  this.shadowRoot.querySelector('[data-height]').hidden=next.coverage!=='header';
+  this.shadowRoot.querySelector('output').textContent=this._config.card_background.transparency+'%';
+  this._syncNativeBackgroundFields();this._emitBackgroundConfig();
+ }
+}
+
+
 // The caller formats measurements and translates the subtitle. All text is escaped.
-function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',attrs={}}={}){
+function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',layout='',unitPosition='raised',attrs={}}={}){
  const missing=value==null||value==='';
  const number=uiEscape(missing?'—':value);
  const label=subtitle!==''&&subtitle!=null?(subtitleEntity?`<button type="button" class="primary-label" data-entity="${uiEscape(subtitleEntity)}">${uiEscape(subtitle)}</button>`:`<div class="primary-label">${uiEscape(subtitle)}</div>`):'';
- return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
+ return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing),'data-primary-layout':layout==='uniform'?'uniform':null,'data-unit-position':layout==='uniform'&&['raised','baseline','center'].includes(unitPosition)?unitPosition:null})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
 }
 
 function uiPrimaryValueStyles(){return `
-[data-ui-primary-value]{--_primary-tone:var(--ui-primary-tone,var(--tone,var(--primary-color,#2196f3)));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-primary-value]{--_primary-tone:var(--accent-color,var(--primary-color,#2196f3));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
 [data-ui-primary-value] .primary-value{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin:0;font-size:var(--ui-primary-size,60px);line-height:1.15;font-weight:650;letter-spacing:-.055em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 [data-ui-primary-value] .primary-number{display:block;min-width:0;max-width:100%;overflow-wrap:anywhere}
 [data-ui-primary-value] button.primary-number{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}[data-ui-primary-value] button:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px;border-radius:3px}
 [data-ui-primary-value] .primary-value small{display:block;margin:8px 0 0;font-size:var(--ui-primary-unit-size,16px);line-height:1.4;font-weight:400;letter-spacing:-.03em;color:var(--secondary-text-color,#626a78)}
-[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid color-mix(in srgb,var(--_primary-tone) 55%,transparent);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
-[data-ui-primary-value] button.primary-label{display:block;max-width:100%;min-height:0;margin-bottom:0;padding-block:0;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
+[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid var(--_primary-tone);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-label{display:flex;align-items:center;box-sizing:border-box;max-width:100%;min-width:44px;min-height:44px;margin-bottom:0;padding-block:6px;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
 [data-ui-primary-value][data-density=compact] .primary-value{font-size:var(--ui-primary-size,46px)}
 [data-ui-primary-value][data-density=compact] .primary-value small{font-size:var(--ui-primary-unit-size,14px);margin-top:5px}
+/* One opt-in composition owns value, unit and subtitle geometry for all cards. */
+[data-ui-primary-value][data-primary-layout=uniform]{--ui-primary-size:44px;--ui-primary-unit-size:16px}
+[data-ui-primary-value][data-primary-layout=uniform][data-density=compact]{--ui-primary-size:36px;--ui-primary-unit-size:14px}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-value{display:flex;align-items:flex-start;flex-wrap:nowrap;gap:6px;min-height:44px;font-size:var(--ui-primary-size);line-height:1.1;font-weight:650;letter-spacing:-.035em;white-space:nowrap;overflow-wrap:normal}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-number{display:block;min-width:0;min-height:0;max-width:none;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+[data-ui-primary-value][data-primary-layout=uniform] button.primary-number{min-height:44px}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-value small{flex:none;margin:6px 0 0;font-size:var(--ui-primary-unit-size);line-height:1.4;letter-spacing:0;white-space:nowrap}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=baseline] .primary-value{align-items:baseline}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=baseline] .primary-value small{margin:0}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=center] .primary-value{align-items:center}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=center] .primary-value small{margin:0}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-label{position:relative;display:flex;align-items:flex-start;box-sizing:border-box;min-width:0;min-height:44px;max-width:100%;margin:2px 0 0;padding:0 0 0 8px;border:0;border-radius:0;background:none;font-family:inherit;font-size:12px;font-weight:400;line-height:1.4;letter-spacing:0;color:var(--secondary-text-color,#626a78);text-align:start;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-label::before{content:'';position:absolute;inset-inline-start:0;top:2px;width:2px;height:12px;border-radius:1px;background:var(--_primary-tone)}
 `;}
 
 
@@ -97,13 +616,60 @@ function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
 [data-ui-metric][data-density=compact] .ui-metric-icon{width:20px;height:20px;border-radius:6px;transform:translate(2px,-2px)}
 [data-ui-metric][data-density=compact] .ui-metric-icon svg,[data-ui-metric][data-density=compact] .ui-metric-icon ha-icon{width:16px;height:16px;--mdc-icon-size:16px}
 [data-ui-metric][data-density=compact] .ui-metric-value{font-size:20px}
+[data-ui-metric][data-value-kind=text] .ui-metric-value{font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-.03em;white-space:normal;overflow-wrap:break-word}
 [data-ui-metric][data-density=compact] .ui-metric-info{margin-top:4px;padding-top:4px}
 [data-ui-metric][data-unavailable=true]{--_metric-tone:var(--secondary-text-color,#626a78)}
-button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:hover{filter:brightness(1.04)}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:not(:disabled):hover{background:color-mix(in srgb,var(--secondary-background-color,#eee) 94%,var(--primary-text-color,#20252b));color:var(--primary-text-color,#20252b);filter:none}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
 [data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
 [data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
 @supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
 `;}
+
+
+const barBounds=(min,max)=>Number.isFinite(min)&&Number.isFinite(max)&&max>min?{min,max}:{min:0,max:100};
+const barPercent=(value,min,max)=>Math.max(0,Math.min(100,(value-min)/(max-min)*100));
+
+// All text/attributes are escaped; only finite measurements become fill widths.
+function uiBar({value=null,min=0,max=100,target=null,charging=false,label='',valueText='',decorative=false,attrs={}}={}){
+ ({min,max}=barBounds(min,max));
+ const known=Number.isFinite(value),amount=known?Math.max(min,Math.min(max,value)):null;
+ const percent=known?barPercent(amount,min,max):0,marker=Number.isFinite(target)?barPercent(target,min,max):null;
+ const active=!!charging&&known&&amount<max&&(!Number.isFinite(target)||amount<target);
+ return `<div${uiAttributes({...attrs,'data-ui-bar':'','data-charging':String(active),'data-unavailable':String(!known),...(decorative?{'aria-hidden':'true'}:{'aria-label':label,...(known?{role:'progressbar','aria-valuemin':min,'aria-valuemax':max,'aria-valuenow':amount,...(valueText?{'aria-valuetext':valueText}:{})}:{})})})}><span class="ui-bar-fill" style="width:${percent}%">${active?'<span class="ui-bar-motion" aria-hidden="true"></span>':''}</span>${marker==null?'':`<span class="ui-bar-marker" style="left:${marker}%" aria-hidden="true"></span>`}</div>`;
+}
+
+function uiSlider({value=0,min=0,max=100,step=1,disabled=false,attrs={}}={}){
+ ({min,max}=barBounds(min,max));
+ const amount=Number.isFinite(value)?Math.max(min,Math.min(max,value)):min;
+ return `<input${uiAttributes({...attrs,type:'range','data-ui-slider':'',min,max,step:Number.isFinite(step)&&step>0?step:1,value:amount,...(disabled?{disabled:true}:{}),style:(attrs.style?attrs.style+';':'')+`--ui-bar-position:${barPercent(amount,min,max)}%`})}>`;
+}
+
+// Call alongside existing input handlers; never sends a command or replaces events.
+function syncUISlider(input){
+ const min=Number(input.min),max=Number(input.max),value=Number(input.value);
+ input.style.setProperty('--ui-bar-position',Number.isFinite(value)&&Number.isFinite(min)&&Number.isFinite(max)&&max>min?barPercent(value,min,max)+'%':'0%');
+}
+
+function uiBarStyles(){return `
+[data-ui-bar]{--_bar-tone:var(--ui-bar-tone,var(--accent-color,var(--primary-color,#2196f3)));position:relative;box-sizing:border-box;display:block;min-width:0;width:100%;height:var(--ui-bar-height,12px);border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%),inset -1px -1px 0 rgb(255 255 255 / 20%));isolation:isolate}
+[data-ui-bar]>.ui-bar-fill{display:block;position:relative;overflow:hidden;isolation:isolate;height:100%;border-radius:inherit;background:var(--_bar-tone);box-shadow:inset 0 1px 0 #ffffff30}
+[data-ui-bar]>.ui-bar-marker{position:absolute;top:-5px;width:2px;height:calc(100% + 10px);transform:translateX(-50%);max-width:100%;border-radius:2px;background:var(--primary-text-color,#20252b);pointer-events:none}
+[data-ui-bar]>.ui-bar-marker[style*="left:0%"]{transform:none}
+[data-ui-bar]>.ui-bar-marker[style*="left:100%"]{transform:translateX(-100%)}
+[data-ui-bar] .ui-bar-motion{position:absolute;inset:0 auto 0 0;width:65%;pointer-events:none;background:linear-gradient(90deg,transparent,#ffffff4d 50%,transparent);animation:ui-bar-charge var(--ui-bar-duration,3.8s) linear infinite;animation-delay:var(--ui-bar-delay,0s)}
+@keyframes ui-bar-charge{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
+input[data-ui-slider]{--_bar-tone:var(--ui-bar-tone,var(--accent-color,var(--primary-color,#2196f3)));box-sizing:border-box;appearance:none;-webkit-appearance:none;display:block;width:100%;height:44px;min-height:44px;min-width:0;margin:0;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);cursor:pointer;touch-action:pan-y}
+input[data-ui-slider]::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:linear-gradient(var(--_bar-tone),var(--_bar-tone)) 0 / var(--ui-bar-position,0%) 100% no-repeat,var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%))}
+input[data-ui-slider]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:18px;height:18px;margin-top:-3px;border-radius:50%;border:2px solid var(--card-background-color,#fff);background:var(--_bar-tone);box-shadow:0 0 0 1px var(--_bar-tone)}
+input[data-ui-slider]::-moz-range-track{height:12px;border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%))}
+input[data-ui-slider]::-moz-range-progress{height:12px;border-radius:999px;background:var(--_bar-tone)}
+input[data-ui-slider]::-moz-range-thumb{box-sizing:border-box;width:18px;height:18px;border-radius:50%;border:2px solid var(--card-background-color,#fff);background:var(--_bar-tone);box-shadow:0 0 0 1px var(--_bar-tone)}
+input[data-ui-slider]:focus-visible{outline:2px solid var(--_bar-tone);outline-offset:3px}
+input[data-ui-slider]:disabled{opacity:.45;cursor:default}
+@media(prefers-reduced-motion:reduce){[data-ui-bar] .ui-bar-motion{display:none;animation:none}}
+@media(forced-colors:active){[data-ui-bar]{background:Canvas;border:1px solid CanvasText;box-shadow:none}[data-ui-bar]>.ui-bar-fill{background:Highlight;box-shadow:none;forced-color-adjust:none}[data-ui-bar]>.ui-bar-marker{background:CanvasText}[data-ui-bar] .ui-bar-motion{display:none}input[data-ui-slider]{appearance:auto;accent-color:Highlight}}
+`;}
+
 
 
 
@@ -117,11 +683,11 @@ function uiDetailSurface({title='',metrics=[],percent=null,entity='',actionLabel
    const missing=value==null||value==='';
    return `<div><dt>${uiEscape(label)}</dt><dd>${uiEscape(missing?'—':value)}${!missing&&unit?' '+uiEscape(unit):''}${hint?`<small class="ui-detail-surface-hint">${uiEscape(hint)}</small>`:''}</dd></div>`;
   }).join('')}</dl>
-  ${progress==null?'':`<div class="ui-detail-surface-track" aria-hidden="true"><i style="width:${progress}%"></i></div>`}
+  ${progress==null?'':uiBar({value:progress,decorative:true,attrs:{class:'ui-detail-surface-track',style:'--ui-bar-tone:var(--ui-detail-tone,var(--primary-color,#2196f3))'}})}
  </section>`;
 }
 
-function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+`
+function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+uiBarStyles()+`
 [data-ui-detail-surface]{box-sizing:border-box;min-width:0;padding:12px;border-radius:8px;color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--ui-detail-tone,var(--primary-color,#2196f3)) 5%,transparent)}
 [data-ui-detail-surface] .ui-detail-surface-title{font-family:inherit;font-size:12px;font-weight:600;line-height:1.4;color:inherit;margin:0 0 8px;overflow-wrap:anywhere}
 [data-ui-detail-surface] .ui-detail-surface-action{font:inherit;line-height:1.4;color:inherit;background:none;border:0;border-radius:4px;padding:4px 0;margin:-4px 0;text-align:start;cursor:pointer}
@@ -131,8 +697,7 @@ function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface
 [data-ui-detail-surface] dt{font-size:10px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere;margin:0 0 2px}
 [data-ui-detail-surface] dd{margin:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 [data-ui-detail-surface] .ui-detail-surface-hint{display:block;margin-top:3px;font-size:10px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--secondary-text-color,#626a78)}
-[data-ui-detail-surface] .ui-detail-surface-track{height:8px;border-radius:8px;background:var(--divider-color,#ddd);overflow:hidden;margin-top:8px}
-[data-ui-detail-surface] .ui-detail-surface-track>i{display:block;height:100%;background:var(--ui-detail-tone,var(--primary-color,#2196f3))}
+[data-ui-detail-surface] .ui-detail-surface-track{margin-top:8px}
 @container(max-width:360px){[data-ui-detail-surface] dd{font-size:15px}}
 @media(forced-colors:active){[data-ui-detail-surface]{border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track{background:Canvas;border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track>i{background:Highlight;forced-color-adjust:none}}
 `;}
@@ -152,7 +717,11 @@ function bindUITabs({tabs,panels,onSelect=()=>{}}){
   const target=buttons.find(tab=>tab.dataset.uiTab===value&&!tab.disabled);if(!target)return false;
   for(const tab of buttons){const active=tab===target;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
   for(const panel of sections)panel.hidden=panel.dataset.uiTabPanel!==value;
-  if(focus)target.focus({preventScroll:true});if(notify)onSelect(value,target);return true;
+  if(focus)target.focus({preventScroll:true});
+  // Keep a selected tab visible within a scrolling strip without moving the page.
+  const list=target.parentElement;
+  if(list&&list.scrollWidth>list.clientWidth&&target.getBoundingClientRect){const box=target.getBoundingClientRect(),view=list.getBoundingClientRect();list.scrollLeft+=box.left<view.left?box.left-view.left:box.right>view.right?box.right-view.right:0;}
+  if(notify)onSelect(value,target);return true;
  };
  for(const tab of buttons){
   const click=()=>select(tab.dataset.uiTab,{focus:true});
@@ -178,6 +747,24 @@ function uiTabsStyles(){return `
 [data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
 [data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
+
+// Approved 2A-1 appearance. Retain the existing helper name for consumers.
+function uiBalancedTabsStyles(){
+ const strip=':host [data-ui-tabs][role=tablist]';
+ const tab=strip+' [role=tab][data-ui-tab]';
+ return `
+${strip}{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:stretch;gap:0;width:100%;box-sizing:border-box;padding:0;border:0;border-bottom:1px solid var(--divider-color,#ddd);background:transparent;box-shadow:none;overflow:visible}
+${strip}:has(>[role=tab]:nth-child(4)){display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+${strip}::-webkit-scrollbar{display:none}
+${strip}:has(>[role=tab]:nth-child(4)) [role=tab][data-ui-tab]{flex:1 0 88px}
+${tab}{display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:44px;max-width:none;min-height:44px;height:auto;margin:0 0 -1px;padding:5px 6px 3px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--secondary-text-color,#666);font-family:inherit;font-size:13px;font-weight:400;line-height:1.3;text-align:center;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;text-decoration:none;transform:none}
+${tab}:not(:disabled):hover{color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none;transform:none}
+${tab}[aria-selected=true],${tab}[aria-selected=true]:not(:disabled):hover{color:var(--primary-text-color,#20252b);font-weight:400;background:transparent;box-shadow:none;border-bottom:2px solid var(--accent-color,var(--primary-color));text-decoration:none;transform:none}
+${tab}:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+${strip}~[data-ui-tab-panel]{border:0;padding-block-start:12px;background:transparent}
+@media(forced-colors:active){${strip}{border-bottom-color:CanvasText}${tab}[aria-selected=true]{border-bottom-color:Highlight;outline:1px solid Highlight;outline-offset:-2px;box-shadow:none}${tab}:focus-visible{outline:2px solid CanvasText;outline-offset:-4px}}
+`;
+}
 
 
 const entityTabText=value=>typeof value==='string'?value.trim():'';
@@ -573,7 +1160,7 @@ function compactPeriodName({start,end,mode,past,zoomed,hours,name,locale,zone}){
  return name;
 }
 function periodControls(host,language='en',{popupNavigation=false,tabVariant=''}={}){
- const active=host.shadowRoot.activeElement;
+ const adapter=host._periodAdapter,active=host.shadowRoot.activeElement;
  if(!host._periodMenuPending)host._periodFocus=null;
  if(active?.closest?.('.header-actions'))host._periodFocus=active.dataset.periodTab!=null?`tab:${active.dataset.periodTab}`:active.dataset.customField!=null?`custom:${active.dataset.customField}`:active.dataset.periodOption!=null?`option:${active.dataset.periodOption}`:active.dataset.zoom!=null?`zoom:${active.dataset.zoom}`:active.classList.contains('history-link')?'history':active.dataset.period;
  if(host._config.show_navigation===false){host._periodMenuOpen=false;host._periodMenuPending=false;return {};}
@@ -583,29 +1170,29 @@ function periodControls(host,language='en',{popupNavigation=false,tabVariant=''}
   host._periodMenuOpen=!!host._periodMenuPending||(typeof previousMenu.showPopover==='function'?previousMenu.matches(':popover-open'):previousMenu.hasAttribute('data-fallback-open'));
  }
  const nl=language.startsWith('nl'),label=(en,nlText)=>nl?nlText:en,mode=host._periodMode??'configured',past=(host._periodOffset??0)<0;
- const standard=label(`Default (${host._config.hours_to_show} hours)`,`Standaard (${host._config.hours_to_show} uur)`);
- const rolling=[['1h',1],['6h',6],['12h',12],['24h',24],['48h',48],['7d',168],['14d',336],['30d',720],['90d',2160],['365d',8760]].map(([id,hours])=>[id,hours<168?label(`${hours} ${hours===1?'hour':'hours'}`,`${hours} uur`):label(`${hours/24} days`,`${hours/24} dagen`),hours<168?`${hours} ${nl?'u':'h'}`:`${hours/24} d`]);
- const calendar=[['today',label('Today','Vandaag'),label('Day','Dag')],['week',label('This week','Deze week'),label('Week','Week')],['month',label('This month','Deze maand'),label('Month','Maand')],['quarter',label('This quarter','Dit kwartaal'),label('Quarter','Kwartaal')],['year',label('This year','Dit jaar'),label('Year','Jaar')]];
+ const standard=adapter?.standard??label(`Default (${host._config.hours_to_show} hours)`,`Standaard (${host._config.hours_to_show} uur)`);
+ const rolling=adapter?.rolling??[['1h',1],['6h',6],['12h',12],['24h',24],['48h',48],['7d',168],['14d',336],['30d',720],['90d',2160],['365d',8760]].map(([id,hours])=>[id,hours<168?label(`${hours} ${hours===1?'hour':'hours'}`,`${hours} uur`):label(`${hours/24} days`,`${hours/24} dagen`),hours<168?`${hours} ${nl?'u':'h'}`:`${hours/24} d`]);
+ const calendar=adapter?.calendar??[['today',label('Today','Vandaag'),label('Day','Dag')],['week',label('This week','Deze week'),label('Week','Week')],['month',label('This month','Deze maand'),label('Month','Maand')],['quarter',label('This quarter','Dit kwartaal'),label('Quarter','Kwartaal')],['year',label('This year','Dit jaar'),label('Year','Jaar')]];
  const calendarChoice=calendar.find(([id])=>id===mode);
  if(!calendarChoice&&mode!=='configured'&&mode!=='custom'&&host._periodHours!=null&&!rolling.some(([id])=>id===mode))rolling.push([mode,label(`${host._periodHours} hours`,`${host._periodHours} uur`)]);
- const selectedStandard=label(`Default (${host._periodHours??host._config.hours_to_show} hours)`,`Standaard (${host._periodHours??host._config.hours_to_show} uur)`);
+ const selectedStandard=adapter?.standard??label(`Default (${host._periodHours??host._config.hours_to_show} hours)`,`Standaard (${host._periodHours??host._config.hours_to_show} uur)`);
  const name=mode==='configured'?selectedStandard:calendarChoice?.[past?2:1]??rolling.find(([id])=>id===mode)?.[1]??standard;
  const tabIds=['rolling','calendar','custom'];
  const selectedTab=host._periodMenuOpen&&tabIds.includes(host._periodTab)?host._periodTab:mode==='custom'?'custom':calendarChoice?'calendar':'rolling';
  host._periodTab=selectedTab;
  const choice=([value,text,compact])=>uiButton({variant:'surface',content:`<span>${periodEscape(compact??text)}</span><span aria-hidden="true">${value===mode?'✓':''}</span>`,attrs:{role:'menuitemradio','aria-checked':value===mode,tabindex:-1,'aria-label':text,title:text,'data-period-option':value}});
 
- const {start,end}=host._status==='ready'&&Number.isFinite(host._viewStart)&&Number.isFinite(host._viewEnd)?{start:host._viewStart,end:host._viewEnd}:graphPeriodRange(host);
+ const {start,end}=adapter?.range()??(host._status==='ready'&&Number.isFinite(host._viewStart)&&Number.isFinite(host._viewEnd)?{start:host._viewStart,end:host._viewEnd}:graphPeriodRange(host));
  const locale=nl?'nl-NL':'en-GB',zone=host._hass?.config?.time_zone||'UTC';
  const zoomed=host._status==='ready'&&(start>host._start+1||end<host._end-1);
- const compactName=compactPeriodName({start,end,mode,past,zoomed,hours:host._periodHours??host._config.hours_to_show,name,locale,zone});
+ const compactName=adapter?.name()??compactPeriodName({start,end,mode,past,zoomed,hours:host._periodHours??host._config.hours_to_show,name,locale,zone});
  const format=new Intl.DateTimeFormat(locale,{timeZone:zone,day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'shortOffset'});
  const range=`${format.format(start)} – ${format.format(end)}`;
- const customRange=graphPeriodRange(host),draft=host._periodCustomDraft??{start:periodDateTime(customRange.start,zone),end:periodDateTime(customRange.end,zone)};
- const canGoNext=mode==='custom'?host._periodEnd!=null&&customRange.end<Date.now():past;
+ const customRange=adapter?.range()??graphPeriodRange(host),draft=host._periodCustomDraft??{start:periodDateTime(customRange.start,zone),end:periodDateTime(customRange.end,zone)};
+ const canGoNext=adapter?true:mode==='custom'?host._periodEnd!=null&&customRange.end<Date.now():past;
  const custom=`<form data-custom-range><div class="period-custom-fields">${[['start',label('Start','Begin')],['end',label('End','Einde')]].map(([key,text])=>`<label>${text}<input type="datetime-local" name="${key}" data-custom-field="${key}" value="${periodEscape(draft[key])}" step="60" required></label>`).join('')}</div><p class="period-custom-zone">${periodEscape(zone)}</p><p class="period-custom-error" role="alert"${draft.error?'':' hidden'}>${periodEscape(draft.error??'')}</p>${uiButton({variant:'surface',type:'submit',text:label('Apply','Toepassen'),attrs:{'data-custom-field':'apply'}})}</form>`;
  const contents=uiTabs({id:'eleven-period',variant:tabVariant,label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
-  {value:'rolling',label:label('Last','Afgelopen'),content:`<div class="period-options" role="menu" aria-label="${label('Last','Afgelopen')}">${rolling.map(choice).join('')}</div>`},
+  {value:'rolling',label:adapter?.rollingLabel??label('Last','Afgelopen'),content:`<div class="period-options" role="menu" aria-label="${label('Last','Afgelopen')}">${rolling.map(choice).join('')}</div>`},
   {value:'calendar',label:label('Calendar','Kalender'),content:`<div class="period-options period-calendar" role="menu" aria-label="${label('Calendar','Kalender')}">${calendar.map(([id,text])=>choice([id,text])).join('')}</div>`},
   {value:'custom',label:label('Custom range','Eigen bereik'),content:custom,className:'period-custom'}
  ].map(item=>({...item,tabAttrs:{'data-period-tab':item.value},panelAttrs:{'data-period-panel':item.value}}))});
@@ -624,7 +1211,7 @@ function restorePeriodFocus(host,items=[]){
 function disconnectPeriodControls(host,preserveState=false){host._periodMenuCleanup?.();host._periodMenuCleanup=null;if(!preserveState)host._periodMenuPending=false;}
 function bindPeriodControls(host){
  disconnectPeriodControls(host,true);
- const root=host.shadowRoot,nav=root.querySelector('.period-controls');if(!nav){restorePeriodFocus(host);return;}
+ const adapter=host._periodAdapter,root=host.shadowRoot,nav=root.querySelector('.period-controls');if(!nav){restorePeriodFocus(host);return;}
  const menu=nav.querySelector('.period-menu'),trigger=nav.querySelector('[data-period="menu"]'),items=[...menu.querySelectorAll('[data-period-option]')];
  const nl=(host._hass?.language??'en').startsWith('nl'),label=(en,nlText)=>nl?nlText:en;
  const form=menu.querySelector('form[data-custom-range]'),tabs=[...menu.querySelectorAll('[data-period-tab]')],panels=[...menu.querySelectorAll('[data-period-panel]')];
@@ -650,7 +1237,7 @@ function bindPeriodControls(host){
  });
  const {open,close,position}=controller;cleanups.push(()=>controller.disconnect());
  trigger.onkeydown=e=>{if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();open();if(e.key==='ArrowUp')visibleItems().at(-1)?.focus({preventScroll:true});}};
- for(const item of items)item.onclick=()=>{close(true);chooseGraphPeriod(host,item.dataset.periodOption);};
+ for(const item of items)item.onclick=()=>{close(true);if(adapter)adapter.choose(item.dataset.periodOption);else chooseGraphPeriod(host,item.dataset.periodOption);};
  const tabController=bindUITabs({tabs,panels,onSelect:value=>{
   host._periodTab=value;updateOptionFocus();host._periodMenuScroll=0;menu.scrollTop=0;position();
  }});cleanups.push(()=>tabController.disconnect());
@@ -666,7 +1253,7 @@ function bindPeriodControls(host){
    else if(end<=start)message=label('End must be after start.','Einde moet na begin liggen.');
    else if(end-start>366*86400000)message=label('Choose a range of at most 366 days.','Kies een bereik van maximaal 366 dagen.');
    if(message){draft.error=message;const error=form.querySelector('.period-custom-error');error.textContent=message;error.hidden=false;position();return;}
-   close(true);chooseCustomGraphPeriod(host,start,end);
+   close(true);if(adapter)adapter.custom(start,end);else chooseCustomGraphPeriod(host,start,end);
   });
  }
  menu.onkeydown=e=>{
@@ -676,7 +1263,7 @@ function bindPeriodControls(host){
    visible[next].focus();
   }
  };
- for(const [key,direction]of [['previous',-1],['next',1],['now',0]])for(const button of root.querySelectorAll(`[data-period="${key}"]`))button.onclick=()=>{close();moveGraphPeriod(host,direction);};
+ for(const [key,direction]of [['previous',-1],['next',1],['now',0]])for(const button of root.querySelectorAll(`[data-period="${key}"]`))button.onclick=()=>{close();if(adapter)adapter.move(direction);else moveGraphPeriod(host,direction);};
  if(host._periodMenuOpen)open(false);
  if(!host._periodMenuPending)restorePeriodFocus(host,items);
 }
@@ -684,7 +1271,7 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-menu-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;margin-top:12px;border-top:1px solid var(--divider-color,#ddd)}
 .period-menu-navigation>[data-period]{width:36px;height:32px}.period-menu-navigation>[data-period=now]{width:auto;padding:4px 12px}
 .period-controls{display:flex;min-width:0;max-width:100%;flex:0 1 auto}
-.header-actions .period-trigger{width:auto;min-width:0;max-width:100%;flex:0 1 auto;gap:6px;padding:4px 10px;border:0;border-radius:4px;background:transparent;font-weight:400}
+.header-actions .period-trigger{width:auto;min-width:0;max-width:100%;flex:0 1 auto;gap:6px;padding:4px 6px;border:0;border-radius:4px;background:transparent;font-weight:400}
 .header-actions .period-trigger:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
 .period-trigger span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .period-current-range{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;margin:2px 0 10px}
@@ -880,20 +1467,21 @@ const weatherAtmosphereStyles=headerAtmosphereStyles;
 const weatherStyles=`
 :host{display:block;min-width:0;container-type:inline-size;font:inherit}
 *{box-sizing:border-box}ha-card{display:block;overflow:hidden;border-radius:var(--ha-card-border-radius,12px);background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit}
-.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--tone:#536b82}.content[data-dark=true]{--tone:#a8c9eb}
-.content[data-kind=sun],.content[data-kind=partly]{--tone:#946800}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--tone:#f2c451}
-.content[data-kind=rain]{--tone:#427fac}.content[data-dark=true][data-kind=rain]{--tone:#82b8e8}
-.content[data-kind=night],.content[data-kind=storm]{--tone:#6553a3}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--tone:#aca3f1}
-.content[data-kind=snow]{--tone:#45858c}.content[data-dark=true][data-kind=snow]{--tone:#a2dce6}
+/* Supplemental semantic glyphs have fresh paint; readable text is a separate theme role. */
+.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--weather-icon-tone:#6599bb;--weather-text-tone:var(--secondary-text-color,#666);--tone:var(--weather-icon-tone)}.content[data-dark=true]{--weather-icon-tone:#add6ef}
+.content[data-kind=sun],.content[data-kind=partly]{--weather-icon-tone:#f3b51b}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--weather-icon-tone:#ffd45c}
+.content[data-kind=rain]{--weather-icon-tone:#269ad5}.content[data-dark=true][data-kind=rain]{--weather-icon-tone:#76cafa}
+.content[data-kind=night],.content[data-kind=storm]{--weather-icon-tone:#8873dc}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--weather-icon-tone:#b8a7ff}
+.content[data-kind=snow]{--weather-icon-tone:#32a9bb}.content[data-dark=true][data-kind=snow]{--weather-icon-tone:#8bdeec}
 .scene{position:relative;isolation:isolate;margin:-16px -16px 0;padding:16px 16px 16px;overflow:visible}
 .hero{min-height:160px;position:relative;display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:12px;align-content:start;padding-top:6px}
 .temperature{font-size:76px;font-weight:500;line-height:1.15;letter-spacing:-.065em;font-variant-numeric:tabular-nums;margin-top:-20px}.temperature .unit{font-size:.53em;letter-spacing:-.03em;margin-left:2px}
-header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:color-mix(in srgb,var(--tone) 88%,#fff);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
-.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:drop-shadow(0 8px 14px color-mix(in srgb,var(--tone) 25%,transparent))}
+header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:var(--primary-text-color,#20252b);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
+.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:none}
 button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(--secondary-background-color,#eee);border-radius:7px;padding:12px}.status{display:flex;gap:12px;align-items:center;width:100%;text-align:left;border:0;min-height:0;margin:16px 0 0}.status-icon{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:10px;color:var(--tone);background:color-mix(in srgb,var(--tone) 13%,transparent)}.status-icon svg{width:30px;height:30px}.status strong{font-size:13px;line-height:1.4;font-weight:600}.status small{display:block;font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}
 .metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0}.metrics:has(.metric:only-child){grid-template-columns:minmax(0,1fr)}.metric{min-width:0;display:grid;grid-template-rows:auto auto;gap:2px;align-content:start}.metric dt{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin:0;overflow-wrap:anywhere}.metric dd{font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:0;overflow-wrap:anywhere}
-.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--tone)}
-.notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.retry{background:transparent;color:var(--primary-color,#2196f3);border:0;min-height:32px;padding:4px 0}.status:focus-visible,.retry:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
+.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--weather-text-tone)}
+.notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.status:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
 @container(max-width:320px){.hero{min-height:150px}.temperature{font-size:65px;margin-top:-17px}header{margin-top:-17px;padding-top:14px}.art svg{height:100px}.forecast-list{grid-auto-columns:minmax(46px,1fr)}}
 @supports(grid-template-rows:subgrid){.metrics{grid-template-rows:auto auto;row-gap:2px}.metric{grid-row:span 2;grid-template-rows:subgrid}}
 .forecast-panel{padding-top:16px}.forecast-panel[hidden]{display:none!important}
@@ -903,7 +1491,7 @@ button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(
 .content[data-compact=true] .temperature{font-size:64px;margin-top:-16px}
 .content[data-compact=true] header{padding-top:14px;margin-top:-16px}
 .content[data-compact=true] .art{inset:38px 0 0}
-.content[data-compact=true] .art svg{height:74px;width:100px;filter:drop-shadow(0 5px 10px color-mix(in srgb,var(--tone) 20%,transparent))}
+.content[data-compact=true] .art svg{height:74px;width:100px}
 .content[data-compact=true] .scene{padding-bottom:12px}
 .content:not(:has(.weather-metrics)) .scene{padding-bottom:0}
 .content[data-compact=true] .status{padding:10px;gap:10px;margin-top:12px}
@@ -920,10 +1508,10 @@ button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(
 .forecast-extra{font-size:11px;line-height:1.4;margin-top:5px;color:var(--primary-text-color)}.forecast-label{display:block;overflow-wrap:anywhere;font-size:10px;color:var(--secondary-text-color)}
 ${weatherBackgroundStyles}
 
-.wx-rays{transform-origin:70px 55px}.wx-corona{transform-origin:70px 55px}
+.wx-rays{transform-origin:70px 55px}
 @media(prefers-reduced-motion:no-preference){
  .content[data-animated=true] .wx-rays{animation:wx-rotate 24s linear infinite}
- .content[data-animated=true] .wx-corona{animation:wx-glow 5s ease-in-out infinite}
+
  .content[data-animated=true] .wx-cloud{animation:wx-float 6s ease-in-out infinite}
  .content[data-animated=true] .wx-drop{animation:wx-rain 1.5s linear infinite}
  .content[data-animated=true] .wx-flake{animation:wx-snow 4s ease-in-out infinite}
@@ -940,7 +1528,7 @@ ${weatherBackgroundStyles}
  .content[data-animated=true] .wx-lightning{animation:wx-lightning 5s ease-in-out infinite}
 }
 @keyframes wx-rotate{to{transform:rotate(360deg)}}
-@keyframes wx-glow{50%{transform:scale(1.12);opacity:.6}}
+
 @keyframes wx-float{50%{transform:translate(3px,-2px)}}
 @keyframes wx-rain{0%{transform:translate(2px,-3px);opacity:0}15%,75%{opacity:1}100%{transform:translate(-4px,12px);opacity:0}}
 @keyframes wx-snow{0%{transform:translate(-2px,-2px);opacity:0}20%,70%{opacity:1}100%{transform:translate(4px,9px);opacity:0}}
@@ -951,6 +1539,34 @@ ${weatherBackgroundStyles}
 ${weatherAtmosphereStyles}
 ${weatherStyledIconStyles}
 ${headerSceneStyles}
+`;
+
+// Weather-specific anatomy and neutral role mapping; theme paint stays owned upstream.
+const weatherCalmStyles=`
+/* Theme-owned readings; condition color belongs to icons, not a decorative wash. */
+[data-ui-metric]{background:var(--secondary-background-color,transparent)}
+.content .hero{min-height:124px}
+.content[data-compact=true] .hero{min-height:100px}
+.content .hero[data-wide-reading=true]{padding-bottom:116px;min-height:0}
+.content .hero[data-wide-reading=true] .temperature{max-width:100%}
+.content[data-icon-style] .hero[data-wide-reading=true]>.art{top:auto;bottom:0;height:110px}
+.content[data-compact=true] .hero[data-wide-reading=true]{padding-bottom:86px}
+.content[data-compact=true][data-icon-style] .hero[data-wide-reading=true]>.art{height:80px}
+.weather-metrics{grid-template-columns:repeat(var(--weather-reading-columns,1),minmax(0,1fr));column-gap:12px;row-gap:12px}
+.weather-metrics>[data-ui-metric]{padding:12px;min-height:44px}
+[data-ui-metric] .ui-metric-title,[data-ui-metric] .ui-metric-info{font-size:12px;overflow-wrap:normal;word-break:normal}
+[data-ui-metric] .ui-metric-icon{transform:none;width:20px;height:20px}
+[data-ui-metric] .ui-metric-value{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.weather-status{min-height:44px}
+.ui-metric-unit{font-size:12px;white-space:nowrap}
+[data-ui-tabs] [role=tab]:focus-visible,button[data-ui-metric]:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.forecast-list{grid-auto-columns:minmax(max-content,1fr);gap:8px;padding-bottom:4px}
+.forecast-list li{min-width:max-content}
+.forecast-list time{font-size:12px;white-space:nowrap}
+.forecast-atomic{display:inline-block;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.forecast-label{font-size:11px;white-space:normal;overflow-wrap:normal;word-break:normal}
+.forecast-low,.rain-chance,.forecast-extra{font-size:12px}
+
 `;
 
 // Retain live nodes, focus, scroll offsets and running SVG animations on telemetry updates.
@@ -1254,6 +1870,7 @@ function energyFlowDeviceCosts(prefs,hass,state={}){
 
 
 
+
 function energyFlowDetailPopup(host,kind,data,{id,attrs={}}={}){
  const nl=String(host._hass?.locale?.language??host._hass?.language??'en').startsWith('nl'),history=host._view==='history';
  const title=kind==='home'?(nl?'Woning':'Home'):kind==='grid'?(nl?'Net':'Grid'):(nl?'Zon':'Solar');
@@ -1272,7 +1889,7 @@ function energyFlowDetailContent(host,kind,data){
  const metric=(label,value,tone='home')=>`<div data-tone="${tone}"><dt>${uiEscape(label)}</dt><dd>${uiEscape(value)}</dd></div>`;
  const deviceMetric=(label,value,total,{tone='home',hint=''}={})=>{
   const comparable=Number.isFinite(value)&&value>=0&&Number.isFinite(total)&&total>0,percent=comparable?value/total*100:null;
-  return `<div data-tone="${tone}"><dt>${uiEscape(label)}</dt><dd><strong>${uiEscape(reading(value))}</strong>${percent!=null&&percent<=100?`<small>${uiEscape(reading(percent,'%'))}</small>`:''}</dd>${comparable?`<div class="energy-detail-track" aria-hidden="true"><i style="width:${Math.min(100,percent)}%"></i></div>`:''}${hint?`<small class="energy-home-hint">${uiEscape(hint)}</small>`:''}</div>`;
+  return `<div data-tone="${tone}"><dt>${uiEscape(label)}</dt><dd><strong>${uiEscape(reading(value))}</strong>${percent!=null&&percent<=100?`<small>${uiEscape(reading(percent,'%'))}</small>`:''}</dd>${comparable?uiBar({value:percent,decorative:true,attrs:{class:'energy-detail-track',style:'--ui-bar-tone:var(--detail-tone)'}}):''}${hint?`<small class="energy-home-hint">${uiEscape(hint)}</small>`:''}</div>`;
  };
  const state=host._detailResult??{},stats=state.statistics??{},meta=state.metadata??{};
  let html='';
@@ -1283,7 +1900,7 @@ function energyFlowDetailContent(host,kind,data){
  if(kind==='home'){
   html+=`<dl class="energy-grid-metrics energy-home-summary">${metric(t('Woning totaal','Home total'),reading(data.home))}${metric(t('Geschat basisverbruik','Estimated base consumption'),reading(host._baseResult?.value?.watts??null,'W'))}</dl>`;
   const devices=energyFlowDeviceRows(prefs,hass,history,stats),costs=history?energyFlowDeviceCosts(prefs,hass,state):{};
-  if(!devices.length)return html+note(t('Geen afzonderlijke apparaten ingesteld in Home Assistant Energy.','No individual devices configured in Home Assistant Energy.'));
+  if(!devices.length)return html;
   const costReading=cost=>cost?.currency?reading(cost.value,cost.currency):'—';
   const surface=(label,value,{entity='',cost=null,hint='',id=''}={})=>{
    const share=Number.isFinite(data.home)&&data.home>0?value/data.home*100:null;
@@ -1363,7 +1980,7 @@ const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 .energy-device-sort select:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
 @container(max-width:360px){.energy-home-summary dd{font-size:16px}}
 
-:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--detail-bar-radius:8px;--detail-home:var(--house,var(--primary-color,#578d83));--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,#9576bb)}
+:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--detail-bar-radius:8px;--detail-home:var(--house,var(--primary-color,#578d83));--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
 :is([data-energy-popup],[data-energy-panel]) .ui-popup-heading>strong{font-size:14px;font-weight:600}
 :is([data-energy-popup],[data-energy-panel]) button{border-radius:8px}
 .energy-grid-metrics>.energy-grid-net{grid-column:1/-1}
@@ -1373,7 +1990,8 @@ const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 :is([data-energy-popup],[data-energy-panel]) :is([data-tone=home],[data-tone=other]){--detail-tone:var(--detail-home)}
 :is([data-energy-popup],[data-energy-panel]) [data-tone=solar]{--detail-tone:var(--detail-solar)}
 .energy-detail-section{margin:16px 0 0}.energy-detail-section h3{font-size:12px;font-weight:650;line-height:1.4;margin:0;color:var(--primary-text-color)}
-.energy-detail-track,.energy-detail-supply{display:flex;height:var(--detail-bar-height);margin:8px 0 0;border-radius:var(--detail-bar-radius);background:var(--divider-color,#ddd);overflow:hidden}
+.energy-detail-track{margin:8px 0 0}
+.energy-detail-supply{display:flex;height:var(--detail-bar-height);margin:8px 0 0;border-radius:var(--detail-bar-radius);background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none);overflow:hidden}
 .energy-detail-track i,.energy-detail-supply i{display:block;height:100%;flex:none;border-radius:0;background:var(--detail-tone)}
 .energy-detail-supply [data-supply=solar]{background:var(--detail-solar)}
 .energy-detail-supply [data-supply=grid]{background:var(--detail-import)}
@@ -1381,6 +1999,7 @@ const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 .energy-detail-supply [data-supply=export]{background:var(--detail-export)}
 .energy-grid-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 16px;margin:16px 0 0}
 .energy-grid-summary{margin-top:0}
+.content [data-ui-detail-surface]{background:var(--secondary-background-color,#eee)}
 .energy-grid-metrics>div{display:grid;grid-template-rows:subgrid;grid-row:span 2;min-width:0}
 .energy-grid-metrics>div:nth-child(n+3){padding-top:14px}
 .energy-grid-metrics dt{font-size:11px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere;line-height:1.4}
@@ -1409,92 +2028,100 @@ button.circle-node:focus-visible{outline-offset:-3px}
 @media(forced-colors:active){.energy-detail-track,.energy-detail-supply{background:Canvas;border:1px solid CanvasText}.energy-detail-track i,.energy-detail-supply [data-supply=grid]{background:CanvasText;forced-color-adjust:none}.energy-detail-supply [data-supply=solar]{background:Highlight;forced-color-adjust:none}}
 `;
 
+
 const energyFlowStyles=`
 ha-card{border-radius:var(--ha-card-border-radius,12px)}
-.content [data-ui-metric]{--ui-metric-radius:8px}
+.content [data-ui-metric]:not(.circle-node){--ui-metric-radius:8px;background:var(--secondary-background-color,#eee)}
 .content [data-ui-button],.content .period-trigger,.content .period-custom input,.content [data-ui-popup]{border-radius:8px}
 
 :host{height:100%;min-height:0}ha-card{height:100%;min-height:0;overflow:auto;overscroll-behavior:auto;scrollbar-width:thin}
-.content{--tone:#d9b77c;--solar:#d9b77c;--grid:#91a9c7;--house:#9bc9b2}
-.content[data-dark=false]{--tone:#92641c;--solar:#946800;--grid:#356da6;--house:#34785d}
+.content{--tone:#ffd45c;--solar:var(--energy-solar-color,#ffd45c);--grid:var(--energy-grid-consumption-color,#76cafa);--house:#74d8ac;--return:var(--energy-grid-return-color,#b8a7ff)}
+.content[data-dark=false]{--tone:#f3b51b;--solar:var(--energy-solar-color,#f3b51b);--grid:var(--energy-grid-consumption-color,#269ad5);--house:#269b79;--return:var(--energy-grid-return-color,#8873dc)}
 .content[data-color=waiting]{--tone:#82b8e8}.content[data-color=done]{--tone:#7ed79c}.content[data-color=planned]{--tone:#8fa5ff}.content[data-color=off]{--tone:#a7a9b2}
 .content[data-dark=false][data-color=waiting]{--tone:#386c9b}.content[data-dark=false][data-color=done]{--tone:#277441}.content[data-dark=false][data-color=planned]{--tone:#4455ad}.content[data-dark=false][data-color=off]{--tone:#656975}
-.header-region{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px 12px;align-items:start}
-.energy-heading{grid-column:1;grid-row:1;min-width:0;--ui-primary-size:60px;--ui-primary-unit-size:16px}
-.energy-heading:has([data-long=true]){--ui-primary-size:34px}
-.toolbar{grid-column:2;grid-row:1;display:flex;justify-content:flex-end;align-items:start;max-width:280px;min-width:0;margin:0!important}
-.toolbar .header-actions{margin:0;min-width:0;max-width:100%}
-.toolbar .chart-controls{flex-wrap:nowrap;justify-content:flex-end;gap:0;min-width:0;max-width:100%}
+.header-region{display:grid;grid-template-columns:minmax(0,1fr);gap:16px 20px;align-items:start}
+.energy-topline{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:start;gap:12px 20px;min-width:0}
+.energy-heading{flex:0 1 auto;min-width:0;max-width:100%}
+.energy-heading [data-ui-primary-value][data-primary-layout=uniform] .primary-label:not(button){min-height:0}
+.toolbar{display:flex;align-items:start;flex:0 1 auto;width:auto;max-width:100%;min-width:0;margin-inline-start:auto;padding-top:2px}
+.content[data-view=history] .toolbar{flex:1 1 260px;min-width:min(100%,260px)}
+.toolbar .header-actions{margin:0;min-width:0;width:100%;max-width:100%}
+.toolbar .chart-controls{flex-wrap:nowrap;gap:0;min-width:0;width:100%;max-width:100%}
 .toolbar .view-period{display:flex;align-items:center;flex:1 1 auto;flex-wrap:nowrap;gap:0;min-width:0}
-.toolbar .chart-controls>[data-period]{flex:none;width:28px;min-width:0;padding:4px}
-.toolbar .chart-controls>[data-period=now]{width:30px}
-.toolbar .view-period>[data-view-button]{flex:none;min-height:32px;padding:4px 8px;white-space:nowrap}
-.toolbar .view-period .period-controls{position:relative;flex:1 1 auto;min-width:0;margin:0;padding:0;border-inline-start:1px solid var(--divider-color,#ddd)}
-.toolbar .view-period .period-trigger{width:100%;min-width:0;max-width:190px}
+.toolbar .chart-controls>[data-period]{flex:none;width:36px;min-width:36px;padding:2px 4px}
+.toolbar .chart-controls>[data-period=now]{width:36px}
+.toolbar [data-view-button]{flex:none;min-height:36px;padding:2px 6px;font-size:12px;white-space:nowrap}
+.toolbar .view-period .period-controls{position:relative;flex:1 1 auto;min-width:0;margin:0;padding:0;border:0}
+.toolbar .view-period .period-trigger{width:100%;min-width:0;max-width:none;min-height:36px;padding:2px 6px;font-size:12px}
 .toolbar .view-period .period-trigger>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toolbar .view-period .period-trigger svg{width:14px;height:14px}
-.circle-flow{grid-column:1/-1;grid-row:2;min-width:0}
+.circle-flow{grid-column:1/-1;min-width:0}
 .circle-flow *{box-sizing:border-box}
-.circle-scene{position:relative;width:100%;aspect-ratio:412/164;margin:0 auto}
-.circle-scene foreignObject{overflow:visible}
-.circle-scene>svg{display:block;width:100%;height:100%;overflow:visible}
+/* Only routes scale. HTML rows grow with localized values and enlarged text.
+   The first half of the node row ends at SVG y=104, keeping the original
+   horizontal routes through the button centers without a resize observer. */
+.circle-scene{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:minmax(40px,auto) auto minmax(36px,1fr) minmax(36px,1fr);width:100%;margin:0 auto}
+.flow-routes{position:relative;grid-area:1/1/4/-1;min-width:0;pointer-events:none}
+.flow-routes>svg{position:absolute;inset:0 auto auto 0;display:block;width:100%;height:calc(100% * 164 / 104);overflow:visible}
+.circle-scene>[data-node]{grid-row:3/5;z-index:1;align-self:stretch;justify-self:center}
+.circle-scene>[data-node=sun]{grid-column:1;justify-self:start}
+.circle-scene>[data-node=home]{grid-column:2/4}
+.circle-scene>[data-node=grid]{grid-column:4;justify-self:end}
+.circle-scene>[data-flow-value=return]{grid-area:1/1/2/-1;padding-top:16px;padding-bottom:8px}
+.circle-scene>[data-flow-value=solar]{grid-area:2/1/3/3}
+.circle-scene>[data-flow-value=grid]{grid-area:2/3/3/5}
 .flow-route[data-route=solar]{color:var(--solar)}
-.flow-route[data-route=return]{color:#b4a0db}.content[data-dark=false] .flow-route[data-route=return]{color:#8060b1}
+.flow-route[data-route=return]{color:var(--return)}
 .flow-route[data-route=grid]{color:var(--grid)}
 .flow-bed{fill:none;stroke:currentColor;stroke-width:8;stroke-opacity:.16;stroke-linecap:round;stroke-linejoin:round}
 .flow-wire{fill:none;stroke:currentColor;stroke-width:2.1;stroke-opacity:.9;stroke-linecap:round;stroke-linejoin:round}
 .flow-route[data-active=false] .flow-bed{stroke:var(--divider-color,#ddd);stroke-width:2;stroke-opacity:.7}
 .flow-route[data-active=false] .flow-wire{stroke-opacity:.12}
 .flow-dot{fill:currentColor;r:3;offset-distance:0%;offset-rotate:0deg;animation:energy-flow-travel var(--route-duration,4s) linear infinite}
-.circle-node[data-ui-metric]{--node-ink:var(--ui-metric-tone);width:100%;height:100%;position:relative;isolation:isolate;grid-template-columns:minmax(0,1fr);grid-template-rows:22px 16px;align-content:center;justify-items:center;row-gap:4px;column-gap:0;border:0;border-radius:8px;background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--node-ink) 10%,transparent),color-mix(in srgb,var(--node-ink) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee)}
-.circle-node[data-ui-metric][data-density] .ui-metric-icon,.circle-node[data-ui-metric][data-density] .ui-metric-icon svg{width:22px;height:22px}
-.circle-node .ui-metric-value{display:none}.circle-node[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:2;justify-self:center;text-align:center;font-size:11px;font-weight:500;line-height:16px}
+.circle-node[data-ui-metric]{--node-ink:var(--ui-metric-tone);width:max-content;max-width:none;min-width:72px;min-height:72px;height:auto;position:relative;isolation:isolate;grid-template-columns:minmax(0,1fr);grid-template-rows:22px auto;align-content:center;justify-items:center;row-gap:4px;column-gap:0;border:0;border-radius:8px}
+.circle-node[data-ui-metric][data-density] .ui-metric-icon,.circle-node[data-ui-metric][data-density] .ui-metric-icon svg,.circle-node[data-ui-metric][data-density] .ui-metric-icon ha-icon{width:22px;height:22px;--mdc-icon-size:22px}
+.circle-node .ui-metric-value{display:none}.circle-node[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:2;justify-self:center;text-align:center;font-size:12px;font-weight:500;line-height:1.35;white-space:nowrap;overflow-wrap:normal;word-break:normal}
 .circle-node[data-ui-metric][data-density] .ui-metric-icon{position:relative;grid-row:1;grid-column:1;justify-self:center;align-self:center;transform:none;color:var(--node-ink);overflow:visible}
-.circle-node[data-ui-metric] .ui-metric-icon::before{content:'';position:absolute;inset:-29px -31px;border-radius:50%;background:radial-gradient(ellipse,color-mix(in srgb,var(--node-ink) 13%,transparent),color-mix(in srgb,var(--node-ink) 4%,transparent) 48%,transparent 76%);z-index:-1;pointer-events:none}
-.flow-reading{fill:var(--primary-text-color,#20252b);font-family:inherit;font-size:18px;font-weight:600;letter-spacing:-.4px;font-variant-numeric:tabular-nums}.flow-reading[data-long=true]{font-size:12px}.flow-unit{fill:var(--secondary-text-color,#626a78);font-size:11px;font-weight:400;letter-spacing:0}
+.flow-reading{position:relative;z-index:1;min-width:0;padding:0 4px 8px;color:var(--primary-text-color,#20252b);font-family:inherit;font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.4px;text-align:center;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.flow-reading[data-long=true]{font-size:12px}.flow-unit{color:var(--secondary-text-color,#626a78);font-size:12px;font-weight:400;letter-spacing:0;white-space:nowrap}
 .flow-arrow{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.flow-route[data-active=false] .flow-arrow{opacity:.24}
-.header-region>[data-ui-metric]{grid-column:1/-1;grid-row:3}
+.header-region>[data-ui-metric]{grid-column:1/-1}
 .flow-secondary{margin-top:12px}
+.content .flow-secondary .ui-metric-title{overflow-wrap:normal;word-break:normal}
+.toolbar [data-view-button]{min-height:36px}
+@container(max-width:340px){.content .flow-secondary{grid-template-columns:minmax(0,1fr)}}
 .content[data-animated=false] .flow-dot,.content[data-view=history] .flow-dot{display:none}
 :host([data-motion-paused]) .flow-dot{animation-play-state:paused}
 .content[data-compact=true] .header-region{row-gap:12px}
-.content[data-compact=true] .energy-heading{--ui-primary-size:46px;--ui-primary-unit-size:14px}
 @keyframes energy-flow-travel{to{offset-distance:100%}}
 @media(prefers-reduced-motion:reduce){.circle-scene .flow-dot{display:none}}
 .toolbar .period-menu-navigation{display:none}
-@container(max-width:480px){
- .header-region{grid-template-columns:minmax(0,1fr) 100px;column-gap:8px}
- .toolbar{width:100%;max-width:100%;justify-self:end}
- .toolbar .header-actions,.toolbar .chart-controls,.toolbar .view-period{width:100%}
- .toolbar .chart-controls{background:none}
- .toolbar .chart-controls>[data-period]{display:none}
- .toolbar .view-period{flex-direction:column;align-items:stretch;gap:4px}
- .toolbar .view-period>[data-view-button],.toolbar .view-period .period-controls{background:var(--secondary-background-color,#eee);border-radius:8px}
- .toolbar .view-period .period-controls{border:0}
- .toolbar .view-period .period-trigger{padding:4px 6px;gap:3px;min-height:32px}
- .toolbar .view-period .period-trigger>span,.toolbar .view-period>[data-view-button]{font-size:11px}
- .toolbar .period-menu-navigation{display:flex}
- .energy-heading,.content[data-compact=true] .energy-heading{--ui-primary-size:46px;--ui-primary-unit-size:14px}
- .energy-heading:has([data-long=true]){--ui-primary-size:30px}
-}
-@container(max-width:319px){
- .header-region{row-gap:12px}
- .energy-heading,.content[data-compact=true] .energy-heading{--ui-primary-size:36px;--ui-primary-unit-size:12px}
- .energy-heading:has([data-long=true]){--ui-primary-size:25px}
-}
-@container(max-width:270px){.energy-heading,.content[data-compact=true] .energy-heading{--ui-primary-size:32px}}
+${segmentedControlStyles('.toolbar .chart-controls','.toolbar [data-view-button],.toolbar .period-trigger,.toolbar .chart-controls>[data-period]',{first:'.toolbar .period-trigger,.toolbar .view-period>[data-view-button]',last:'.toolbar [data-view-button]',dividers:'.toolbar .chart-controls>[data-period],.toolbar .chart-controls>[data-view-button]'})}
+/* Keep these after the shared segmented recipe, which defaults to 36px. */
+.toolbar .chart-controls{flex-wrap:wrap}
+.toolbar .view-period{flex:1 1 120px;max-width:100%;min-width:max-content;flex-wrap:wrap}
+.toolbar .chart-controls>[data-period],.toolbar .chart-controls [data-view-button],.toolbar .view-period .period-trigger{min-width:44px;min-height:44px;height:auto;width:auto;max-width:100%;padding:6px;font-size:12px;line-height:1.35;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.toolbar .chart-controls>[data-period]{width:44px}
+.toolbar .chart-controls>[data-period=now]{width:auto;min-width:44px}
+.toolbar .view-period .period-controls{min-width:max-content}
+.toolbar .view-period .period-trigger{width:100%}
+.toolbar .view-period .period-trigger>span{overflow:visible;text-overflow:clip;white-space:nowrap;overflow-wrap:normal;text-align:start}
+@container(max-width:340px){.content[data-view=history] .toolbar .view-period{flex-basis:100%}}
+
 `;
 
-// One stroke family for the diagram and shared metric surfaces.
-const energyFlowIconPaths={
- solar:'M3 12h15l2 9H1l2-9ZM4 16h14M7 12l-1 9m7-9 1 9M6 23h9M10 21v2M18 2v2m0 4v2m-4-4h-2m12 0h-2m-7-3-1-1m7 1 1-1M20 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0',
- sun:'M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0',
- grid:'m12 2-7 20m7-20 7 20M8 7h8M6 13h12M3 22h18M12 2v20M8 7l10 6M16 7 6 13',
- home:'m3 10 9-7 9 7M5 9v12h14V9m-6 2-4 6h4l-1 4 4-6h-4l1-4',
- import:'m8 8 6-5 7 5M10 8v13h10V8M2 14h12m-4-4 4 4-4 4',
- export:'m3 8 6-5 6 5M4 8v13h10v-4M10 12h12m-4-4 4 4-4 4'
+// Native HA/MDI glyphs; keep energy colors and accessible parent labels.
+const energyFlowIconNames={
+ solar:'mdi:solar-power-variant',
+ sun:'mdi:weather-sunny',
+ grid:'mdi:transmission-tower',
+ home:'mdi:home',
+ import:'mdi:home-import-outline',
+ export:'mdi:home-export-outline'
 };
-function energyFlowIcon(kind){return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-energy-icon="${kind}"><path d="${energyFlowIconPaths[kind]??energyFlowIconPaths.home}"/></svg>`;}
+function energyFlowIcon(kind){
+ const key=Object.hasOwn(energyFlowIconNames,kind)?kind:'home';
+ return `<ha-icon icon="${energyFlowIconNames[key]}" aria-hidden="true" data-energy-icon="${key}"></ha-icon>`;
+}
 
 
 
@@ -1512,28 +2139,29 @@ function energyFlowDiagram(data,history,nl,format,{detailView='popup',tabs=[],id
   const active=amount!=null&&amount>0,duration=6-Math.min(1,(amount||0)/Math.max(total,1))*4.5;
   return `<g class="flow-route" data-route="${name}" data-active="${active}"><path class="flow-bed" d="${path}"/><path class="flow-wire" d="${path}"/><path class="flow-arrow" d="${arrow}"/>${active&&!history?`<circle class="flow-dot" r="2.7" style="offset-path:path('${path}');--route-duration:${duration}s"/>`:''}</g>`;
  };
- const node=(kind,label,value,x,tone)=>{
+ const node=(kind,label,value,tone)=>{
   const aria=kind==='grid'?`${text('Netafname','Grid import')} ${number(incoming)} ${unit}, ${text('Teruglevering','Grid export')} ${number(outgoing)} ${unit}`:`${label}: ${number(value)} ${unit}`;
-  return `<foreignObject x="${x-36}" y="68" width="72" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="height:100%">${uiMetric({action:true,title:label,value:label,iconContent:energyFlowIcon(kind),compact:true,attrs:{class:'circle-node','data-node':kind,'data-direction':kind==='grid'?direction:'','data-active':String(value!=null&&value>0),'data-energy-detail':kind,'aria-haspopup':detailView==='popup'?'dialog':null,'aria-controls':detailView==='tabs'&&tabs.includes(kind)?id+'-tabs-panel-'+kind:null,disabled:detailView==='tabs'&&!tabs.includes(kind),'aria-label':aria,style:`--ui-metric-tone:var(--${tone})`}})}</div></foreignObject>`;
+  return uiMetric({action:true,title:label,value:label,iconContent:energyFlowIcon(kind),compact:true,attrs:{class:'circle-node','data-node':kind,'data-direction':kind==='grid'?direction:'','data-active':String(value!=null&&value>0),'data-energy-detail':kind,'aria-haspopup':detailView==='popup'?'dialog':null,'aria-controls':detailView==='tabs'&&tabs.includes(kind)?id+'-tabs-panel-'+kind:null,disabled:detailView==='tabs'&&!tabs.includes(kind),'aria-label':aria,style:`--ui-metric-tone:var(--${tone})`}});
  };
- const reading=(name,value,x,y)=>`<text class="flow-reading" data-flow-value="${name}" data-long="${number(value).length>6}" x="${x}" y="${y}" text-anchor="middle">${uiEscape(number(value))}${value==null?'':`<tspan class="flow-unit"> ${unit}</tspan>`}</text>`;
- return `<div class="circle-flow" role="group" aria-label="${text('Energiestromen tussen zon, woning en net','Energy flows between solar, home and grid')}"><div class="circle-scene"><svg viewBox="4 0 412 164">
+ const reading=(name,value)=>`<div class="flow-reading" data-flow-value="${name}" data-long="${number(value).length>6}">${uiEscape(number(value))}${value==null?'':`<span class="flow-unit"> ${unit}</span>`}</div>`;
+ return `<div class="circle-flow" role="group" aria-label="${text('Energiestromen tussen zon, woning en net','Energy flows between solar, home and grid')}"><div class="circle-scene"><div class="flow-routes" aria-hidden="true"><svg viewBox="4 0 412 164" preserveAspectRatio="none">
   ${route('solar','M66 104H184',own,'M126 100l5 4-5 4')}
   ${route('return','M40 78V18A8 8 0 0 1 48 10H372A8 8 0 0 1 380 18V78',returned,'M126 6l5 4-5 4M289 6l5 4-5 4')}
   ${route('grid','M354 104H236',incoming,'M294 100l-5 4 5 4')}
-  ${node('sun',text('Zon','Solar'),solar,40,'solar')}${node('home',text('Woning','Home'),home,210,'house')}${node('grid',text('Net','Grid'),incoming==null||outgoing==null?null:incoming+outgoing,380,'grid')}
-  ${reading('return',returned,210,36)}${reading('solar',own,128,89)}${reading('grid',incoming,292,89)}
- </svg></div></div>`;
+  </svg></div>
+  ${node('sun',text('Zon','Solar'),solar,'solar')}${node('home',text('Woning','Home'),home,'house')}${node('grid',text('Net','Grid'),incoming==null||outgoing==null?null:incoming+outgoing,'grid')}
+  ${reading('return',returned)}${reading('solar',own)}${reading('grid',incoming)}
+ </div></div>`;
 }
 
 
 
 function energyFlowMetrics(data,history,nl,format,compact=false,config={}){
  const text=(a,b)=>nl?a:b,unit=history?'kWh':'kW';
- const field=(key,title,icon,tone,info)=>uiMetric({title,iconContent:energyFlowIcon(icon),value:data[key]==null?null:format(data[key]),unit,info,compact,attrs:{'data-metric':key,style:`--ui-metric-tone:var(--${tone})`}});
+ const field=(key,title,icon,tone)=>uiMetric({title,iconContent:energyFlowIcon(icon),value:data[key]==null?null:format(data[key]),unit,compact,attrs:{'data-metric':key,style:`--ui-metric-tone:var(--${tone})`}});
  return {
-  solar:config.show_field_1===false?'':field('solar',text('Zonne-energie','Solar generation'),'solar','solar',history?text('Opwek in gekozen periode','Generation in selected period'):text('Opwek op dit moment','Generation right now')),
-  grid:config.show_field_2===false&&config.show_field_3===false?'':`<div class="flow-secondary" data-ui-metric-grid style="--ui-metric-columns:${config.show_field_2===false||config.show_field_3===false?1:2}">${config.show_field_2===false?'':field('import',text('Netafname','Grid import'),'import','grid',history?text('Afgenomen in gekozen periode','Imported in selected period'):text('Van net naar woning','From grid to home'))}${config.show_field_3===false?'':field('export',text('Teruglevering','Grid export'),'export','solar',history?text('Teruggeleverd in gekozen periode','Exported in selected period'):text('Terug naar het net','Returned to the grid'))}</div>`
+  solar:config.show_field_1===false?'':field('solar',text('Zonne-energie','Solar generation'),'solar','solar'),
+  grid:config.show_field_2===false&&config.show_field_3===false?'':`<div class="flow-secondary" data-ui-metric-grid style="--ui-metric-columns:${config.show_field_2===false||config.show_field_3===false?1:2}">${config.show_field_2===false?'':field('import',text('Netafname','Grid import'),'import','grid')}${config.show_field_3===false?'':field('export',text('Teruglevering','Grid export'),'export','return')}</div>`
  };
 }
 
@@ -1614,6 +2242,7 @@ class EnergyFlowEditor extends customTabsEditor(HTMLElement){
 
 
 
+
 let energyFlowSequence=0;
 class EnergyFlowCard extends HTMLElement{
  constructor(){super();this.attachShadow({mode:'open'});this._id='energy-flow-'+(++energyFlowSequence);this._version=0;this._periodMode='today';this._statistics=null;}
@@ -1639,8 +2268,8 @@ class EnergyFlowCard extends HTMLElement{
  set hass(hass){const changed=this._hass?.connection!==hass?.connection||this._offline()!==(hass?.connected===false||hass?.connection?.connected===false);this._hass=hass;if(changed)this._reset();this.render();this._sync();}
  get hass(){return this._hass;}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
- connectedCallback(){this._attached=true;this._connectTimeframe();if(this._view==='history')this._reloadPeriod();this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._sync());this.render();this._sync();}
- disconnectedCallback(){this._tabController?.disconnect();this._attached=false;this._connected=false;this._timeframeKey=null;disconnectTimeframeSync(this);this._motionCleanup?.();this._motionCleanup=null;disconnectPeriodControls(this);this._reset();}
+ connectedCallback(){this._attached=true;this._connectTimeframe();if(this._view==='history')this._reloadPeriod();this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._sync());this._readingResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._readingResize=new ResizeObserver(()=>this._fitPrimaryReading());this._readingResize.observe(this);}this.render();this._sync();}
+ disconnectedCallback(){this._readingResize?.disconnect();this._readingResize=null;this._tabController?.disconnect();this._attached=false;this._connected=false;this._timeframeKey=null;disconnectTimeframeSync(this);this._motionCleanup?.();this._motionCleanup=null;disconnectPeriodControls(this);this._reset();}
  _reset(){this._dismissDetails();this._baseVersion=(this._baseVersion??0)+1;this._baseResult=null;this._basePendingKey=null;this._detailVersion=(this._detailVersion??0)+1;this._detailResult=null;this._detailLoading=false;this._detailError=false;this._detailInfo=null;this._version++;clearTimeout(this._timer);this._timer=null;this._loading=false;this._prefs=null;this._statistics=null;this._error=null;this._requested=0;}
  _connectTimeframe(){
   this._connected=!!this._attached&&this._view==='history';
@@ -1751,6 +2380,14 @@ class EnergyFlowCard extends HTMLElement{
    if(version!==this._version)return;this._loading=false;this.render();this._sync();
   });
  }
+ _fitPrimaryReading(){
+  const content=this.shadowRoot.querySelector('.content'),number=this.shadowRoot.querySelector('.energy-heading .primary-number');
+  if(!content||!number||!content.clientWidth)return;
+  number.style.removeProperty('font-size');
+  const row=number.parentElement,unit=row.querySelector('small'),styles=getComputedStyle(content),available=content.clientWidth-parseFloat(styles.paddingLeft)-parseFloat(styles.paddingRight)-(unit?.getBoundingClientRect().width??0)-6;
+  const width=Math.max(number.scrollWidth,number.getBoundingClientRect().width),size=parseFloat(getComputedStyle(number).fontSize);
+  if(width>available&&available>0)number.style.fontSize=Math.max(12,size*available/width*.98)+'px';
+ }
  render(){
   if(!this._config)return;
   const config=this._config,nl=energyFlowDutch(this._hass),text=(a,b)=>nl?a:b,history=this._view==='history',offline=this._offline();
@@ -1774,10 +2411,10 @@ class EnergyFlowCard extends HTMLElement{
   const tabs=energyFlowTabs(this,data,nl);
   const details=(config.detail_view==='tabs'?'':['home','grid','sun'].map(kind=>energyFlowDetailPopup(this,kind,data,{id:this._id+'-detail-'+kind})).join(''));
   const switchButton=uiButton({text:history?text('Actueel','Live'):text('Historisch','History'),variant:'text',attrs:{'data-view-button':history?'live':'history','aria-label':history?text('Toon actueel vermogen','Show live power'):text('Toon historische energie','Show historical energy')}});
-  const toolbar=`<div class="toolbar"><div class="header-actions"><div class="chart-controls" role="group" aria-label="${text('Weergave en tijdvak','View and timeframe')}"><div class="view-period">${switchButton}${history?period.picker:''}</div>${history?period.navigation:''}</div></div></div>`;
+  const toolbar=`<div class="toolbar"><div class="header-actions"><div class="chart-controls" role="group" aria-label="${text('Weergave en tijdvak','View and timeframe')}"><div class="view-period">${history?period.picker:switchButton}</div>${history?period.navigation+switchButton:''}</div></div></div>`;
   let notice=offline?text('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'):this._error?text('Energy-gegevens laden mislukt. Controleer de Energy-configuratie en Recorder.','Could not load Energy data. Check Energy configuration and Recorder.'):!this._prefs?text('Energy-configuratie laden…','Loading Energy configuration…'):!configured?text('Stel elektriciteitsbronnen in via het Home Assistant Energy-dashboard.','Configure electricity sources in the Home Assistant Energy dashboard.'):this._loading&&history&&!this._statistics?text('Energiestatistieken laden…','Loading energy statistics…'):Object.values({solar:data.solar,import:data.import,export:data.export,home:data.home}).some(value=>value==null)?history?text('Niet alle energiestatistieken zijn beschikbaar voor deze periode.','Some energy statistics are unavailable for this period.'):text('Actueel vermogen ontbreekt. Stel vermogenssensoren in bij Energy of kies ze in de kaartconfiguratie.','Live power is missing. Configure power sensors in Energy or select them in the card editor.'):'';
   if(data.battery)notice+=(notice?' ':'')+text('Thuisbatterij meegerekend in woningverbruik.','Home consumption includes the battery balance.');
-  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div>${toolbar}<div class="energy-heading">${uiPrimaryValue({value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
+  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiBalancedTabsStyles()}${uiPrimaryValueStyles()}${uiMetricStyles()}${cardThemeStyles({periodUI:true,wells:'.content [data-ui-metric]:not(.circle-node),[data-ui-detail-surface]',controls:'.circle-node[data-ui-metric],.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'[data-ui-popup]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div><div class="energy-topline"><div class="energy-heading">${uiPrimaryValue({layout:'uniform',value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${toolbar}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
   if(!this._bound){this._bound=true;this.shadowRoot.addEventListener('click',event=>{
    const entity=event.target.closest?.('[data-entity]');
    if(entity){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:entity.dataset.entity},bubbles:true,composed:true}));return;}
@@ -1800,11 +2437,12 @@ class EnergyFlowCard extends HTMLElement{
   bindPeriodControls(this);
   if(openedDetail&&config.detail_view!=='tabs'){const popup=this.shadowRoot.querySelector(`[data-energy-popup=${openedDetail}]`);requestAnimationFrame(()=>{if(!popup.isConnected||this._detailNode!==openedDetail)return;popup.scrollTop=detailScroll;if(focusedPopupControl)popup.querySelector(focusedPopupControl)?.focus({preventScroll:true});else if(focusedEntity)[...popup.querySelectorAll('[data-entity]')].find(button=>button.dataset.entity===focusedEntity)?.focus({preventScroll:true});});}
   if(focusedDetail&&!openedDetail)this.shadowRoot.querySelector(`[data-energy-detail=${focusedDetail}]`)?.focus({preventScroll:true});
+  this._fitPrimaryReading();
   if(focused&&!this._periodMenuOpen)this.shadowRoot.querySelector('[data-view-button]')?.focus({preventScroll:true});
  }
 }
 
-if(!customElements.get('eleven-energy-flow-card-test'))customElements.define('eleven-energy-flow-card-test',EnergyFlowCard);
+if(!customElements.get('eleven-energy-flow-card-test'))customElements.define('eleven-energy-flow-card-test',withCardBackground(EnergyFlowCard));
 window.customCards=window.customCards||[];
 if(!window.customCards.some(card=>card.type==='eleven-energy-flow-card-test'))window.customCards.push({type:'eleven-energy-flow-card-test',name:'Eleven Energy Flow (beta)',description:'Automatic Home Assistant Energy sources, live power and historical energy distribution.',preview:true});
 })();

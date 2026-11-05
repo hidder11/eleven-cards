@@ -107,9 +107,12 @@ class HouseBrowserQA(unittest.TestCase):
         page=self.page
         page.add_script_tag(path=str(ROOT/'cards/house-card/dist/eleven-house-card.js'))
         self.assertEqual(page.evaluate("customCards.filter(c=>c.type==='eleven-house-card').length"),1)
-        self.assertTrue(page.evaluate("customElements.get('eleven-house-styled-card').prototype instanceof customElements.get('eleven-house-card') || customElements.get('eleven-house-card').prototype instanceof customElements.get('eleven-house-styled-card')"))
-        page.evaluate("window.editor=customElements.get('eleven-house-card').getConfigElement();document.body.append(editor);editor.setConfig(config);editor.hass=hass")
-        self.assertTrue(page.evaluate("editor.form.schema.some(s=>s.name==='weather_overlay')&&editor.form.schema.some(s=>s.name==='presentation')"))
+        # Background wrappers are separate subclasses; the underlying House
+        # implementations retain the public alias relationship.
+        self.assertTrue(page.evaluate("customElements.get('eleven-house-card').backgroundBaseCard.prototype instanceof customElements.get('eleven-house-styled-card').backgroundBaseCard"))
+        page.evaluate("async () => {window.editor=await customElements.get('eleven-house-card').getConfigElement();document.body.append(editor);editor.setConfig(config);editor.hass=hass;}")
+        self.assertTrue(page.evaluate("() => {const schema=editor.shadowRoot.querySelector('eleven-house-styled-card-editor').shadowRoot.querySelector('ha-form').schema;return schema.some(s=>s.name==='weather_overlay')&&schema.some(s=>s.name==='presentation');}"))
+        self.assertEqual(page.locator('eleven-card-background-editor details summary').inner_text(),'Card background')
         page.keyboard.press('Tab');self.assertTrue(page.evaluate("!!card.shadowRoot.activeElement"))
         self.assertTrue(page.evaluate("card.shadowRoot.activeElement.matches(':focus-visible')"))
 

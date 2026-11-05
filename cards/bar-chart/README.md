@@ -76,3 +76,7 @@ uv run --with playwright python tests/browser-bar-chart.py
 ```
 
 The browser QA page at `qa/index.html` uses explicitly synthetic power readings, including negative values and an unavailable interval. It is not a live Home Assistant dashboard.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

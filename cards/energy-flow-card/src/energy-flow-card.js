@@ -1,4 +1,5 @@
-import {bindUITabs} from '../../../shared/ui-tabs.js';
+import {cardThemeStyles} from '../../../shared/card-theme.js';
+import {bindUITabs,uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';
 import {energyFlowTabs,energyFlowTabStyles} from './energy-flow-tabs.js';
 import {uiMetricStyles} from '../../../shared/ui-metric.js';
 import {energyFlowMetrics} from './energy-flow-metrics.js';
@@ -45,8 +46,8 @@ export class EnergyFlowCard extends HTMLElement{
  set hass(hass){const changed=this._hass?.connection!==hass?.connection||this._offline()!==(hass?.connected===false||hass?.connection?.connected===false);this._hass=hass;if(changed)this._reset();this.render();this._sync();}
  get hass(){return this._hass;}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
- connectedCallback(){this._attached=true;this._connectTimeframe();if(this._view==='history')this._reloadPeriod();this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._sync());this.render();this._sync();}
- disconnectedCallback(){this._tabController?.disconnect();this._attached=false;this._connected=false;this._timeframeKey=null;disconnectTimeframeSync(this);this._motionCleanup?.();this._motionCleanup=null;disconnectPeriodControls(this);this._reset();}
+ connectedCallback(){this._attached=true;this._connectTimeframe();if(this._view==='history')this._reloadPeriod();this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._sync());this._readingResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._readingResize=new ResizeObserver(()=>this._fitPrimaryReading());this._readingResize.observe(this);}this.render();this._sync();}
+ disconnectedCallback(){this._readingResize?.disconnect();this._readingResize=null;this._tabController?.disconnect();this._attached=false;this._connected=false;this._timeframeKey=null;disconnectTimeframeSync(this);this._motionCleanup?.();this._motionCleanup=null;disconnectPeriodControls(this);this._reset();}
  _reset(){this._dismissDetails();this._baseVersion=(this._baseVersion??0)+1;this._baseResult=null;this._basePendingKey=null;this._detailVersion=(this._detailVersion??0)+1;this._detailResult=null;this._detailLoading=false;this._detailError=false;this._detailInfo=null;this._version++;clearTimeout(this._timer);this._timer=null;this._loading=false;this._prefs=null;this._statistics=null;this._error=null;this._requested=0;}
  _connectTimeframe(){
   this._connected=!!this._attached&&this._view==='history';
@@ -157,6 +158,14 @@ export class EnergyFlowCard extends HTMLElement{
    if(version!==this._version)return;this._loading=false;this.render();this._sync();
   });
  }
+ _fitPrimaryReading(){
+  const content=this.shadowRoot.querySelector('.content'),number=this.shadowRoot.querySelector('.energy-heading .primary-number');
+  if(!content||!number||!content.clientWidth)return;
+  number.style.removeProperty('font-size');
+  const row=number.parentElement,unit=row.querySelector('small'),styles=getComputedStyle(content),available=content.clientWidth-parseFloat(styles.paddingLeft)-parseFloat(styles.paddingRight)-(unit?.getBoundingClientRect().width??0)-6;
+  const width=Math.max(number.scrollWidth,number.getBoundingClientRect().width),size=parseFloat(getComputedStyle(number).fontSize);
+  if(width>available&&available>0)number.style.fontSize=Math.max(12,size*available/width*.98)+'px';
+ }
  render(){
   if(!this._config)return;
   const config=this._config,nl=energyFlowDutch(this._hass),text=(a,b)=>nl?a:b,history=this._view==='history',offline=this._offline();
@@ -180,10 +189,10 @@ export class EnergyFlowCard extends HTMLElement{
   const tabs=energyFlowTabs(this,data,nl);
   const details=(config.detail_view==='tabs'?'':['home','grid','sun'].map(kind=>energyFlowDetailPopup(this,kind,data,{id:this._id+'-detail-'+kind})).join(''));
   const switchButton=uiButton({text:history?text('Actueel','Live'):text('Historisch','History'),variant:'text',attrs:{'data-view-button':history?'live':'history','aria-label':history?text('Toon actueel vermogen','Show live power'):text('Toon historische energie','Show historical energy')}});
-  const toolbar=`<div class="toolbar"><div class="header-actions"><div class="chart-controls" role="group" aria-label="${text('Weergave en tijdvak','View and timeframe')}"><div class="view-period">${switchButton}${history?period.picker:''}</div>${history?period.navigation:''}</div></div></div>`;
+  const toolbar=`<div class="toolbar"><div class="header-actions"><div class="chart-controls" role="group" aria-label="${text('Weergave en tijdvak','View and timeframe')}"><div class="view-period">${history?period.picker:switchButton}</div>${history?period.navigation+switchButton:''}</div></div></div>`;
   let notice=offline?text('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'):this._error?text('Energy-gegevens laden mislukt. Controleer de Energy-configuratie en Recorder.','Could not load Energy data. Check Energy configuration and Recorder.'):!this._prefs?text('Energy-configuratie laden…','Loading Energy configuration…'):!configured?text('Stel elektriciteitsbronnen in via het Home Assistant Energy-dashboard.','Configure electricity sources in the Home Assistant Energy dashboard.'):this._loading&&history&&!this._statistics?text('Energiestatistieken laden…','Loading energy statistics…'):Object.values({solar:data.solar,import:data.import,export:data.export,home:data.home}).some(value=>value==null)?history?text('Niet alle energiestatistieken zijn beschikbaar voor deze periode.','Some energy statistics are unavailable for this period.'):text('Actueel vermogen ontbreekt. Stel vermogenssensoren in bij Energy of kies ze in de kaartconfiguratie.','Live power is missing. Configure power sensors in Energy or select them in the card editor.'):'';
   if(data.battery)notice+=(notice?' ':'')+text('Thuisbatterij meegerekend in woningverbruik.','Home consumption includes the battery balance.');
-  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div>${toolbar}<div class="energy-heading">${uiPrimaryValue({value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
+  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiBalancedTabsStyles()}${uiPrimaryValueStyles()}${uiMetricStyles()}${cardThemeStyles({periodUI:true,wells:'.content [data-ui-metric]:not(.circle-node),[data-ui-detail-surface]',controls:'.circle-node[data-ui-metric],.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'[data-ui-popup]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div><div class="energy-topline"><div class="energy-heading">${uiPrimaryValue({layout:'uniform',value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${toolbar}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
   if(!this._bound){this._bound=true;this.shadowRoot.addEventListener('click',event=>{
    const entity=event.target.closest?.('[data-entity]');
    if(entity){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:entity.dataset.entity},bubbles:true,composed:true}));return;}
@@ -206,6 +215,7 @@ export class EnergyFlowCard extends HTMLElement{
   bindPeriodControls(this);
   if(openedDetail&&config.detail_view!=='tabs'){const popup=this.shadowRoot.querySelector(`[data-energy-popup=${openedDetail}]`);requestAnimationFrame(()=>{if(!popup.isConnected||this._detailNode!==openedDetail)return;popup.scrollTop=detailScroll;if(focusedPopupControl)popup.querySelector(focusedPopupControl)?.focus({preventScroll:true});else if(focusedEntity)[...popup.querySelectorAll('[data-entity]')].find(button=>button.dataset.entity===focusedEntity)?.focus({preventScroll:true});});}
   if(focusedDetail&&!openedDetail)this.shadowRoot.querySelector(`[data-energy-detail=${focusedDetail}]`)?.focus({preventScroll:true});
+  this._fitPrimaryReading();
   if(focused&&!this._periodMenuOpen)this.shadowRoot.querySelector('[data-view-button]')?.focus({preventScroll:true});
  }
 }

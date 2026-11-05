@@ -1,3 +1,4 @@
+import {withCardBackground} from '../../../shared/card-background.js';
 import {timeframeSyncConfig,connectTimeframeSync,disconnectTimeframeSync} from '../../../shared/periods.js';
 import {validateConfig,loadHistorySeries,historyEntityIds,seriesSourceIds,historyUrl,decodeHistory,seriesMetadata,graphAxes,valueAt,numericState,stepPath,gradientColor,aggregateSeries,displayPoints,connectGapPoints,editorConfig,cardConfig,seriesAppearance,updateSeriesRow,removeSeriesRow,lineStyleSources} from './history-utils.js';
 import {language,text,number,time,escapeHtml,frontendHass} from './localization.js';
@@ -10,6 +11,8 @@ import {periodControls,periodControlsStyles,bindPeriodControls,disconnectPeriodC
 import {chartZoomState,chartDataInformation,chartValueStatistics,captureChartInsights,bindChartInsights,disconnectChartInsights,chartInsightStyles} from '../../../shared/chart-insights.js';
 import {uiLegend} from '../../../shared/ui-legend.js';
 import {retryDelay} from '../../../shared/request.js';
+import {uiButton} from '../../../shared/ui-button.js';
+import {uiActionButtonStyles} from '../../../shared/ui-action-button.js';
 const COLORS=['#2196f3','#e78a14','#ab70d9','#26a69a','#e66b91','#718cc2','#a18d3a','#718d78'];
 const REFRESH_MS=60000;
 // Native controls, with one independently owned appearance form per sensor.
@@ -85,7 +88,7 @@ export class HistoryGraphCard extends HTMLElement {
   if(!customElements.get('eleven-history-graph-editor'))customElements.define('eleven-history-graph-editor',HistoryGraphEditor);
   return document.createElement('eleven-history-graph-editor');
  }
- constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._timer=null;this._connected=false;this._status='loading';this._series=[];this._outside=e=>{const chart=this.shadowRoot.querySelector('.chart');if(chart&&!e.composedPath().includes(chart)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip?.();};}
+ constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._timer=null;this._connected=false;this._status='loading';this._series=[];this._outside=e=>{const tools=this.shadowRoot.querySelector('.history-tools');if(tools?.open&&!e.composedPath().includes(tools)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))tools.open=false;const chart=this.shadowRoot.querySelector('.chart');if(chart&&!e.composedPath().includes(chart)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip?.();};}
  static _formContract(schema){
   return {schema,computeLabel:function(item){return text(item?.name==='title'?'titleField':item?.name??'',language(this?.hass??frontendHass()));},computeHelper:function(item){const key=`${item?.name}Helper`,value=text(key,language(this?.hass??frontendHass()));return value===key?undefined:value;}};
  }
@@ -240,7 +243,7 @@ export class HistoryGraphCard extends HTMLElement {
   if(this._connected){this._elfTimer=setTimeout(()=>this._syncElf(),Math.min(60000-now%60000,this._elfPreviewUntil>now?this._elfPreviewUntil-now:60000));this._elfTimer.unref?.();}
  }
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._elfPreview??=()=>{this._elfPreviewUntil=Date.now()+ELF_FLIGHT_MS;this.shadowRoot.querySelector('.eleven-elf')?.remove();this._syncElf();};registerElfPreview(this._elfPreview);document.addEventListener('pointerdown',this._outside);this._syncElf();if(this._config&&this._hass)this._refresh();}
- disconnectedCallback(){this._touchPointer=null;this._touchRenderPending=false;this._hideTooltip();disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);this._connected=false;unregisterElfPreview(this._elfPreview);this._elfPreviewUntil=0;this._generation++;this._inFlight=false;this._started=false;clearTimeout(this._timer);this._timer=null;clearTimeout(this._elfTimer);this._elfTimer=null;document.removeEventListener('pointerdown',this._outside);}
+ disconnectedCallback(){this._axisResize?.disconnect();this._touchPointer=null;this._touchRenderPending=false;this._hideTooltip();disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);this._connected=false;unregisterElfPreview(this._elfPreview);this._elfPreviewUntil=0;this._generation++;this._inFlight=false;this._started=false;clearTimeout(this._timer);this._timer=null;clearTimeout(this._elfTimer);this._elfTimer=null;document.removeEventListener('pointerdown',this._outside);}
  _sumDataContext(hass){return this._config.series_options.some(s=>s.sum_entities?.length)?JSON.stringify([hass.config?.time_zone,historyEntityIds(this._config).map(id=>{const s=hass.states?.[id];return [id,!!s,s?.attributes?.unit_of_measurement??''];})]):null;}
  async _refresh(){
   if(!this._connected||!this._config||!this._hass||this._inFlight)return;
@@ -286,7 +289,7 @@ export class HistoryGraphCard extends HTMLElement {
   this._touchRenderPending=false;captureChartInsights(this);const lang=language(this._hass);this._lang=lang;this._zone=this._hass?.config?.time_zone;
   let meta;try{meta=seriesMetadata(this._hass??{},this._config.entities,this._config.series_options);}catch(e){if(this._hass)this._status=e.message;}
   const title=this._config.title??this._defaultTitle(lang);let content='';
-  if(this._status!=='ready'||!meta){content=`<div class="state" role="status">${escapeHtml(text(this._status,lang))}${['error','unit','sum_unit','sum_statistics','missing','statistics_config','statistics_unavailable'].includes(this._status)?`<button class="retry">${text('retry',lang)}</button>`:''}</div>`;}
+  if(this._status!=='ready'||!meta){content=`<div class="state" role="status">${escapeHtml(text(this._status,lang))}${['error','unit','sum_unit','sum_statistics','missing','statistics_config','statistics_unavailable'].includes(this._status)?uiButton({variant:'action',className:'retry',text:text('retry',lang)}):''}</div>`;}
   else{
    this._rawSeries??=this._series;
    const key=JSON.stringify([this._start,this._end,this._zone,this._config.aggregation_period,this._config.aggregation_method]);
@@ -302,10 +305,12 @@ export class HistoryGraphCard extends HTMLElement {
    const x=t=>(t-this._viewStart)/(this._viewEnd-this._viewStart)*1000,y=v=>(max-v)/(max-min)*300;
    const axes=this._axes.map((axis,index)=>{
     const position=index?`left:auto;right:calc(12px + ${index-1} * var(--axis-column));width:var(--axis-column);max-width:var(--axis-column);text-align:right;`:'';
-    const unit=mixed?`<span class="axis-unit" style="${position}">${escapeHtml(axis.unit||'—')}</span>`:'';
-    return unit+[...axis.ticks].reverse().map(value=>{const ratio=(axis.max-value)/(axis.max-axis.min);return `<span class="axis-y" style="top:calc(${ratio*100}% + ${22-ratio*52}px);${position}">${escapeHtml(number(value,lang,true))}</span>`;}).join('');
+    const unit=mixed?`<span class="axis-unit" data-axis="${index}" title="${escapeHtml(axis.unit||'—')}" style="${position}">${escapeHtml(axis.unit||'—')}</span>`:'';
+    return unit+[...axis.ticks].reverse().map(value=>{const ratio=(axis.max-value)/(axis.max-axis.min);return `<span class="axis-y" style="top:calc(${ratio*100}% + ${22-ratio*52}px);${position}" data-axis="${index}" data-ratio="${ratio}">${escapeHtml(number(value,lang,true))}</span>`;}).join('');
    }).join('');
-   const times=Array.from({length:4},(_,i)=>`<span class="axis-x" data-tick="${i}" style="left:calc(${i/3*100}% + ${44-i/3*56}px - ${i/3} * var(--axes-right,0px))">${escapeHtml(time(this._timeAtPlotPosition(i/3),lang,this._zone,(this._viewEnd-this._viewStart)>86400000))}</span>`).join('');
+   const dateFormat=new Intl.DateTimeFormat('en-CA',{timeZone:this._zone,year:'numeric',month:'2-digit',day:'2-digit'});
+   const spansDates=dateFormat.format(this._viewStart)!==dateFormat.format(this._viewEnd);
+   const times=Array.from({length:4},(_,i)=>`<span class="axis-x" data-tick="${i}" style="left:calc(${i/3*100}% + ${44-i/3*56}px - ${i/3} * var(--axes-right,0px))">${escapeHtml(time(this._timeAtPlotPosition(i/3),lang,this._zone,spansDates))}</span>`).join('');
 
    const display=this._plotSeries.map((s,i)=>({...s,points:this._displayPoints(s.points,i)}));
    const seriesY=i=>{const a=this._axes[this._seriesAxes[i]];return v=>(a.max-v)/(a.max-a.min)*300;};
@@ -316,17 +321,31 @@ export class HistoryGraphCard extends HTMLElement {
     fills:display.flatMap((s,i)=>{const a=this._seriesAppearance(i);if(!visible[i]||!a.show_fill)return [];const fillColor=Array.isArray(a.fill_color)?`rgb(${a.fill_color.join(',')})`:a.fill_color;return [{d:this._area(s.points,x,seriesY(i),i),className:'series-fill',fill:a.fill_mode==='own'?fillColor:this._appearance(i).stroke,opacity:a.fill_opacity,mask:a.fill_fade?'url(#history-fill-fade)':null}];}),
     lines:display.flatMap((s,i)=>visible[i]?[{d:this._line(s.points,Math.max(this._viewEnd,s.points.at(-1)?.t??this._viewEnd),x,seriesY(i),i),className:'series-line',entity:s.id,appearance:this._appearance(i)}]:[]),
    });
-   const legend=uiLegend({items:meta.items.map((item,i)=>{const s=this._series[i],value=this._legendValue(s);const a=this._appearance(i,value);return {id:item.id,visible:visible[i],title:text(visible[i]?'hide_sensor':'show_sensor',lang)+' '+item.name,attrs:{'data-series':item.id},content:`<i style="--series-color:${a.color};border-top-width:${a.width}px;border-top-style:${a.style}"></i><span>${escapeHtml(item.name)}</span><strong>${value===null?text('unavailable',lang):escapeHtml(number(value,lang))}${mixed&&value!==null&&item.unit?` ${escapeHtml(item.unit)}`:''}</strong>`};}),afterContent:mixed?'':`<span class="unit">${escapeHtml(meta.unit)}</span>`});
+   const legend=uiLegend({items:meta.items.map((item,i)=>{const s=this._series[i],value=this._legendValue(s);const a=this._appearance(i,value);return {id:item.id,visible:visible[i],title:text(visible[i]?'hide_sensor':'show_sensor',lang)+' '+item.name,attrs:{'data-series':item.id},content:`<i style="--series-color:${a.color};border-top-width:${a.width}px;border-top-style:${a.style}"></i><span>${escapeHtml(item.name)}</span><strong>${value===null?text('unavailable',lang):escapeHtml(number(value,lang))}${(mixed||this._legendUnitsInline)&&value!==null&&item.unit?` ${escapeHtml(item.unit)}`:''}</strong>`};}),afterContent:mixed||this._legendUnitsInline?'':`<span class="unit">${escapeHtml(meta.unit)}</span>`});
    const missing=meta.items.filter((_,i)=>visible[i]&&!this._series[i].points.some(p=>p.v!==null)).map(s=>s.name);
    content=`${this._config.show_legend?legend:`<div class="data-status">${escapeHtml(mixed?'':meta.unit)}</div>`}${missing.length?`<div class="data-status">${text('partial',lang)} ${escapeHtml(missing.join(', '))}</div>`:''}<div class="chart" style="--axis-column:min(48px, calc((100% - 124px) / ${Math.max(1,extra)}));--axes-right:calc(${extra} * var(--axis-column))" tabindex="0" role="group" aria-label="${text('chart',lang)}">${anyVisible?axes+times:`<div class="empty-visibility" role="status">${escapeHtml(text('no_visible',lang))}</div>`}<div class="plot">${graph}<div class="zoom-selection" hidden></div></div>${this._config.show_hover_line?'<div class="guide" hidden></div>':''}<div class="markers"></div><div class="tooltip" hidden></div><div class="sr-only" aria-live="polite"></div></div>`;
   }
-  const controls=cardHeader({title,showTitle:this._config.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:lang,periods:periodControls(this,lang),zoomState:chartZoomState(this),information:chartDataInformation(this,lang)});
+  const headerOptions={title,showTitle:this._config.show_title!==false,ready:this._status==='ready',historyUrl:this._historyUrl(),language:lang,periods:periodControls(this,lang),zoomState:chartZoomState(this),information:chartDataInformation(this,lang)};
+  const controls=this._calmChartLayout?this._historyHeader(headerOptions):cardHeader(headerOptions);
   // DOM replacement blurs a focused old chart before disconnecting it. This is
   // teardown, not a user dismissal; the new chart gets its own blur handler.
   const previousChart=this.shadowRoot.querySelector('.chart');if(previousChart)previousChart.onblur=null;
-  this.shadowRoot.innerHTML=`<style>${this._styles()}</style><ha-card lang="${lang}"><div class="card-content">${controls}${content}</div></ha-card>`;
+  const toolsHadFocus=this.shadowRoot.activeElement?.matches?.('.history-tools summary');
+  // Bar shares the information wells; the Default button correction stays History-only.
+  const historyOnly=(this.constructor.backgroundBaseCard??this.constructor)===HistoryGraphCard;
+  this.shadowRoot.innerHTML=`<style>${this._styles()}${cardThemeStyles({chartUI:true,plots:'.chart',wells:'.insight-sensor[data-ui-detail-surface]',controls:'.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period],.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]'+(historyOnly?',.period-default [data-ui-button=surface]':''),surfaces:'.tooltip,[data-ui-popup]'})}${this._calmChartLayout?this._historyStyles():''}${uiBalancedTabsStyles()}</style><ha-card lang="${lang}"><div class="card-content">${controls}${content}</div></ha-card>`;
   this._updateGraphTheme();bindPeriodControls(this);bindChartInsights(this);
+  const tools=this.shadowRoot.querySelector('.history-tools');if(tools)tools.onkeydown=e=>{if(e.key==='Escape'&&!e.target.closest?.('[popover]')){e.preventDefault();tools.open=false;tools.querySelector('summary').focus();}};
+  if(toolsHadFocus)tools?.querySelector('summary').focus({preventScroll:true});
   this.shadowRoot.querySelectorAll?.('[data-zoom]').forEach(button=>button.onclick=()=>this._zoom({in:0.5,out:2,reset:0}[button.dataset.zoom]));
+  this._axisResize?.disconnect();
+  if(this._calmChartLayout){
+   this.style?.removeProperty('--history-required-height');
+   const chart=this.shadowRoot.querySelector('.chart'),layout=()=>{if(this.shadowRoot.querySelector('.chart')===chart)this._layoutHistoryAxes();};
+   this._layoutHistoryAxes();
+   if(chart&&globalThis.ResizeObserver){this._axisResize=new ResizeObserver(layout);for(const node of [chart,this.shadowRoot.querySelector('.card-header'),this.shadowRoot.querySelector('.legend'),...chart.querySelectorAll('.axis-unit'),chart.querySelector('.axis-y'),chart.querySelector('.axis-x')].filter(Boolean))this._axisResize.observe(node);}
+   const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(layout);globalThis.document?.fonts?.ready?.then(layout);
+  }
   this._graph?.restore(this);
   const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();this._bindInteractions();
   this._syncElf();const renderedChart=this.shadowRoot.querySelector('.chart'),restoreTooltip=()=>{if(this.shadowRoot.querySelector('.chart')===renderedChart){SharedGraph.restoreHover(this);if(this._cursor!=null)this._showTooltip(this._cursor,false);}};const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(restoreTooltip);else restoreTooltip();
@@ -407,11 +426,82 @@ export class HistoryGraphCard extends HTMLElement {
   chart.querySelector('.sr-only').textContent=`${time(timestamp,this._lang,this._zone,true)}. ${rows.map(row=>`${row.name}: ${row.value}`).join('. ')}`;
   if(publish)SharedGraph.publishHover(this,timestamp);
  }
+  // The shared header still supplies every existing action and its semantics.
+  // Bar explicitly opts into this arrangement; other companions remain unchanged.
+ get _calmChartLayout(){return (this.constructor.backgroundBaseCard??this.constructor)===HistoryGraphCard;}
+ _historyHeader(options){
+  const label=options.language.startsWith('nl')?'Grafiekopties':'Graph tools';
+  const open=this.shadowRoot.querySelector('.history-tools')?.open;
+  const header=cardHeader({...options,periods:{},zoomState:{...options.zoomState,zoomed:options.zoomState.zoomed&&!options.periods.picker}});
+  return header.replace('<div class="header-actions">',`<details class="history-tools"${open?' open':''}><summary title="${label}" aria-label="${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="header-actions history-tools-panel">`).replace('</div></header>',`</div></details>${options.periods.picker?`<div class="header-actions history-timeframe"><div class="chart-controls" role="group" aria-label="${options.language.startsWith('nl')?'Tijdvak':'Timeframe'}">${options.periods.picker}${options.periods.navigation??''}</div></div>`:''}</header>`);
+ }
+ _layoutHistoryAxes(){
+  const chart=this.shadowRoot.querySelector('.chart');if(!chart?.getBoundingClientRect||!globalThis.getComputedStyle)return;
+  const labels=[...chart.querySelectorAll('[data-axis]')];if(!labels.length)return;
+  const edge=10,gap=8,width=chart.clientWidth,canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+  if(!ctx||width<=0)return;
+  const measure=node=>{ctx.font=getComputedStyle(node).font;return Math.ceil(ctx.measureText(node.textContent).width);};
+  const count=this._axes.length,scale=chart.getBoundingClientRect().width/width||1;
+  // Unit names may wrap; numeric ticks never truncate. Reserve actual glyph widths.
+  const columns=Array.from({length:count},(_,i)=>Math.max(0,...labels.filter(n=>Number(n.dataset.axis)===i).map(n=>n.classList.contains('axis-unit')?Math.min(measure(n),56):measure(n))));
+  const left=edge+columns[0]+gap,right=count>1?edge+columns.slice(1).reduce((a,b)=>a+b+gap,0):edge;
+  chart.style.setProperty('--history-plot-left',left+'px');chart.style.setProperty('--history-plot-right',right+'px');
+  const units=labels.filter(n=>n.classList.contains('axis-unit'));
+  for(const n of units){const i=Number(n.dataset.axis);n.style.width=columns[i]+'px';n.style.maxWidth='none';n.style.whiteSpace='normal';n.style.overflowWrap='anywhere';}
+  const unitHeight=Math.max(0,...units.map(n=>n.getBoundingClientRect().height/scale));
+  const tickHalf=Math.max(0,...labels.filter(n=>n.classList.contains('axis-y')).map(n=>parseFloat(getComputedStyle(n).lineHeight)/2));
+  const top=edge+unitHeight+tickHalf+8;
+  const ticks=[...chart.querySelectorAll('.axis-x')];
+  for(const n of ticks){const ratio=Number(n.dataset.tick)/3;n.style.display='block';n.style.width='max-content';n.style.setProperty('left',`calc(${ratio*100}% + ${left-ratio*(left+right)}px)`,'important');n.style.right='auto';n.style.transform=ratio===0?'none':ratio===1?'translateX(-100%)':'translateX(-50%)';n.style.setProperty('max-width',Math.max(40,(width-left-right-8)/2)+'px','important');n.style.whiteSpace='normal';n.style.textAlign=ratio===0?'left':ratio===1?'right':'center';}
+  // Decide density from real label boxes, not the browser viewport.
+  let previous=null;for(const n of ticks){const b=n.getBoundingClientRect(),last=ticks.at(-1).getBoundingClientRect();if(n!==ticks[0]&&n!==ticks.at(-1)&&((previous&&b.left<previous.right+8)||b.right+8>last.left)){n.style.display='none';continue;}previous=b;}
+  const bottom=edge+Math.max(0,...ticks.filter(n=>n.style.display!=='none').map(n=>n.getBoundingClientRect().height/scale))+tickHalf+8;
+  chart.style.minHeight=(top+bottom+80)+'px';
+  chart.style.setProperty('--history-plot-top',top+'px');chart.style.setProperty('--history-plot-bottom',bottom+'px');
+  for(const n of labels){const i=Number(n.dataset.axis),offset=edge+columns.slice(i+1).reduce((a,b)=>a+b+gap,0);n.style.left=i?'auto':edge+'px';n.style.right=i?offset+'px':'auto';n.style.width=columns[i]+'px';n.style.maxWidth='none';n.style.textAlign=i?'right':'left';if(n.classList.contains('axis-y')){n.style.display='block';n.style.top=`calc(${Number(n.dataset.ratio)*100}% + ${top-Number(n.dataset.ratio)*(top+bottom)}px)`;}else n.style.top=edge+'px';}
+  for(let i=0;i<count;i++){
+   const ys=labels.filter(n=>n.classList.contains('axis-y')&&Number(n.dataset.axis)===i);let previous=null;
+   for(const n of ys){const box=n.getBoundingClientRect(),last=ys.at(-1).getBoundingClientRect();if(n!==ys[0]&&n!==ys.at(-1)&&((previous&&box.top<previous.bottom+8)||box.bottom+8>last.top)){n.style.display='none';continue;}previous=box;}
+  }
+  // Fixed dashboard height is a minimum, not a licence to clip enlarged text.
+  const content=this.shadowRoot.querySelector('.card-content'),style=getComputedStyle(content),surface=getComputedStyle(this.shadowRoot.querySelector('ha-card'));
+  const px=value=>parseFloat(value)||0;
+  const intrinsic=[...content.children].reduce((height,node)=>{const css=getComputedStyle(node);return height+(node===chart?px(chart.style.minHeight):node.getBoundingClientRect().height/scale)+px(css.marginTop)+px(css.marginBottom);},px(style.paddingTop)+px(style.paddingBottom)+px(surface.borderTopWidth)+px(surface.borderBottomWidth));
+  this.style?.setProperty('--history-required-height',Math.ceil(intrinsic)+'px');
+ }
+ _historyStyles(){return `
+ :host{min-height:var(--history-required-height,0px)}
+ ha-card{height:100%;min-height:var(--history-required-height,0px)}
+ .card-header{display:flex;align-items:center;gap:12px 8px;margin:0 0 4px;position:relative}
+ .card-header h2{font-size:16px;line-height:24px;font-weight:600;flex:1 1 0;margin:0}
+ .history-tools{margin-inline-start:auto;flex:none;height:24px}
+ .history-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+ .history-tools summary{position:relative;top:-10px}
+ .history-tools summary::-webkit-details-marker{display:none}
+ .history-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
+ .history-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+ .history-tools-panel.header-actions{position:absolute;z-index:5;inset-inline-end:0;top:48px;width:max-content;max-width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color);box-shadow:var(--eleven-material-surface-shadow,var(--ha-card-box-shadow,none));gap:8px;justify-content:flex-start}
+ .history-tools:not([open])>.history-tools-panel{display:none}
+ .history-timeframe.header-actions{width:100%;flex:1 1 100%;margin:0;gap:0}
+ .history-timeframe .chart-controls{width:100%;flex:1 1 100%}
+ .history-timeframe .period-controls{min-width:0;flex:1 1 auto}
+ .history-timeframe .period-trigger{font-size:12px}
+ .plot{left:var(--history-plot-left,44px);right:var(--history-plot-right,12px);top:var(--history-plot-top,36px);bottom:var(--history-plot-bottom,36px)}
+ .guide{top:var(--history-plot-top,36px);bottom:var(--history-plot-bottom,36px)}
+ .axis-x{bottom:10px}
+ .axis-y{overflow:visible;text-overflow:clip}
+ .axis-unit{line-height:1.3;overflow:visible;text-overflow:clip}
+ .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0}
+ .legend-item{display:grid;grid-template-columns:15px minmax(0,1fr);gap:0 6px;align-content:center}
+ .legend-item strong{grid-column:2;font-size:var(--font-size-label);white-space:normal;overflow-wrap:anywhere}
+ .legend-item>span{overflow-wrap:anywhere}
+ .legend .unit{grid-column:1/-1;font-size:11px}
+ `;}
  _styles(){return `
  :host{display:block;height:100%;min-width:0;container-type:inline-size;--font-size-meta:11px;--font-size-label:12px;--font-size-title:18px;}
  ha-card{height:100%;display:flex;flex-direction:column;background:var(--ha-card-background,var(--card-background-color));color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
- .card-content{position:relative;display:flex;flex-direction:column;box-sizing:border-box;min-height:0;height:100%;overflow:auto;scrollbar-width:thin;padding:16px 16px 12px;line-height:1.4}
- ${cardHeaderStyles()}
+ .card-content{position:relative;display:flex;flex-direction:column;box-sizing:border-box;min-height:0;height:100%;overflow:auto;scrollbar-width:thin;padding:var(--eleven-card-padding,16px);line-height:1.4}
+ ${cardHeaderStyles()}${uiActionButtonStyles()}
  ${periodControlsStyles()}
  ${chartInsightStyles()}
  .legend{display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px;margin:0 0 2px;color:var(--secondary-text-color);font-size:var(--font-size-label)}
@@ -427,7 +517,7 @@ export class HistoryGraphCard extends HTMLElement {
  .legend-item strong,.tooltip .tooltip-value{color:var(--history-value-color,var(--primary-text-color));font-style:normal}
  .tooltip .tooltip-label{color:var(--secondary-text-color)}
  .grid-line{stroke:var(--history-grid-color,var(--divider-color));stroke-width:.8;vector-effect:non-scaling-stroke;pointer-events:none}.grid-zero{stroke:var(--history-grid-zero-color,var(--divider-color));stroke-width:1.2}
- .state{display:flex;flex:1;height:260px;flex-direction:column;justify-content:center;align-items:flex-start;gap:8px;min-height:120px;font-size:14px;color:var(--secondary-text-color)}.retry{font:inherit;border:1px solid var(--divider-color);border-radius:6px;background:var(--secondary-background-color);color:var(--primary-text-color);min-height:44px;padding:0 12px;cursor:pointer}
+ .state{display:flex;flex:1;height:260px;flex-direction:column;justify-content:center;align-items:flex-start;gap:8px;min-height:120px;font-size:14px;color:var(--secondary-text-color)}
  .guide{position:absolute;top:22px;bottom:30px;border-left:1px dashed var(--secondary-text-color);pointer-events:none}.guide[hidden]{display:none}
  .zoom-selection{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--primary-color,#2196f3) 18%,transparent);border-inline:1px solid var(--primary-color,#2196f3);pointer-events:none}.zoom-selection[hidden]{display:none}
  .sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
@@ -437,6 +527,8 @@ export class HistoryGraphCard extends HTMLElement {
  @media(max-width:480px){.card-content{padding:12px 12px 10px}}
  `;}
 }
-if(!customElements.get('eleven-history-graph-card'))customElements.define('eleven-history-graph-card',HistoryGraphCard);
+if(!customElements.get('eleven-history-graph-card'))customElements.define('eleven-history-graph-card',withCardBackground(HistoryGraphCard));
 window.customCards=window.customCards??[];
 if(!window.customCards.some(card=>card.type==='eleven-history-graph-card'))window.customCards.push({type:'eleven-history-graph-card',name:'Eleven History Graph Card',get description(){return language(frontendHass())==='nl'?'Sensorhistorie met een eigen y-as per eenheid':'Sensor history with an independent y-axis per unit';}});
+import {cardThemeStyles} from '../../../shared/card-theme.js';
+import {uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';

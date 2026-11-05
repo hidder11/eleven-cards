@@ -121,13 +121,13 @@ test('both cards expose localized source and render statistics through the real 
   card.hass={states:{'sensor.a':{state:'12',attributes:{unit_of_measurement:'°C'}}},callWS:async msg=>msg.type==='recorder/get_statistics_metadata'?[{statistic_id:'sensor.a',mean_type:1,statistics_unit_of_measurement:'°C'}]:{'sensor.a':[{start:Date.now()-3600000,end:Date.now(),mean:12}]},callApi:()=>{throw Error('raw not expected');}};
   card.connectedCallback();await new Promise(r=>setImmediate(r));
   assert.equal(card._status,'ready');assert.equal(card._series[0].source,'statistics');
-  assert.match(card.shadowRoot.innerHTML,/<strong>12<\/strong>/,'legend samples inside the final statistics bin');
+  assert.match(card.shadowRoot.innerHTML,C===BarChartCard?/<strong>12 °C<\/strong>/:/<strong>12<\/strong>/,'legend samples inside the final statistics bin');
   assert.match(card._styles(),/@container[^}]*max-width:480px/);
   assert.match(card.shadowRoot.innerHTML,/data-tick="1"/);
   const oldEnd=Date.now()-2*3600000;
   card.hass={...card.hass,callWS:async msg=>msg.type==='recorder/get_statistics_metadata'?[{statistic_id:'sensor.a',has_mean:true,unit_of_measurement:'°C'}]:{'sensor.a':[{start:oldEnd-3600000,end:oldEnd,mean:12}]}};
   await card._refresh();
-  assert.match(card.shadowRoot.innerHTML,/<strong>12<\/strong>/,'live legend uses the sensor, not the unfinished statistics tail');
+  assert.match(card.shadowRoot.innerHTML,C===BarChartCard?/<strong>12 °C<\/strong>/:/<strong>12<\/strong>/,'live legend uses the sensor, not the unfinished statistics tail');
   assert.equal(u.valueAt(card._series[0].points,card._end-1),null,'graph retains its trailing gap');
   card._periodEnd=card._end;card._render();
   assert.match(card.shadowRoot.innerHTML,/<strong>Unavailable<\/strong>/,'a fixed historical range never falls back to the live sensor');

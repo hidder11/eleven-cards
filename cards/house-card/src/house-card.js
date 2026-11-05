@@ -62,5 +62,5 @@ class HouseCardEditor extends ElevenHouseCardEditor{
 
 class HouseCardAlias extends HouseCard {}
 class HouseEditorAlias extends HouseCardEditor {}
-for(const [name,Class] of [['eleven-house-styled-card',HouseCard],['eleven-house-card',HouseCardAlias],['eleven-house-styled-card-editor',HouseCardEditor],['eleven-house-card-editor',HouseEditorAlias]])if(!customElements.get(name))customElements.define(name,Class);
+for(const [name,Class] of [['eleven-house-styled-card',HouseCard],['eleven-house-card',HouseCardAlias],['eleven-house-styled-card-editor',HouseCardEditor],['eleven-house-card-editor',HouseEditorAlias]])if(!customElements.get(name))customElements.define(name,name.endsWith('-editor')?Class:withCardBackground(Class));
 window.customCards=window.customCards||[];if(!window.customCards.some(c=>c.type==='eleven-house-card'))window.customCards.push({type:'eleven-house-card',name:'Eleven House (beta)',description:'Configurable house rendering with live weather',preview:true});

@@ -1,5 +1,72 @@
 // Eleven Car (beta) - self-contained standalone module
 (()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false,periodUI=chartUI}={}) {
+ // Segmented groups own their paint; descendants pressing must not press the group.
+ if(chartUI)controls=controls.split(',').filter(selector=>!['.zoom-controls','.chart-links'].includes(selector.trim())).join(',');
+ if(periodUI)controls=[controls,'.period-default [data-ui-button=surface]'].filter(Boolean).join(',');
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${wells?`:is(${wells}):is([data-ui-detail-surface]){background:var(--secondary-background-color,#eee)}`:''}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,transparent)}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${periodUI?`
+.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>[data-period]{position:relative;flex:none}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:4px 6px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+${segmentedControlStyles('.chart-controls','.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period]',{first:'.chart-controls>.period-controls>.period-trigger'})}
+${segmentedControlStyles('.zoom-controls','.zoom-controls>[data-zoom]')}
+${segmentedControlStyles('.chart-links','.chart-links>.history-link,.chart-links>.insight-control>.insight-trigger',{last:'.chart-links>.insight-control>.insight-trigger'})}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
+// A single raised group with separate native button press states; no parent :active.
+function segmentedControlStyles(group,buttons,{first=`:is(${group})>:is(button,a):first-child`,last=`:is(${group})>:is(button,a):last-child`,dividers=`:is(${group})>:not(:first-child)`}={}){return `
+${group}{gap:0;align-items:stretch;background:var(--eleven-material-control-background,var(--secondary-background-color,#eee));box-shadow:var(--eleven-material-control-shadow,var(--eleven-surface-shadow,none));border-radius:var(--eleven-material-radius-button,9px)}
+:is(${buttons}){position:relative;align-self:stretch;height:auto;padding:2px 6px;background:transparent;box-shadow:none;border:0;border-radius:0;min-height:36px;min-width:36px;font-size:12px;box-sizing:border-box}
+:is(${buttons}) svg{width:14px;height:14px}
+${first?`:is(${buttons}):is(${first}){border-start-start-radius:var(--eleven-material-radius-button,9px);border-end-start-radius:var(--eleven-material-radius-button,9px)}`:''}
+${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-material-radius-button,9px);border-end-end-radius:var(--eleven-material-radius-button,9px)}`:''}
+:is(${dividers}){position:relative}
+:is(${dividers})::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--divider-color,#ddd) 55%,transparent);pointer-events:none;z-index:1}
+:is(${buttons}):disabled{opacity:1;color:color-mix(in srgb,var(--primary-text-color,#20252b) 35%,transparent);cursor:default}
+:is(${buttons}):not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none}
+:is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
+:is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+@media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -37,24 +104,521 @@ function uiButtonStyles(){return `
 `;}
 
 
+const CARD_BACKGROUNDS=Object.freeze([
+ {value:'aurora',label:'Aurora sky',description:'Langzaam golvende lichtgordijnen met kleine sterren.'},
+ {value:'lanes',label:'Energy Lanes',description:'Diagonale banen met een rustige lichtstroom.'},
+ {value:'halo',label:'Halo orbit',description:'Dunne ringen die langzaam om elkaar bewegen.'},
+ {value:'ribbon',label:'Silk Flow',description:'Zachte linten die langs de kaart glijden.'},
+ {value:'eclipse',label:'Eclipse',description:'Een zwevende cirkel met een verlichte rand.'},
+ {value:'clouds',label:'Cloud layers',description:'Drie transparante wolkenlagen met verschillende snelheden.'},
+ {value:'isobars',label:'Atmospheric flow',description:'Fijne contourlijnen met bewegende lichtaccenten.'},
+ {value:'hologram',label:'Holographic grid',description:'Een perspectiefraster met een zachte scanlijn.'},
+ {value:'ink',label:'Liquid ink',description:'Organische kleurvelden die rustig van vorm veranderen.'},
+ {value:'terrain',label:'Relief map',description:'Gelaagde hoogtelijnen die langzaam verschuiven.'},
+ {value:'aurora-curtains',family:'aurora',code:'1A',label:'Aurora curtains',description:'Smallere, verticale lichtgordijnen met een rustige zijwaartse golf.'},
+ {value:'aurora-horizon',family:'aurora',code:'1B',label:'Aurora horizon',description:'Brede lichtbogen laag op de kaart, met meer open ruimte bovenin.'},
+ {value:'ribbon-pleats',family:'ribbon',code:'4A',label:'Silk pleats',description:'Fijn gevouwen linten met meerdere zachte randen.'},
+ {value:'ribbon-sweep',family:'ribbon',code:'4B',label:'Silk sweep',description:'Twee brede, diagonale linten die in tegengestelde richting bewegen.'},
+ {value:'isobars-stream',family:'isobars',code:'7A',label:'Open jetstream',description:'Ruim uit elkaar liggende luchtstromen met lange bewegende accenten.'},
+ {value:'isobars-vortex',family:'isobars',code:'7B',label:'Atmospheric vortex',description:'Gesloten druklijnen die rustig rond een centrum rechts draaien.'},
+ {value:'ink-marble',family:'ink',code:'9A',label:'Ink marble',description:'Vloeibare kleuraders met een fijnere, gemarmerde structuur.'},
+ {value:'ink-bloom',family:'ink',code:'9B',label:'Ink bloom',description:'Drie zachte inktbloemen die langzaam openen en samenvloeien.'},
+ {value:'hologram-dots',family:'hologram',code:'8A',label:'Holographic dots',description:'Een ruimtelijk puntenraster met een brede lichtgolf.'},
+ {value:'hologram-hex',family:'hologram',code:'8B',label:'Holographic honeycomb',description:'Een bewegend honingraatraster met een rustige diagonale scan.'},
+ {value:'caustics',code:'11',label:'Caustic light',description:'Gebroken licht op water: een netwerk van vervormende lichtcellen.'},
+ {value:'stardrift',code:'12',label:'Stardrift',description:'Losse lichtsporen die langzaam diagonaal door de kaart trekken.'},
+ {value:'dunes',code:'13',label:'Quiet dunes',description:'Drie golvende duinsilhouetten die zacht langs elkaar schuiven.'},
+ {value:'moire',code:'14',label:'Moire silk',description:'Twee fijne lijnweefsels die langzaam kruisen en nieuwe patronen vormen.'},
+ {value:'constellation',code:'15',label:'Constellation',description:'Een open netwerk van lichtpunten met accenten langs de verbindingen.'}
+
+].map(Object.freeze));
+const backgroundHex=value=>typeof value==='string'&&/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value)?value:null;
+function normalizeCardBackground(input={}){
+ const source=input&&typeof input==='object'?input:{};
+ const number=source.transparency==null?65:Number(source.transparency);
+ const height=source.height==null?240:Number(source.height);
+ return {variant:CARD_BACKGROUNDS.some(item=>item.value===source.variant)?source.variant:'aurora',colorMode:['accent','custom','dynamic'].includes(source.colorMode)?source.colorMode:'accent',colors:Array.isArray(source.colors)?source.colors.map(backgroundHex).filter(Boolean).slice(0,3):[],transparency:Number.isFinite(number)?Math.min(100,Math.max(0,number)):65,animated:source.animated!==false,coverage:source.coverage==='header'?'header':'card',height:Number.isFinite(height)?Math.min(2000,Math.max(24,Math.round(height))):240};
+}
+// Purely decorative markup. The calling card decides which status colour to supply.
+function uiCardBackground(input={}, {statusColor}={}){
+ const config=normalizeCardBackground(input),accent='var(--accent-color,var(--primary-color,#03a9f4))';
+ const colors=config.colorMode==='custom'&&config.colors.length?config.colors:config.colorMode==='dynamic'&&backgroundHex(statusColor)?[statusColor]:[accent];
+ const palette=Array.from({length:3},(_,i)=>colors[i%colors.length]);
+ const style=palette.map((color,i)=>`--ui-bg-${i+1}:${color}`).join(';')+`;--ui-bg-opacity:${(100-config.transparency)/100};--ui-bg-height:${config.height}px`;
+ const family=CARD_BACKGROUNDS.find(item=>item.value===config.variant).family??config.variant;
+ const curves=cardBackgroundGeometry(config.variant,family);
+ const stars=(family==='aurora'&&config.variant!=='aurora-horizon'||config.variant==='stardrift')?Array.from({length:16},(_,i)=>`<b style="left:${i*37%100}%;top:${i*19%80}%;animation-delay:${-i*.7}s"></b>`).join(''):'';
+ return `<div${uiAttributes({'data-ui-card-background':config.variant,'data-ui-background-family':family,'data-ui-background-coverage':config.coverage,'data-animated':String(config.animated),'aria-hidden':'true',style})}><i></i><i></i><i></i>${curves}${stars}</div>`;
+
+}
+
+function cardBackgroundGeometry(variant,family){
+ let paths='';
+ if(family==='isobars'){
+  const count=variant==='isobars-stream'?6:9;
+  paths=Array.from({length:count},(_,i)=>variant==='isobars-vortex'?`<path d="M${330-i*23} 150C${260-i*23} ${40-i*13} ${510+i*12} ${45-i*16} ${525+i*21} 150S${380-i*18} ${290+i*16} ${330-i*23} 150Z"/>`:`<path d="M-60 ${i*38}C95 ${i*25-80} 260 ${i*30+140} 390 ${i*27+30}S580 ${i*38-50} 660 ${i*35+20}"/>`).join('');
+ }else if(variant==='hologram'){
+  paths=Array.from({length:19},(_,i)=>{const x=-240+i*60;return `<path d="M${x} 0L${300+(x-300)*1.6} 320"/>`;}).join('');
+  paths+='<g class="ui-bg-grid-rows">'+[0,18,42,74,116,170,238,320,400].map(y=>`<path d="M-400 ${y}H1000"/>`).join('')+'</g>';
+ }else if(variant==='hologram-hex'){
+  paths=Array.from({length:48},(_,i)=>{const x=i%8*88+(Math.floor(i/8)%2)*44,y=Math.floor(i/8)*54;return `<path d="M${x} ${y-32}l28 16v32l-28 16-28-16v-32Z"/>`;}).join('');
+ }else if(variant==='caustics'){
+  paths=Array.from({length:35},(_,i)=>{const x=i%7*100,y=Math.floor(i/7)*85;return `<path d="M${x} ${y}q45 -35 100 0q-35 35 0 85q-60 -30 -100 0q30 -45 0 -85Z"/>`;}).join('');
+ }else if(variant==='constellation'){
+  const points=[[20,60],[110,100],[180,35],[275,125],[360,55],[475,90],[570,25],[80,225],[210,270],[330,210],[440,280],[565,200]];
+  paths='<path d="M20 60L110 100L180 35L275 125L360 55L475 90L570 25M110 100L80 225L210 270L275 125L330 210L440 280L565 200L475 90M330 210L360 55"/>';
+  paths+=points.map(([x,y],i)=>`<circle cx="${x}" cy="${y}" r="${i%3+1.5}" style="animation-delay:${-i*.6}s"/>`).join('');
+ }
+ return paths?`<svg viewBox="0 0 600 320" preserveAspectRatio="none" focusable="false">${paths}</svg>`:'';
+}
+
+function uiCardBackgroundStyles(){return `
+/* Explicit radius also works through ha-card slots, where inherit follows the slot.
+   The parent keeps its theme surface; only the decorative layer clips and fades. */
+[data-ui-background-host]{position:relative;isolation:isolate}
+:where([data-ui-background-host]>:not([data-ui-card-background])){position:relative;z-index:1}
+[data-ui-background-host]>[data-ui-card-background]{position:absolute;inset:0;z-index:0;overflow:hidden;border-radius:var(--ui-background-radius,var(--ha-card-border-radius,12px));clip-path:inset(0 round var(--ui-background-radius,var(--ha-card-border-radius,12px)));pointer-events:none;user-select:none;contain:paint;opacity:var(--ui-bg-opacity,.35);color:var(--ui-bg-1);--ui-bg-a:color-mix(in srgb,var(--ui-bg-1) 65%,transparent);--ui-bg-b:color-mix(in srgb,var(--ui-bg-2) 55%,transparent);--ui-bg-c:color-mix(in srgb,var(--ui-bg-3) 50%,transparent)}
+[data-ui-background-coverage=header]{max-height:var(--ui-bg-height,240px);mask-image:linear-gradient(to bottom,#000 0%,#000 55%,transparent 100%)}
+[data-ui-card-background]>i{position:absolute;display:block;pointer-events:none;animation:ui-bg-drift 18s ease-in-out infinite alternate}
+[data-ui-card-background]>i:nth-child(2){animation-delay:-7s;animation-duration:23s}
+[data-ui-card-background]>i:nth-child(3){animation-delay:-13s;animation-duration:29s}
+[data-ui-background-family=aurora]>i{inset:-30%;border-radius:50%;background:conic-gradient(from 70deg at 50% 90%,transparent 0deg,var(--ui-bg-a) 17deg,transparent 65deg);filter:blur(16px);transform:rotate(-18deg)}
+[data-ui-background-family=aurora]>i:nth-child(2){background:conic-gradient(from 230deg at 50% 10%,transparent,var(--ui-bg-b) 25deg,transparent 70deg)}
+[data-ui-background-family=aurora]>i:nth-child(3){background:radial-gradient(ellipse at 80% 5%,var(--ui-bg-c),transparent 60%)}
+[data-ui-background-family=aurora]>b{position:absolute;width:2px;height:2px;border-radius:50%;background:var(--ui-bg-3);animation:ui-bg-star 5s ease-in-out infinite alternate}
+[data-ui-card-background=lanes]>i{inset:-50%;background:linear-gradient(135deg,transparent 30%,var(--ui-bg-a) 30.2% 42%,transparent 42.2% 55%,var(--ui-bg-b) 55.2% 61%,transparent 61.2%);animation:ui-bg-lanes 16s ease-in-out infinite alternate}
+[data-ui-card-background=lanes]>i:nth-child(2){background:repeating-linear-gradient(135deg,transparent 0 42px,var(--ui-bg-c) 43px,transparent 44px 90px);opacity:.35}
+[data-ui-card-background=lanes]>i:nth-child(3){display:none}
+[data-ui-card-background=halo]>i{width:80%;height:95%;right:-20%;top:-20%;border:1px solid var(--ui-bg-a);border-radius:50%;box-shadow:0 0 0 20px color-mix(in srgb,var(--ui-bg-2) 12%,transparent),0 0 0 45px color-mix(in srgb,var(--ui-bg-3) 8%,transparent);animation:ui-bg-orbit 22s ease-in-out infinite alternate}
+[data-ui-card-background=halo]>i:nth-child(2){right:5%;top:25%;width:65%;height:65%;border-color:var(--ui-bg-b);box-shadow:none}
+[data-ui-card-background=halo]>i:nth-child(3){display:none}
+[data-ui-background-family=ribbon]>i{width:150%;height:85%;top:15%;left:-20%;border-radius:50%;border-top:1px solid var(--ui-bg-a);background:linear-gradient(var(--ui-bg-a),transparent 60%);transform:rotate(-20deg);animation:ui-bg-ribbon 19s ease-in-out infinite alternate}
+[data-ui-background-family=ribbon]>i:nth-child(2){top:30%;background:linear-gradient(var(--ui-bg-b),transparent 60%)}
+[data-ui-background-family=ribbon]>i:nth-child(3){top:45%;background:linear-gradient(var(--ui-bg-c),transparent 60%)}
+[data-ui-card-background=eclipse]>i{width:80%;aspect-ratio:1;right:-10%;top:-20%;border-radius:50%;background:radial-gradient(circle,transparent 52%,var(--ui-bg-a) 54%,var(--ui-bg-b) 57%,transparent 66%);animation:ui-bg-orbit 26s ease-in-out infinite alternate}
+[data-ui-card-background=eclipse]>i:nth-child(2){inset:0;width:auto;aspect-ratio:auto;background:radial-gradient(ellipse at 90% 0,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=eclipse]>i:nth-child(3){display:none}
+[data-ui-card-background=clouds]>i{inset:-25%;background:radial-gradient(ellipse at 20% 25%,var(--ui-bg-a),transparent 45%),radial-gradient(ellipse at 80% 65%,var(--ui-bg-b),transparent 40%);filter:blur(12px);animation:ui-bg-clouds 24s ease-in-out infinite alternate}
+[data-ui-card-background=clouds]>i:nth-child(2){transform:rotate(160deg);opacity:.7}
+[data-ui-card-background=clouds]>i:nth-child(3){background:radial-gradient(ellipse at 60% 50%,var(--ui-bg-c),transparent 55%);opacity:.6}
+[data-ui-background-family=isobars]>i{inset:0;background:radial-gradient(ellipse at 80% 10%,var(--ui-bg-b),transparent 65%);animation:none}
+[data-ui-background-family=isobars]>i:not(:first-child){display:none}
+[data-ui-background-family=isobars]>svg{position:absolute;inset:-10%;width:120%;height:120%;fill:none;stroke:var(--ui-bg-1);stroke-width:1;opacity:.5}
+[data-ui-background-family=isobars] path:nth-child(2n){stroke:var(--ui-bg-2);stroke-dasharray:30 230;stroke-width:2;animation:ui-bg-front 14s linear infinite}
+[data-ui-background-family=hologram]{perspective:380px}
+[data-ui-background-family=hologram]>i:first-child{inset:-50%;background:repeating-linear-gradient(0deg,transparent 0 34px,var(--ui-bg-a) 35px,transparent 36px),repeating-linear-gradient(90deg,transparent 0 34px,var(--ui-bg-b) 35px,transparent 36px);transform:rotateX(50deg);animation:ui-bg-grid 24s linear infinite}
+[data-ui-background-family=hologram]>i:nth-child(2){inset:-50% 0;background:linear-gradient(transparent 35%,var(--ui-bg-c) 50%,transparent 65%);animation:ui-bg-scan 14s ease-in-out infinite alternate}
+[data-ui-background-family=hologram]>i:nth-child(3){display:none}
+[data-ui-background-family=ink]>i{width:110%;height:130%;left:-20%;top:-40%;border-radius:36% 64% 55% 45%;background:radial-gradient(ellipse,var(--ui-bg-a),transparent 65%);filter:blur(14px);animation:ui-bg-ink 24s ease-in-out infinite alternate}
+[data-ui-background-family=ink]>i:nth-child(2){left:20%;top:0;background:radial-gradient(ellipse,var(--ui-bg-b),transparent 65%)}
+[data-ui-background-family=ink]>i:nth-child(3){left:40%;top:-20%;background:radial-gradient(ellipse,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=terrain]>i{inset:-50%;border-radius:42%;background:repeating-radial-gradient(ellipse at 65% 35%,transparent 0 17px,var(--ui-bg-a) 18px,transparent 19px 35px);animation:ui-bg-terrain 30s ease-in-out infinite alternate}
+[data-ui-card-background=terrain]>i:nth-child(2){inset:-30%;opacity:.3;background:repeating-radial-gradient(ellipse at 20% 70%,transparent 0 25px,var(--ui-bg-b) 26px,transparent 27px 50px)}
+[data-ui-card-background=terrain]>i:nth-child(3){inset:0;background:radial-gradient(ellipse at 90% 0,var(--ui-bg-c),transparent 65%)}
+/* The selected grid spans the full card, including its upper edge. */
+[data-ui-card-background=hologram]{perspective:none}
+[data-ui-card-background=hologram]>i:first-child{display:none}
+[data-ui-card-background=hologram]>i:nth-child(2){opacity:.25}
+[data-ui-card-background=hologram]>svg{position:absolute;inset:0;width:100%;height:100%;fill:none;stroke:var(--ui-bg-1);stroke-width:.8;opacity:.5}
+[data-ui-card-background=hologram] .ui-bg-grid-rows{stroke:var(--ui-bg-2);animation:ui-bg-grid-rows 24s ease-in-out infinite alternate}
+@keyframes ui-bg-grid-rows{to{transform:translateY(-18px)}}
+/* Alternatives reuse their family's structure and palette. */
+[data-ui-card-background=aurora-curtains]>i{inset:-35% -20%;border-radius:35%;background:repeating-conic-gradient(from 18deg at 50% 110%,transparent 0deg 12deg,var(--ui-bg-a) 16deg,transparent 23deg 40deg);filter:blur(10px);animation:ui-bg-curtains 24s ease-in-out infinite alternate}
+[data-ui-card-background=aurora-curtains]>i:nth-child(2){background:repeating-conic-gradient(from -12deg at 50% 100%,transparent 0deg 18deg,var(--ui-bg-b) 23deg,transparent 31deg 48deg);opacity:.65}
+[data-ui-card-background=aurora-curtains]>i:nth-child(3){background:radial-gradient(ellipse at 90% 0,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=aurora-horizon]>i{inset:35% -25% -65%;border-radius:50%;background:radial-gradient(ellipse at 50% 50%,transparent 36%,var(--ui-bg-a) 43%,transparent 55%);filter:blur(9px);animation:ui-bg-horizon 28s ease-in-out infinite alternate}
+[data-ui-card-background=aurora-horizon]>i:nth-child(2){inset:20% -30% -80%;background:radial-gradient(ellipse,transparent 40%,var(--ui-bg-b) 46%,transparent 56%)}
+[data-ui-card-background=aurora-horizon]>i:nth-child(3){inset:50% -20% -50%;background:radial-gradient(ellipse,transparent 35%,var(--ui-bg-c) 45%,transparent 55%)}
+[data-ui-card-background=ribbon-pleats]>i{height:110%;top:5%;border-top:1px solid var(--ui-bg-a);background:repeating-linear-gradient(180deg,var(--ui-bg-a) 0,transparent 9px 23px,var(--ui-bg-b) 24px,transparent 25px 48px);opacity:.65;animation:ui-bg-pleats 28s ease-in-out infinite alternate}
+[data-ui-card-background=ribbon-pleats]>i:nth-child(2){top:20%;background:repeating-linear-gradient(180deg,var(--ui-bg-b),transparent 12px 32px);opacity:.35}
+[data-ui-card-background=ribbon-pleats]>i:nth-child(3){display:none}
+[data-ui-card-background=ribbon-sweep]>i{width:175%;height:70%;left:-30%;top:-10%;border-radius:45%;transform:rotate(35deg);background:linear-gradient(180deg,var(--ui-bg-a),transparent 75%);animation:ui-bg-sweep 25s ease-in-out infinite alternate}
+[data-ui-card-background=ribbon-sweep]>i:nth-child(2){top:60%;transform:rotate(-30deg);background:linear-gradient(180deg,var(--ui-bg-b),transparent 75%);animation-direction:alternate-reverse}
+[data-ui-card-background=ribbon-sweep]>i:nth-child(3){display:none}
+[data-ui-card-background=isobars-stream]>svg{width:140%;left:-20%;opacity:.45;animation:ui-bg-stream 30s ease-in-out infinite alternate}
+[data-ui-card-background=isobars-stream] path{stroke-width:.8}
+[data-ui-card-background=isobars-stream] path:nth-child(2n){stroke-width:2;stroke-dasharray:100 400;animation:ui-bg-jetstream 21s linear infinite}
+[data-ui-card-background=isobars-vortex]>svg{inset:-15%;width:130%;height:130%;transform-origin:70% 50%;animation:ui-bg-vortex 38s ease-in-out infinite alternate}
+[data-ui-card-background=isobars-vortex] path:nth-child(2n){stroke-dasharray:55 360;animation-duration:26s}
+[data-ui-card-background=ink-marble]>i{inset:-50%;width:auto;height:auto;border-radius:40%;filter:blur(5px);background:repeating-conic-gradient(from 35deg at 65% 40%,transparent 0deg 20deg,var(--ui-bg-a) 24deg,transparent 30deg 44deg,var(--ui-bg-b) 47deg,transparent 53deg 85deg);animation:ui-bg-marble 35s ease-in-out infinite alternate}
+[data-ui-card-background=ink-marble]>i:nth-child(2){inset:-20%;background:repeating-conic-gradient(from 150deg at 70% 50%,transparent 0deg 35deg,var(--ui-bg-c) 40deg,transparent 47deg 90deg);opacity:.5}
+[data-ui-card-background=ink-marble]>i:nth-child(3){display:none}
+[data-ui-card-background=ink-bloom]>i{width:85%;height:110%;left:30%;top:-30%;border-radius:60% 40% 65% 35%;filter:blur(7px);background:radial-gradient(ellipse at 60% 50%,var(--ui-bg-a),transparent 65%);animation:ui-bg-bloom 24s ease-in-out infinite alternate}
+[data-ui-card-background=ink-bloom]>i:nth-child(2){left:0;top:25%;background:radial-gradient(ellipse,var(--ui-bg-b),transparent 65%);animation-direction:alternate-reverse}
+[data-ui-card-background=ink-bloom]>i:nth-child(3){left:60%;top:10%;background:radial-gradient(ellipse,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=hologram-dots]>i:first-child{background:radial-gradient(circle,var(--ui-bg-a) 1.4px,transparent 2px) 0 0/24px 24px;transform:rotateX(45deg) rotateZ(-12deg);animation:ui-bg-dots 30s linear infinite}
+[data-ui-card-background=hologram-dots]>i:nth-child(2){background:radial-gradient(ellipse at 60% 50%,var(--ui-bg-b),transparent 55%);animation-duration:20s}
+[data-ui-card-background=hologram-hex]>i:first-child{display:none}
+[data-ui-card-background=hologram-hex]>svg{position:absolute;inset:-10%;width:120%;height:120%;fill:none;stroke:var(--ui-bg-1);stroke-width:.8;opacity:.45;animation:ui-bg-hex 32s ease-in-out infinite alternate}
+[data-ui-card-background=hologram-hex] path:nth-child(3n){stroke:var(--ui-bg-2)}
+[data-ui-card-background=hologram-hex]>i:nth-child(2){inset:-50%;background:linear-gradient(120deg,transparent 40%,var(--ui-bg-c) 50%,transparent 60%);animation:ui-bg-hexscan 26s ease-in-out infinite alternate}
+/* Five new patterns. */
+[data-ui-card-background=caustics]>svg{position:absolute;inset:-15%;width:130%;height:130%;fill:none;stroke:var(--ui-bg-1);stroke-width:1.3;opacity:.4;animation:ui-bg-caustics 27s ease-in-out infinite alternate}
+[data-ui-card-background=caustics] path:nth-child(3n){stroke:var(--ui-bg-2);stroke-width:2}
+[data-ui-card-background=caustics]>i{inset:-20%;background:radial-gradient(ellipse at 80% 10%,var(--ui-bg-c),transparent 65%);animation:ui-bg-clouds 32s ease-in-out infinite alternate}
+[data-ui-card-background=caustics]>i:not(:first-child){display:none}
+[data-ui-card-background=stardrift]>b{position:absolute;width:2px;height:2px;border-radius:50%;background:var(--ui-bg-1);animation:ui-bg-stardrift 22s linear infinite}
+[data-ui-card-background=stardrift]>b::before{content:'';position:absolute;width:52px;height:1px;left:0;top:0;transform-origin:left;transform:rotate(35deg);background:linear-gradient(90deg,transparent,var(--ui-bg-2))}
+[data-ui-card-background=stardrift]>b:nth-of-type(3n){animation-duration:31s;opacity:.5}
+[data-ui-card-background=stardrift]>i{inset:0;background:radial-gradient(ellipse at 80% 0,var(--ui-bg-c),transparent 70%)}
+[data-ui-card-background=stardrift]>i:not(:first-child){display:none}
+[data-ui-card-background=dunes]>i{width:160%;height:95%;left:-25%;top:65%;border-radius:55% 65% 0 0;transform:rotate(-12deg);background:linear-gradient(var(--ui-bg-a),transparent 80%);animation:ui-bg-dunes 32s ease-in-out infinite alternate}
+[data-ui-card-background=dunes]>i:nth-child(2){top:48%;left:10%;transform:rotate(14deg);background:linear-gradient(var(--ui-bg-b),transparent 75%);animation-direction:alternate-reverse}
+[data-ui-card-background=dunes]>i:nth-child(3){top:80%;left:-50%;background:linear-gradient(var(--ui-bg-c),transparent 75%)}
+[data-ui-card-background=moire]>i{inset:-80%;background:repeating-linear-gradient(90deg,transparent 0 7px,var(--ui-bg-a) 7.5px,transparent 8px 15px);transform:rotate(25deg);opacity:.45;animation:ui-bg-weave 40s ease-in-out infinite alternate}
+[data-ui-card-background=moire]>i:nth-child(2){background:repeating-linear-gradient(90deg,transparent 0 9px,var(--ui-bg-b) 9.5px,transparent 10px 19px);transform:rotate(-18deg);animation-direction:alternate-reverse}
+[data-ui-card-background=moire]>i:nth-child(3){inset:0;background:radial-gradient(ellipse at 90% 20%,var(--ui-bg-c),transparent 65%);opacity:.6;animation:ui-bg-drift 30s ease-in-out infinite alternate}
+[data-ui-card-background=constellation]>svg{position:absolute;inset:0;width:100%;height:100%;fill:none;stroke:var(--ui-bg-1);stroke-width:.8;opacity:.6}
+[data-ui-card-background=constellation] path{stroke-dasharray:80 200;animation:ui-bg-network 24s linear infinite}
+[data-ui-card-background=constellation] circle{fill:var(--ui-bg-2);stroke:none;animation:ui-bg-star 8s ease-in-out infinite alternate}
+[data-ui-card-background=constellation]>i{inset:0;background:radial-gradient(ellipse at 80% 40%,var(--ui-bg-c),transparent 65%)}
+[data-ui-card-background=constellation]>i:not(:first-child){display:none}
+@keyframes ui-bg-curtains{to{transform:translate(8%,6%) skewX(12deg) scale(1.1)}}
+@keyframes ui-bg-horizon{to{transform:translate(-5%,-15%) scale(1.15,.9)}}
+@keyframes ui-bg-pleats{to{transform:translate(4%,8%) rotate(-6deg) scaleY(.9)}}
+@keyframes ui-bg-sweep{to{transform:translate(10%,15%) rotate(15deg)}}
+@keyframes ui-bg-stream{to{transform:translate(7%,-6%) rotate(4deg)}}
+@keyframes ui-bg-jetstream{to{stroke-dashoffset:-500}}
+@keyframes ui-bg-vortex{to{transform:rotate(20deg) scale(.95)}}
+@keyframes ui-bg-marble{to{transform:rotate(25deg) scale(1.15,.9);border-radius:60% 40% 50% 50%}}
+@keyframes ui-bg-bloom{to{transform:translate(-10%,12%) scale(1.2,.8);border-radius:35% 65% 40% 60%}}
+@keyframes ui-bg-dots{from{transform:rotateX(45deg) rotateZ(-12deg) translateY(-24px)}to{transform:rotateX(45deg) rotateZ(-12deg) translateY(0)}}
+@keyframes ui-bg-hex{to{transform:translate(-5%,8%) rotate(6deg)}}
+@keyframes ui-bg-hexscan{to{transform:translate(20%,-5%)}}
+@keyframes ui-bg-caustics{to{transform:translate(4%,5%) scale(1.12,.88) skewX(8deg)}}
+@keyframes ui-bg-stardrift{from{transform:translate(50px,35px);opacity:0}20%{opacity:.8}80%{opacity:.6}to{transform:translate(-100px,-70px);opacity:0}}
+@keyframes ui-bg-dunes{to{transform:translate(8%,-6%) rotate(-3deg)}}
+@keyframes ui-bg-weave{to{transform:translate(3%,2%) rotate(8deg)}}
+@keyframes ui-bg-network{to{stroke-dashoffset:-280}}
+
+@keyframes ui-bg-drift{to{transform:translate(8%,12%) rotate(10deg) scale(1.12)}}
+@keyframes ui-bg-star{from{opacity:.15}to{opacity:.85}}
+@keyframes ui-bg-lanes{to{transform:translate(12%,-12%)}}
+@keyframes ui-bg-orbit{to{transform:translate(-12%,18%) rotate(25deg)}}
+@keyframes ui-bg-ribbon{to{transform:translate(5%,12%) rotate(5deg)}}
+@keyframes ui-bg-clouds{to{transform:translate(15%,-10%) scale(1.2)}}
+@keyframes ui-bg-front{to{stroke-dashoffset:-260}}
+@keyframes ui-bg-grid{from{transform:rotateX(50deg) translateY(-36px)}to{transform:rotateX(50deg) translateY(0)}}
+@keyframes ui-bg-scan{to{transform:translateY(25%)}}
+@keyframes ui-bg-ink{to{transform:translate(15%,10%) rotate(40deg) scale(1.18);border-radius:64% 36% 35% 65%}}
+@keyframes ui-bg-terrain{to{transform:translate(5%,8%) rotate(18deg) scale(1.08)}}
+[data-ui-card-background][data-animated=false],[data-ui-card-background][data-animated=false] *{animation:none!important}
+[data-ui-card-background][data-motion-paused],[data-ui-card-background][data-motion-paused] *{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){[data-ui-card-background],[data-ui-card-background] *{animation:none!important}}
+`;}
+// Observe a stable card container, so re-rendering its decorative layer is safe.
+function observeCardBackgroundMotion(container){
+ const doc=container?.ownerDocument;if(!doc)return ()=>{};
+ let visible=true;
+ const update=()=>{for(const layer of (container.shadowRoot??container).querySelectorAll('[data-ui-card-background]'))layer.toggleAttribute('data-motion-paused',doc.hidden||!visible);};
+ const Observer=doc.defaultView?.IntersectionObserver;
+ const observer=Observer?new Observer(entries=>{visible=entries.some(entry=>entry.isIntersecting);update();}):null;
+ observer?.observe(container);doc.addEventListener('visibilitychange',update);update();
+ return ()=>{observer?.disconnect();doc.removeEventListener('visibilitychange',update);};
+}
+
+
+
+// Retain legacy YAML when the new object is absent. Unsupported legacy designs
+// continue to use their original renderer until the user chooses a shared style.
+function cardBackgroundSettings(config={}){
+ const input=config.card_background;
+ if(input===false)return {...normalizeCardBackground({variant:'isobars',coverage:'header'}),enabled:false,legacy:false};
+ if(input&&typeof input==='object'&&!Array.isArray(input))return {...normalizeCardBackground({variant:'isobars',coverage:'header',...input}),enabled:input.enabled!==false,legacy:false};
+ const legacy=typeof config.background==='string'&&!CARD_BACKGROUNDS.some(row=>row.value===config.background)&&config.background!=='none';
+ const strength=Number(config.background_strength);
+ return {...normalizeCardBackground({variant:config.background??'isobars',coverage:'header',transparency:config.background_strength!=null&&Number.isFinite(strength)?100-strength:65,animated:config.animate_background!==false}),enabled:config.background!=='none',legacy};
+}
+
+const cardBackgroundHostStyles=uiCardBackgroundStyles()+`
+[data-ui-background-host] :is(.header-background,.scene-background){display:none!important}
+`;
+
+// Wrap registrations rather than replacing each card's renderer. The original
+// class retains its DOM patching, subscriptions, action handlers and editor.
+const withCardBackground=Base=>class extends Base{
+ static get backgroundBaseCard(){return Base;}
+ set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
+ get hass(){return super.hass;}
+ setConfig(config){
+  this._captureElevenBackgroundPlayback();
+  super.setConfig(config);
+  this._elevenBackgroundConfig={...config};
+  this._syncElevenBackground();
+ }
+ connectedCallback(){
+  super.connectedCallback?.();
+  this._elevenBackgroundObserver?.disconnect();
+  const root=this.shadowRoot;
+  if(root&&globalThis.MutationObserver){
+   this._elevenBackgroundObserver=new MutationObserver(()=>this._syncElevenBackground());
+   // Attribute changes include live status/theme changes in patched card DOM.
+   this._elevenBackgroundObserver.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['data-kind','data-tone','data-state','data-dark','data-theme','data-color']});
+  }
+  this._syncElevenBackground();
+ }
+ disconnectedCallback(){
+  this._captureElevenBackgroundPlayback();
+  this._elevenBackgroundObserver?.disconnect();this._elevenBackgroundObserver=null;
+  this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  super.disconnectedCallback?.();
+ }
+ setCardBackground(background){
+  this._elevenBackgroundConfig={...this._elevenBackgroundConfig,card_background:background};this._syncElevenBackground();
+ }
+ // Capture before native renderers replace their DOM, including timer updates.
+ _render(...args){this._captureElevenBackgroundPlayback();const result=super._render?.(...args);this._syncElevenBackground();return result;}
+ render(...args){this._captureElevenBackgroundPlayback();const result=super.render?.(...args);this._syncElevenBackground();return result;}
+ _captureElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer;if(!layer?.isConnected)return;
+  const animations=(layer.getAnimations?.({subtree:true})??[]).filter(animation=>Number.isFinite(animation.currentTime));
+  if(!animations.length)return;
+  this._elevenBackgroundPlayback={variant:layer.getAttribute('data-ui-card-background'),at:layer.ownerDocument.timeline?.currentTime??0,animations:animations.map(animation=>({name:animation.animationName,time:animation.currentTime,running:animation.playState==='running'}))};
+ }
+ _restoreElevenBackgroundPlayback(){
+  const layer=this._elevenBackgroundLayer,saved=this._elevenBackgroundPlayback;
+  if(!saved||!layer||saved.variant!==layer.getAttribute('data-ui-card-background'))return;
+  const elapsed=Math.max(0,(layer.ownerDocument.timeline?.currentTime??saved.at)-saved.at),remaining=[...saved.animations];
+  for(const animation of layer.getAnimations?.({subtree:true})??[]){
+   const index=remaining.findIndex(item=>item.name===animation.animationName);if(index<0)continue;
+   const item=remaining.splice(index,1)[0];animation.currentTime=item.time+(item.running?elapsed:0);
+  }
+ }
+ _syncElevenBackground(){
+  const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
+  const settings=cardBackgroundSettings(this._elevenBackgroundConfig);
+  if(settings.legacy){
+   host.removeAttribute('data-ui-background-host');
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
+  host.setAttribute('data-ui-background-host','');
+  if(!root.querySelector('style[data-ui-background-styles]')){
+   const style=document.createElement('style');style.dataset.uiBackgroundStyles='';style.textContent=cardBackgroundHostStyles;root.append(style);
+  }
+  const hass=this._hass??this.hass,entity=this._elevenBackgroundConfig.entity??this._elevenBackgroundConfig.percentage_entity;
+  const unavailable=['unknown','unavailable'].includes(hass?.states?.[entity]?.state);
+  const background={...settings,animated:settings.animated&&hass?.connected!==false&&hass?.connection?.connected!==false&&!unavailable};
+  // Cards already own their state-to-tone mapping. Read only their computed,
+  // hex-valued tone, never configuration or sensor text as a CSS fragment.
+  const content=host.querySelector('.content,[data-tone],.room')??host;
+  const statusColor=this.cardBackgroundStatusColor?.()??globalThis.getComputedStyle?.(content).getPropertyValue('--tone').trim();
+  const signature=JSON.stringify([background,statusColor]);
+  if(this._elevenBackgroundLayer?.parentNode===host&&this._elevenBackgroundSignature===signature){
+   if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);return;
+  }
+  this._captureElevenBackgroundPlayback();
+  this._elevenBackgroundSignature=signature;
+  if(!settings.enabled){
+   this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;return;
+  }
+  const template=document.createElement('template');template.innerHTML=uiCardBackground(background,{statusColor});
+  const next=template.content.firstElementChild,previous=this._elevenBackgroundLayer;
+  // Keep the decorative nodes when colours, coverage or native content change.
+  const reuse=previous?.getAttribute('data-ui-card-background')===background.variant;
+  if(reuse){
+   for(const attribute of next.attributes)if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+  }else{
+   previous?.remove();this._elevenBackgroundLayer=next;
+   this._elevenBackgroundMotion?.();this._elevenBackgroundMotion=null;
+  }
+  if(this._elevenBackgroundLayer.parentNode!==host)host.prepend(this._elevenBackgroundLayer);
+  this._restoreElevenBackgroundPlayback();
+  if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
+ }
+ static async getConfigElement(){
+  if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
+  const editor=document.createElement('eleven-card-background-editor');
+  if(super.getConfigElement)editor.nativeEditor=await super.getConfigElement();
+  else if(super.getConfigForm){
+   if(!customElements.get('ha-form')&&window.loadCardHelpers){
+    const helpers=await window.loadCardHelpers(),entities=await helpers.createCardElement({type:'entities',entities:[]});
+    await entities.constructor.getConfigElement();await customElements.whenDefined('ha-form');
+   }
+   editor.nativeForm=super.getConfigForm();
+  }
+  return editor;
+ }
+};
+
+// Hide superseded fields in native forms while keeping all other schema data.
+function cardBackgroundEditorSchema(schema){
+ if(!Array.isArray(schema))return schema;
+ let changed=false;const result=[];
+ for(const field of schema){
+  if(['background','background_strength','animate_background'].includes(field.name)){changed=true;continue;}
+  const children=cardBackgroundEditorSchema(field.schema);
+  if(children!==field.schema){result.push({...field,schema:children});changed=true;}else result.push(field);
+ }
+ return changed?result:schema;
+}
+
+class ElevenCardBackgroundEditor extends HTMLElement{
+ constructor(){
+  super();this.attachShadow({mode:'open'});
+  this.shadowRoot.innerHTML=`<style>
+:host{display:block;color:var(--primary-text-color);font:inherit}details{border:1px solid var(--divider-color,#ddd);border-radius:8px;margin:0 0 16px}summary{cursor:pointer;min-height:44px;box-sizing:border-box;padding:12px 16px;font-weight:500}.settings{display:grid;gap:12px;padding:0 16px 16px}label{display:flex;flex-direction:column;gap:6px;font-size:14px}label.check{flex-direction:row;align-items:center;min-height:44px}input,select{font:inherit;color:inherit;box-sizing:border-box;max-width:100%;min-height:44px;border:1px solid var(--divider-color,#ddd);border-radius:8px;background:var(--card-background-color,#fff);padding:8px}input[type=checkbox]{min-height:20px;width:20px;height:20px;accent-color:var(--accent-color,var(--primary-color))}input[type=range]{width:100%;accent-color:var(--accent-color,var(--primary-color));padding:0;border:0}input[type=color]{width:64px;padding:4px}.colors{display:flex;gap:8px;flex-wrap:wrap}.help{color:var(--secondary-text-color);font-size:12px;margin:0;line-height:1.5}input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}[hidden]{display:none!important}
+</style><details><summary></summary><div class="settings"></div></details><div class="native"></div>`;
+  this.shadowRoot.addEventListener('change',event=>this._changeBackground(event));
+  this.shadowRoot.addEventListener('config-changed',event=>{
+   if(event.target===this)return;
+   event.stopPropagation();
+   const background=this._config?.card_background;
+   // Native editors emit a complete replacement, including deleted fields.
+   // Retain only the setting owned by this wrapper, never old native keys.
+   this._config={...event.detail.config};
+   if(background!==undefined)this._config.card_background=background;
+   this._syncNativeBackgroundFields();this._emitBackgroundConfig();
+  });
+ }
+ connectedCallback(){this._observeNativeBackgroundFields();}
+ disconnectedCallback(){this._nativeBackgroundObserver?.disconnect();this._nativeBackgroundObserver=null;}
+ _observeNativeBackgroundFields(){
+  this._nativeBackgroundObserver?.disconnect();
+  if(this.isConnected&&this._nativeEditor?.shadowRoot&&globalThis.MutationObserver){
+   this._nativeBackgroundObserver=new MutationObserver(()=>this._syncNativeBackgroundFields());
+   this._nativeBackgroundObserver.observe(this._nativeEditor.shadowRoot,{childList:true,subtree:true});
+  }
+  this._syncNativeBackgroundFields();
+ }
+ _syncNativeBackgroundFields(){
+  if(!this._config)return;
+  const legacy=cardBackgroundSettings(this._config).legacy;this._nativeBackgroundSchemas??=new WeakMap();
+  const forms=this._nativeEditor?.shadowRoot?.querySelectorAll('ha-form')??[];
+  for(const form of [...forms,...(this._nativeEditor?.tagName==='HA-FORM'?[this._nativeEditor]:[])]){
+   const saved=this._nativeBackgroundSchemas.get(form);
+   if(legacy){if(saved&&form.schema===saved.filtered)form.schema=saved.original;continue;}
+   if(saved&&form.schema===saved.filtered)continue;
+   const filtered=cardBackgroundEditorSchema(form.schema);
+   if(filtered!==form.schema){this._nativeBackgroundSchemas.set(form,{original:form.schema,filtered});form.schema=filtered;}
+  }
+ }
+ set nativeEditor(editor){this._nativeEditor=editor;this.shadowRoot.querySelector('.native').replaceChildren(editor);if(this._hass)editor.hass=this._hass;if(this._config)editor.setConfig(this._config);this._observeNativeBackgroundFields();}
+ set nativeForm(form){
+  // Cards using Home Assistant's schema-only editor retain all native fields.
+  const editor=document.createElement('ha-form');editor.schema=form.schema;editor.computeLabel=form.computeLabel;editor.computeHelper=form.computeHelper;
+  editor.setConfig=config=>{editor.data=config;};
+  editor.addEventListener('value-changed',event=>{event.stopPropagation();this._config={...this._config,...event.detail.value};this._emitBackgroundConfig();});
+  this.nativeEditor=editor;
+ }
+ setConfig(config){this._config={...config};this._nativeEditor?.setConfig(config);this._renderBackgroundSettings();this._syncNativeBackgroundFields();}
+ set hass(hass){const changed=this._language!==String(hass?.locale?.language??hass?.language??'en').slice(0,2);this._hass=hass;this._language=String(hass?.locale?.language??hass?.language??'en').slice(0,2);if(this._nativeEditor)this._nativeEditor.hass=hass;if(changed)this._renderBackgroundSettings();this._syncNativeBackgroundFields();}
+ get hass(){return this._hass;}
+ _emitBackgroundConfig(){this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:{...this._config}},bubbles:true,composed:true}));}
+ _renderBackgroundSettings(){
+  if(!this._config)return;
+  const nl=this._language==='nl',s=cardBackgroundSettings(this._config),t=(d,e)=>nl?d:e;
+  const choices=['aurora','ribbon','isobars','ink-bloom','hologram'].map(value=>CARD_BACKGROUNDS.find(row=>row.value===value));
+  if(!s.legacy&&!choices.some(row=>row.value===s.variant))choices.push(CARD_BACKGROUNDS.find(row=>row.value===s.variant));
+  this.shadowRoot.querySelector('summary').textContent=t('Kaartachtergrond','Card background');
+  const pickerColor=index=>{const color=(s.colors.length?s.colors[index%s.colors.length]:['#4db6ac','#7287ed','#c77dbd'][index]);return color.length<=5?'#'+color.slice(1,4).split('').map(c=>c+c).join(''):color.slice(0,7);};
+  const option=(value,label,selected)=>`<option value="${uiEscape(value)}"${selected?' selected':''}>${uiEscape(label)}</option>`;
+  this.shadowRoot.querySelector('.settings').innerHTML=`
+<label class="check"><input data-bg="enabled" type="checkbox"${s.enabled?' checked':''}>${t('Achtergrond tonen','Show background')}</label>
+<label>${t('Weergave','Style')}<select data-bg="variant">${s.legacy?option('legacy',t('Bestaande achtergrond','Existing background'),true):''}${choices.map(row=>option(row.value,row.label,!s.legacy&&s.variant===row.value)).join('')}</select></label>
+<label>${t('Kleurbron','Colour source')}<select data-bg="colorMode">${[['accent',t('Home Assistant-accent','Home Assistant accent')],['custom',t('Eigen kleuren','Custom colours')],['dynamic',t('Statuskleur van de kaart','Card status colour')]].map(([v,l])=>option(v,l,s.colorMode===v)).join('')}</select></label>
+<div class="colors" data-colors${s.colorMode!=='custom'?' hidden':''}>${[0,1,2].map((i)=>`<label>${t('Kleur','Colour')} ${i+1}<input type="color" data-bg="color-${i}" value="${uiEscape(pickerColor(i))}"></label>`).join('')}</div>
+<label>${t('Transparantie','Transparency')} <span><output>${s.transparency}%</output><input data-bg="transparency" type="range" min="0" max="100" value="${s.transparency}"></span></label>
+<label>${t('Bereik','Coverage')}<select data-bg="coverage">${option('card',t('Hele kaart','Whole card'),s.coverage==='card')}${option('header',t('Bovenste strook','Top section'),s.coverage==='header')}</select></label>
+<label data-height${s.coverage!=='header'?' hidden':''}>${t('Hoogte (px)','Height (px)')}<input data-bg="height" type="number" min="24" max="2000" step="1" value="${s.height}"></label>
+<p class="help">${t('De bovenste strook vloeit onderaan zacht uit. Dynamische kleuren volgen de kaartstatus wanneer de kaart die aanbiedt.','The top section fades smoothly at the bottom. Dynamic colours follow the card status when available.')}</p>
+<label class="check"><input data-bg="animated" type="checkbox"${s.animated?' checked':''}>${t('Achtergrond animeren','Animate background')}</label>`;
+ }
+ _changeBackground(event){
+  const field=event.target.dataset.bg;if(!field)return;
+  const current=cardBackgroundSettings(this._config),next={...current};delete next.legacy;
+  if(field.startsWith('color-'))next.colors=[...this.shadowRoot.querySelectorAll('input[type=color]')].map(input=>input.value);
+  else next[field]=event.target.type==='checkbox'?event.target.checked:['height','transparency'].includes(field)?Number(event.target.value):event.target.value;
+  if(field==='colorMode'&&next.colorMode==='custom'&&!next.colors.length)next.colors=[...this.shadowRoot.querySelectorAll('input[type=color]')].map(input=>input.value);
+  this._config={...this._config,card_background:{...normalizeCardBackground(next),enabled:next.enabled}};
+  if(current.legacy){this.shadowRoot.querySelector('option[value=legacy]')?.remove();this.shadowRoot.querySelector('[data-bg=variant]').value=next.variant;}
+  if(field==='height')event.target.value=this._config.card_background.height;
+  // Update dependent controls without replacing the focused control.
+  this.shadowRoot.querySelector('[data-colors]').hidden=next.colorMode!=='custom';
+  this.shadowRoot.querySelector('[data-height]').hidden=next.coverage!=='header';
+  this.shadowRoot.querySelector('output').textContent=this._config.card_background.transparency+'%';
+  this._syncNativeBackgroundFields();this._emitBackgroundConfig();
+ }
+}
+
+
+const barBounds=(min,max)=>Number.isFinite(min)&&Number.isFinite(max)&&max>min?{min,max}:{min:0,max:100};
+const barPercent=(value,min,max)=>Math.max(0,Math.min(100,(value-min)/(max-min)*100));
+
+// All text/attributes are escaped; only finite measurements become fill widths.
+function uiBar({value=null,min=0,max=100,target=null,charging=false,label='',valueText='',decorative=false,attrs={}}={}){
+ ({min,max}=barBounds(min,max));
+ const known=Number.isFinite(value),amount=known?Math.max(min,Math.min(max,value)):null;
+ const percent=known?barPercent(amount,min,max):0,marker=Number.isFinite(target)?barPercent(target,min,max):null;
+ const active=!!charging&&known&&amount<max&&(!Number.isFinite(target)||amount<target);
+ return `<div${uiAttributes({...attrs,'data-ui-bar':'','data-charging':String(active),'data-unavailable':String(!known),...(decorative?{'aria-hidden':'true'}:{'aria-label':label,...(known?{role:'progressbar','aria-valuemin':min,'aria-valuemax':max,'aria-valuenow':amount,...(valueText?{'aria-valuetext':valueText}:{})}:{})})})}><span class="ui-bar-fill" style="width:${percent}%">${active?'<span class="ui-bar-motion" aria-hidden="true"></span>':''}</span>${marker==null?'':`<span class="ui-bar-marker" style="left:${marker}%" aria-hidden="true"></span>`}</div>`;
+}
+
+function uiSlider({value=0,min=0,max=100,step=1,disabled=false,attrs={}}={}){
+ ({min,max}=barBounds(min,max));
+ const amount=Number.isFinite(value)?Math.max(min,Math.min(max,value)):min;
+ return `<input${uiAttributes({...attrs,type:'range','data-ui-slider':'',min,max,step:Number.isFinite(step)&&step>0?step:1,value:amount,...(disabled?{disabled:true}:{}),style:(attrs.style?attrs.style+';':'')+`--ui-bar-position:${barPercent(amount,min,max)}%`})}>`;
+}
+
+// Call alongside existing input handlers; never sends a command or replaces events.
+function syncUISlider(input){
+ const min=Number(input.min),max=Number(input.max),value=Number(input.value);
+ input.style.setProperty('--ui-bar-position',Number.isFinite(value)&&Number.isFinite(min)&&Number.isFinite(max)&&max>min?barPercent(value,min,max)+'%':'0%');
+}
+
+function uiBarStyles(){return `
+[data-ui-bar]{--_bar-tone:var(--ui-bar-tone,var(--accent-color,var(--primary-color,#2196f3)));position:relative;box-sizing:border-box;display:block;min-width:0;width:100%;height:var(--ui-bar-height,12px);border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%),inset -1px -1px 0 rgb(255 255 255 / 20%));isolation:isolate}
+[data-ui-bar]>.ui-bar-fill{display:block;position:relative;overflow:hidden;isolation:isolate;height:100%;border-radius:inherit;background:var(--_bar-tone);box-shadow:inset 0 1px 0 #ffffff30}
+[data-ui-bar]>.ui-bar-marker{position:absolute;top:-5px;width:2px;height:calc(100% + 10px);transform:translateX(-50%);max-width:100%;border-radius:2px;background:var(--primary-text-color,#20252b);pointer-events:none}
+[data-ui-bar]>.ui-bar-marker[style*="left:0%"]{transform:none}
+[data-ui-bar]>.ui-bar-marker[style*="left:100%"]{transform:translateX(-100%)}
+[data-ui-bar] .ui-bar-motion{position:absolute;inset:0 auto 0 0;width:65%;pointer-events:none;background:linear-gradient(90deg,transparent,#ffffff4d 50%,transparent);animation:ui-bar-charge var(--ui-bar-duration,3.8s) linear infinite;animation-delay:var(--ui-bar-delay,0s)}
+@keyframes ui-bar-charge{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
+input[data-ui-slider]{--_bar-tone:var(--ui-bar-tone,var(--accent-color,var(--primary-color,#2196f3)));box-sizing:border-box;appearance:none;-webkit-appearance:none;display:block;width:100%;height:44px;min-height:44px;min-width:0;margin:0;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);cursor:pointer;touch-action:pan-y}
+input[data-ui-slider]::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:linear-gradient(var(--_bar-tone),var(--_bar-tone)) 0 / var(--ui-bar-position,0%) 100% no-repeat,var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%))}
+input[data-ui-slider]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:18px;height:18px;margin-top:-3px;border-radius:50%;border:2px solid var(--card-background-color,#fff);background:var(--_bar-tone);box-shadow:0 0 0 1px var(--_bar-tone)}
+input[data-ui-slider]::-moz-range-track{height:12px;border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%))}
+input[data-ui-slider]::-moz-range-progress{height:12px;border-radius:999px;background:var(--_bar-tone)}
+input[data-ui-slider]::-moz-range-thumb{box-sizing:border-box;width:18px;height:18px;border-radius:50%;border:2px solid var(--card-background-color,#fff);background:var(--_bar-tone);box-shadow:0 0 0 1px var(--_bar-tone)}
+input[data-ui-slider]:focus-visible{outline:2px solid var(--_bar-tone);outline-offset:3px}
+input[data-ui-slider]:disabled{opacity:.45;cursor:default}
+@media(prefers-reduced-motion:reduce){[data-ui-bar] .ui-bar-motion{display:none;animation:none}}
+@media(forced-colors:active){[data-ui-bar]{background:Canvas;border:1px solid CanvasText;box-shadow:none}[data-ui-bar]>.ui-bar-fill{background:Highlight;box-shadow:none;forced-color-adjust:none}[data-ui-bar]>.ui-bar-marker{background:CanvasText}[data-ui-bar] .ui-bar-motion{display:none}input[data-ui-slider]{appearance:auto;accent-color:Highlight}}
+`;}
+
+
 // The caller formats measurements and translates the subtitle. All text is escaped.
-function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',attrs={}}={}){
+function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',layout='',unitPosition='raised',attrs={}}={}){
  const missing=value==null||value==='';
  const number=uiEscape(missing?'—':value);
  const label=subtitle!==''&&subtitle!=null?(subtitleEntity?`<button type="button" class="primary-label" data-entity="${uiEscape(subtitleEntity)}">${uiEscape(subtitle)}</button>`:`<div class="primary-label">${uiEscape(subtitle)}</div>`):'';
- return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
+ return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing),'data-primary-layout':layout==='uniform'?'uniform':null,'data-unit-position':layout==='uniform'&&['raised','baseline','center'].includes(unitPosition)?unitPosition:null})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
 }
 
 function uiPrimaryValueStyles(){return `
-[data-ui-primary-value]{--_primary-tone:var(--ui-primary-tone,var(--tone,var(--primary-color,#2196f3)));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-primary-value]{--_primary-tone:var(--accent-color,var(--primary-color,#2196f3));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
 [data-ui-primary-value] .primary-value{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin:0;font-size:var(--ui-primary-size,60px);line-height:1.15;font-weight:650;letter-spacing:-.055em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 [data-ui-primary-value] .primary-number{display:block;min-width:0;max-width:100%;overflow-wrap:anywhere}
 [data-ui-primary-value] button.primary-number{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}[data-ui-primary-value] button:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px;border-radius:3px}
 [data-ui-primary-value] .primary-value small{display:block;margin:8px 0 0;font-size:var(--ui-primary-unit-size,16px);line-height:1.4;font-weight:400;letter-spacing:-.03em;color:var(--secondary-text-color,#626a78)}
-[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid color-mix(in srgb,var(--_primary-tone) 55%,transparent);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
-[data-ui-primary-value] button.primary-label{display:block;max-width:100%;min-height:0;margin-bottom:0;padding-block:0;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
+[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid var(--_primary-tone);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-label{display:flex;align-items:center;box-sizing:border-box;max-width:100%;min-width:44px;min-height:44px;margin-bottom:0;padding-block:6px;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
 [data-ui-primary-value][data-density=compact] .primary-value{font-size:var(--ui-primary-size,46px)}
 [data-ui-primary-value][data-density=compact] .primary-value small{font-size:var(--ui-primary-unit-size,14px);margin-top:5px}
+/* One opt-in composition owns value, unit and subtitle geometry for all cards. */
+[data-ui-primary-value][data-primary-layout=uniform]{--ui-primary-size:44px;--ui-primary-unit-size:16px}
+[data-ui-primary-value][data-primary-layout=uniform][data-density=compact]{--ui-primary-size:36px;--ui-primary-unit-size:14px}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-value{display:flex;align-items:flex-start;flex-wrap:nowrap;gap:6px;min-height:44px;font-size:var(--ui-primary-size);line-height:1.1;font-weight:650;letter-spacing:-.035em;white-space:nowrap;overflow-wrap:normal}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-number{display:block;min-width:0;min-height:0;max-width:none;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+[data-ui-primary-value][data-primary-layout=uniform] button.primary-number{min-height:44px}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-value small{flex:none;margin:6px 0 0;font-size:var(--ui-primary-unit-size);line-height:1.4;letter-spacing:0;white-space:nowrap}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=baseline] .primary-value{align-items:baseline}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=baseline] .primary-value small{margin:0}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=center] .primary-value{align-items:center}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=center] .primary-value small{margin:0}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-label{position:relative;display:flex;align-items:flex-start;box-sizing:border-box;min-width:0;min-height:44px;max-width:100%;margin:2px 0 0;padding:0 0 0 8px;border:0;border-radius:0;background:none;font-family:inherit;font-size:12px;font-weight:400;line-height:1.4;letter-spacing:0;color:var(--secondary-text-color,#626a78);text-align:start;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-label::before{content:'';position:absolute;inset-inline-start:0;top:2px;width:2px;height:12px;border-radius:1px;background:var(--_primary-tone)}
 `;}
 
 
@@ -89,9 +653,10 @@ function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
 [data-ui-metric][data-density=compact] .ui-metric-icon{width:20px;height:20px;border-radius:6px;transform:translate(2px,-2px)}
 [data-ui-metric][data-density=compact] .ui-metric-icon svg,[data-ui-metric][data-density=compact] .ui-metric-icon ha-icon{width:16px;height:16px;--mdc-icon-size:16px}
 [data-ui-metric][data-density=compact] .ui-metric-value{font-size:20px}
+[data-ui-metric][data-value-kind=text] .ui-metric-value{font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-.03em;white-space:normal;overflow-wrap:break-word}
 [data-ui-metric][data-density=compact] .ui-metric-info{margin-top:4px;padding-top:4px}
 [data-ui-metric][data-unavailable=true]{--_metric-tone:var(--secondary-text-color,#626a78)}
-button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:hover{filter:brightness(1.04)}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:not(:disabled):hover{background:color-mix(in srgb,var(--secondary-background-color,#eee) 94%,var(--primary-text-color,#20252b));color:var(--primary-text-color,#20252b);filter:none}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
 [data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
 [data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
 @supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
@@ -112,7 +677,11 @@ function bindUITabs({tabs,panels,onSelect=()=>{}}){
   const target=buttons.find(tab=>tab.dataset.uiTab===value&&!tab.disabled);if(!target)return false;
   for(const tab of buttons){const active=tab===target;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
   for(const panel of sections)panel.hidden=panel.dataset.uiTabPanel!==value;
-  if(focus)target.focus({preventScroll:true});if(notify)onSelect(value,target);return true;
+  if(focus)target.focus({preventScroll:true});
+  // Keep a selected tab visible within a scrolling strip without moving the page.
+  const list=target.parentElement;
+  if(list&&list.scrollWidth>list.clientWidth&&target.getBoundingClientRect){const box=target.getBoundingClientRect(),view=list.getBoundingClientRect();list.scrollLeft+=box.left<view.left?box.left-view.left:box.right>view.right?box.right-view.right:0;}
+  if(notify)onSelect(value,target);return true;
  };
  for(const tab of buttons){
   const click=()=>select(tab.dataset.uiTab,{focus:true});
@@ -138,6 +707,24 @@ function uiTabsStyles(){return `
 [data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
 [data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
+
+// Approved 2A-1 appearance. Retain the existing helper name for consumers.
+function uiBalancedTabsStyles(){
+ const strip=':host [data-ui-tabs][role=tablist]';
+ const tab=strip+' [role=tab][data-ui-tab]';
+ return `
+${strip}{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:stretch;gap:0;width:100%;box-sizing:border-box;padding:0;border:0;border-bottom:1px solid var(--divider-color,#ddd);background:transparent;box-shadow:none;overflow:visible}
+${strip}:has(>[role=tab]:nth-child(4)){display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+${strip}::-webkit-scrollbar{display:none}
+${strip}:has(>[role=tab]:nth-child(4)) [role=tab][data-ui-tab]{flex:1 0 88px}
+${tab}{display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:44px;max-width:none;min-height:44px;height:auto;margin:0 0 -1px;padding:5px 6px 3px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--secondary-text-color,#666);font-family:inherit;font-size:13px;font-weight:400;line-height:1.3;text-align:center;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;text-decoration:none;transform:none}
+${tab}:not(:disabled):hover{color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none;transform:none}
+${tab}[aria-selected=true],${tab}[aria-selected=true]:not(:disabled):hover{color:var(--primary-text-color,#20252b);font-weight:400;background:transparent;box-shadow:none;border-bottom:2px solid var(--accent-color,var(--primary-color));text-decoration:none;transform:none}
+${tab}:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+${strip}~[data-ui-tab-panel]{border:0;padding-block-start:12px;background:transparent}
+@media(forced-colors:active){${strip}{border-bottom-color:CanvasText}${tab}[aria-selected=true]{border-bottom-color:Highlight;outline:1px solid Highlight;outline-offset:-2px;box-shadow:none}${tab}:focus-visible{outline:2px solid CanvasText;outline-offset:-4px}}
+`;
+}
 
 
 const entityTabText=value=>typeof value==='string'?value.trim():'';
@@ -902,15 +1489,15 @@ const evccHistoryMethods = {
   if (!this._entities.power) return '';
   const title = dutch ? 'Laadverloop' : 'Charging power';
   const points = this._historyData ?? [];
-  if (!points.some(point => point.value != null)) return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><p class="notice">${this._historyLoading ? (dutch ? 'Laadverloop laden…' : 'Loading charge history…') : this._historyMissingSession ? (dutch ? 'Sessiebegin niet beschikbaar. Controleer de historie van de aangesloten-sensor.' : 'Session start unavailable. Check the connection sensor history.') : (dutch ? 'Geen vermogenshistorie beschikbaar.' : 'No power history available.')}</p></div>`;
+  if (!points.some(point => point.value != null)) return `<div class="history"><div class="chart-head"><span>${title}</span></div><p class="notice">${this._historyLoading ? (dutch ? 'Laadverloop laden…' : 'Loading charge history…') : this._historyMissingSession ? (dutch ? 'Sessiebegin niet beschikbaar. Controleer de historie van de aangesloten-sensor.' : 'Session start unavailable. Check the connection sensor history.') : (dutch ? 'Geen vermogenshistorie beschikbaar.' : 'No power history available.')}</p></div>`;
   const {start, end} = this._historyRange, max = Math.max(2, Math.ceil(points.reduce((maximum, p) => Math.max(maximum, p.value ?? 0), 0) / 2) * 2);
-  const x = time => 38 + (time - start) / (end - start) * 256, y = value => value == null ? NaN : 100 - value / max * 88;
+  const x = time => (time - start) / (end - start) * 300, y = value => value == null ? NaN : 112 - value / max * 104;
   const graph = this._historyGraph ??= new SharedGraph();
   const coordinates = points.map(p => [x(p.time), y(p.value)]);
-  const svg = graph.render({shadowRoot: this.shadowRoot, isConnected: false}, {viewBox: '0 0 300 120', defs: '<defs><linearGradient id="evcc-power-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--primary-color,#2196f3)" stop-opacity=".22"/><stop offset="100%" stop-color="var(--primary-color,#2196f3)" stop-opacity="0"/></linearGradient></defs>', before: '<path class="grid-line" d="M38 12H294M38 56H294"/><path class="grid-line grid-zero" d="M38 100H294"/>', fills: [{d: evccHistoryArea(coordinates, 100), className: 'power-area', fill: 'url(#evcc-power-fade)'}], lines: [{d: SharedGraph.path(coordinates, 'step'), className: 'series-line', appearance: {...graphLineStyle('solid', 2), stroke: 'var(--primary-color,#2196f3)'}}], after: '<path class="cursor" hidden/>'});
+  const svg = graph.render({shadowRoot: this.shadowRoot, isConnected: false}, {viewBox: '0 0 300 120', defs: '<defs><linearGradient id="evcc-power-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--primary-color,#2196f3)" stop-opacity=".22"/><stop offset="100%" stop-color="var(--primary-color,#2196f3)" stop-opacity="0"/></linearGradient></defs>', before: '<path class="grid-line" d="M0 8H300M0 60H300"/><path class="grid-line grid-zero" d="M0 112H300"/>', fills: [{d: evccHistoryArea(coordinates, 112), className: 'power-area', fill: 'url(#evcc-power-fade)'}], lines: [{d: SharedGraph.path(coordinates, 'step'), className: 'series-line', appearance: {...graphLineStyle('solid', 3.5), stroke: 'var(--primary-color,#2196f3)'}}], after: '<path class="cursor" hidden/>'});
   const format = time => new Intl.DateTimeFormat(this._hass.locale?.language ?? this._hass.language ?? 'en', {...(end-start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(time);
   this._historyGeometry = {x, y, points};
-  return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><div class="plot" tabindex="0" role="group" aria-label="${dutch ? 'Laadvermogen. Gebruik links en rechts voor meetpunten.' : 'Charging power. Use left and right for readings.'}">${svg}<span class="point hover-dot" aria-hidden="true" hidden></span>${[max, max / 2, 0].map((value, index) => `<span class="axis-y" style="top:${10 + index * 36.6667}%">${value}</span>`).join('')}<div class="tooltip" hidden><strong></strong><span><i style="--series-color:var(--primary-color)"></i><b>${dutch ? 'Laadvermogen' : 'Charging power'} <em class="tooltip-value"></em></b></span></div></div><div class="chart-axis">${[start, (start + end) / 2, end].map(time => `<span>${uiEscape(format(time))}</span>`).join('')}</div><p class="sr-only chart-readout" aria-live="polite"></p></div>`;
+  return `<div class="history"><div class="chart-head"><span>${title}</span></div><div class="history-chart"><span class="axis-unit">kW</span><div class="chart-scale" aria-hidden="true">${[max, max / 2, 0].map(value => `<span class="axis-y" style="top:${y(value) / 120 * 100}%">${value}</span>`).join('')}</div><div class="plot" tabindex="0" role="group" aria-label="${dutch ? 'Laadvermogen. Gebruik links en rechts voor meetpunten.' : 'Charging power. Use left and right for readings.'}">${svg}<span class="point hover-dot" aria-hidden="true" hidden></span><div class="tooltip" hidden><strong></strong><span><i style="--series-color:var(--primary-color)"></i><b>${dutch ? 'Laadvermogen' : 'Charging power'} <em class="tooltip-value"></em></b></span></div></div><div class="chart-axis">${[start, (start + end) / 2, end].map(time => `<span>${uiEscape(format(time))}</span>`).join('')}</div></div><p class="sr-only chart-readout" aria-live="polite"></p></div>`;
  },
  _bindHistory() {
   const plot = this.shadowRoot.querySelector('.plot');
@@ -922,11 +1509,11 @@ const evccHistoryMethods = {
    const point = points[this._historyIndex];
    if (point.value == null) { hide(); return; }
    const cursor = plot.querySelector('.cursor'), dot = plot.querySelector('.point');
-   cursor.removeAttribute('hidden'); dot.removeAttribute('hidden'); cursor.setAttribute('d', `M${x(point.time)} 12V100`); dot.style.left = `${x(point.time) / 300 * 100}%`; dot.style.top = `${y(point.value) / 120 * 100}%`;
+   cursor.removeAttribute('hidden'); dot.removeAttribute('hidden'); cursor.setAttribute('d', `M${x(point.time)} 8V112`); dot.style.left = `${x(point.time) / 300 * 100}%`; dot.style.top = `${y(point.value) / 120 * 100}%`;
    const language = this._hass.locale?.language ?? this._hass.language ?? 'en';
    tooltip.hidden = false; tooltip.querySelector('strong').textContent = new Intl.DateTimeFormat(language, {...(this._historyRange.end-this._historyRange.start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(point.time);
    tooltip.querySelector('.tooltip-value').textContent = new Intl.NumberFormat(language, {maximumFractionDigits: 2}).format(point.value) + ' kW';
-   tooltip.style.left = x(point.time) < 166 ? 'auto' : '38px'; tooltip.style.right = x(point.time) < 166 ? '6px' : 'auto';
+   tooltip.style.left = x(point.time) < 150 ? 'auto' : '6px'; tooltip.style.right = x(point.time) < 150 ? '6px' : 'auto';
    this.shadowRoot.querySelector('.chart-readout').textContent = tooltip.textContent;
   };
   plot.addEventListener('pointermove', event => {
@@ -943,6 +1530,7 @@ const evccHistoryMethods = {
   });
  },
 };
+
 
 
 
@@ -967,12 +1555,12 @@ const evccSolarMethods = {
   const value = this._pendingSolar?.value ?? this._solarDraft ?? current;
   const disabled = !range || this._offline() || !!this._pendingSolar || typeof this._hass.callService !== 'function';
   const label = dutch ? 'Zonnevoorkeur' : 'Solar preference';
-  return `<div class="solar-setting"><dl class="metrics solar-metric"><div><dt><label for="solar-share">${label}</label></dt><dd><output for="solar-share" data-solar-output>${this._config.show_controls ? this._solarValue(value) : this._reading('solar_share', dutch)}</output>${this._config.show_controls ? `<input id="solar-share" type="range" data-solar-share min="${range?.min ?? 0}" max="${range?.max ?? 100}" step="${range?.step ?? 10}" value="${value ?? 0}" aria-label="${label}" aria-valuetext="${uiEscape(value == null ? (dutch ? 'Niet beschikbaar' : 'Unavailable') : value + '%')}" aria-describedby="solar-preference-description"${disabled ? ' disabled' : ''}>` : ''}</dd></div></dl><span id="solar-preference-description" class="sr-only">${dutch ? 'Minimum aandeel zon' : 'Minimum solar share'}</span><p id="solar-hint" class="solar-hint" hidden>${uiEscape(evccSolarHint(value, dutch))}</p>${this._pendingSolar ? `<p class="notice" role="status">${dutch ? 'Solar share instellen…' : 'Setting solar share…'}</p>` : ''}${this._solarError ? `<p class="notice error" role="alert">${uiEscape(this._solarError)}</p>` : ''}</div>`;
+  return `<div class="solar-setting"><dl class="metrics solar-metric"><div><dt><label for="solar-share">${label}</label></dt><dd><output for="solar-share" data-solar-output>${this._config.show_controls ? this._solarValue(value) : this._reading('solar_share', dutch)}</output>${this._config.show_controls ? uiSlider({value:value??0,min:range?.min??0,max:range?.max??100,step:range?.step??10,disabled,attrs:{id:'solar-share','data-solar-share':'','aria-label':label,'aria-valuetext':value==null?(dutch?'Niet beschikbaar':'Unavailable'):value+'%','aria-describedby':'solar-preference-description'}}) : ''}</dd></div></dl><span id="solar-preference-description" class="sr-only">${dutch ? 'Minimum aandeel zon' : 'Minimum solar share'}</span><p id="solar-hint" class="solar-hint" hidden>${uiEscape(evccSolarHint(value, dutch))}</p>${this._pendingSolar ? `<p class="notice" role="status">${dutch ? 'Solar share instellen…' : 'Setting solar share…'}</p>` : ''}${this._solarError ? `<p class="notice error" role="alert">${uiEscape(this._solarError)}</p>` : ''}</div>`;
  },
  _bindSolar() {
   const input = this.shadowRoot.querySelector('[data-solar-share]');
   if (!input) return;
-  const progress = () => input.style.setProperty('--solar-position', ((Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min)) * 100) + '%');
+  const progress = () => syncUISlider(input);
   progress();
   input.addEventListener('input', progress);
   input.addEventListener('pointerdown', () => { if (!input.disabled) this._solarEditing = true; });
@@ -1041,14 +1629,6 @@ const galleryStatusStyles=`
  .live-readings{align-items:stretch}.live-readings>div{display:grid;grid-template-rows:auto auto auto;gap:2px;align-content:start;box-sizing:border-box;min-height:0;padding:12px}
  .live-readings .eyebrow{font-size:11px;line-height:1.4;margin:0}.live-readings .live-value{font-size:24px;line-height:1.25;font-weight:650;margin:0;letter-spacing:-.03em}.live-readings .live-sub{font-size:11px;line-height:24px;align-self:stretch;min-height:24px;margin:0}
  @supports(grid-template-rows:subgrid){.live-readings{grid-template-rows:auto auto auto;row-gap:2px}.live-readings>div{grid-row:span 3;grid-template-rows:subgrid}}
- .battery-track{height:12px;border-radius:7px;background:color-mix(in srgb,var(--secondary-background-color) 80%,var(--ha-card-background,var(--card-background-color,#fff)));isolation:isolate}
- .battery-fill{position:relative;overflow:hidden;isolation:isolate;border-radius:7px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color,#2196f3) 85%,#fff),var(--primary-color,#2196f3))}
- .target-marker{top:-3px;height:18px;z-index:3;pointer-events:none}
- .battery-fill::before{content:none;position:absolute;inset:0 auto 0 0;width:42%;border-radius:inherit;pointer-events:none;background:linear-gradient(105deg,transparent 0%,#ffffff22 20%,#ffffffbb 43%,#fffffff2 52%,#ffffff88 63%,transparent 100%)}
- @media(prefers-reduced-motion:no-preference){
-  .content:is([data-tone=charging],[data-tone=planned]) .battery-fill::before{content:'';animation:battery-sweep var(--power-duration,6s) linear infinite;animation-play-state:var(--power-motion,paused);animation-delay:var(--power-delay,0s)}
- }
- @keyframes battery-sweep{0%{transform:translateX(-110%);opacity:0}8%{opacity:1}90%{opacity:1}100%{transform:translateX(250%);opacity:0}}
  :host([data-motion=paused]) *,:host([data-motion=paused]) ::before,:host([data-motion=paused]) ::after{animation-play-state:paused!important}
 `;
 
@@ -1061,11 +1641,6 @@ const evccGalleryStyles=`
  .status-line{padding:10px 12px;background:var(--secondary-background-color);border:0;border-radius:7px;margin-bottom:8px}
  .live-readings{gap:16px;border:0;padding:0}.live-readings>div{padding:10px 12px;background:var(--secondary-background-color);border:0;border-radius:7px}.live-value{font-size:24px}
  .mode-options{margin-top:0}.solar-setting{margin-top:16px;padding:12px;background:var(--secondary-background-color);border-radius:7px}.solar-setting-head{gap:10px;align-items:center}.solar-setting-head label{display:flex;align-items:center;gap:9px;min-width:0;font-size:11px}.solar-setting-head ha-icon{--mdc-icon-size:18px;flex:none;padding:7px;border-radius:50%;background:color-mix(in srgb,var(--primary-color) 12%,transparent);color:var(--primary-color)}.solar-title{display:flex;flex-direction:column;gap:1px}.solar-title strong{font-size:11px;font-weight:600;line-height:1.4;color:var(--primary-text-color)}.solar-title small{font-size:10px;line-height:1.4;color:var(--secondary-text-color)}.solar-setting-head output{flex:none;color:var(--primary-color);font-size:18px;font-weight:600;letter-spacing:-.02em;padding:5px 8px;border-radius:6px;background:var(--ha-card-background)}
- input[data-solar-share]{appearance:none;-webkit-appearance:none;height:36px;margin:6px 0 0;background:transparent;--solar-position:60%;--solar-track:color-mix(in srgb,var(--secondary-background-color) 80%,var(--ha-card-background,var(--card-background-color,#fff)));touch-action:pan-y}
- input[data-solar-share]::-webkit-slider-runnable-track{height:12px;border-radius:7px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color) 85%,#fff),var(--primary-color)) left / var(--solar-position) 100% no-repeat,var(--solar-track)}
- input[data-solar-share]::-moz-range-track{height:12px;border-radius:7px;background:var(--solar-track)}input[data-solar-share]::-moz-range-progress{height:12px;border-radius:7px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color) 85%,#fff),var(--primary-color))}
- input[data-solar-share]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:16px;height:22px;border-radius:5px;background:var(--ha-card-background,var(--card-background-color,#fff));border:2px solid var(--primary-color);box-shadow:0 1px 3px #0002;margin-top:-5px}
- input[data-solar-share]::-moz-range-thumb{box-sizing:border-box;width:16px;height:22px;border-radius:5px;background:var(--ha-card-background,var(--card-background-color,#fff));border:2px solid var(--primary-color);box-shadow:0 1px 3px #0002}
  .solar-setting-head output{padding:0;border-radius:0;background:transparent;font-variant-numeric:tabular-nums}
  .solar-scale{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:10px;color:var(--secondary-text-color);margin:0 1px 10px;font-variant-numeric:tabular-nums}.solar-scale span:first-child,.solar-scale span:last-child{display:flex;flex-direction:column;gap:1px}.solar-scale span:last-child{text-align:right}.solar-scale b{font-size:10px;font-weight:400;color:var(--primary-text-color)}.solar-hint{line-height:1.5;padding-top:10px;border-top:1px solid var(--divider-color)}
  .solar-setting{padding:0;background:transparent;border:0;border-radius:0}.solar-scale{margin-bottom:0}
@@ -1092,6 +1667,7 @@ const evccGalleryStyles=`
 
 
 
+
 function evccCardStyles() { return `
 :host{display:block;min-width:0;height:100%;min-height:0;container-type:inline-size}
 ha-card{display:block;height:100%;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);font:inherit}
@@ -1103,7 +1679,6 @@ header{display:flex;align-items:center;justify-content:space-between;flex-wrap:w
 .car-name{font-size:12px;font-weight:600;overflow-wrap:anywhere;margin-bottom:2px;line-height:1.4;color:var(--secondary-text-color,#666)}.picture{min-width:0;display:grid;place-items:center;min-height:120px}.picture img{width:112%;max-width:460px;height:132px;margin-left:-10%;object-fit:contain;display:block;filter:drop-shadow(0 10px 7px #0002)}.picture ha-icon{--mdc-icon-size:86px;color:var(--secondary-text-color,#666)}.picture small{text-align:center;color:var(--secondary-text-color,#666);font-size:11px;overflow-wrap:anywhere}
 button{font:inherit;color:inherit;cursor:pointer;background:transparent;border:0;padding:0;text-align:start;min-height:24px;max-width:100%;overflow-wrap:anywhere}button:not(:disabled):hover{color:var(--primary-color,#2196f3)}button:focus-visible,.plot:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px;border-radius:3px}button:disabled{cursor:default}
 .eyebrow{display:block;color:var(--secondary-text-color,#666);font-size:11px;line-height:1.4}.battery-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0;min-width:0}.battery-value{font-size:44px;line-height:1.15;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.035em;min-width:0}.battery-meta{min-width:0;max-width:100%;text-align:start}.target,.range{display:flex;align-items:baseline;justify-content:flex-start;flex-wrap:wrap;gap:0 5px;font-size:11px;color:var(--secondary-text-color,#666)}.range>button{font-size:12px;font-weight:600;color:var(--primary-text-color,#20252b)}
-.battery-track,.solar-strip{height:5px;background:var(--secondary-background-color,#eee);border-radius:5px;position:relative;margin-right:1px}.battery-fill,.solar-strip span{height:100%;background:var(--primary-color,#2196f3);border-radius:inherit;display:block}.target-marker{position:absolute;top:-3px;height:11px;width:2px;background:var(--primary-text-color,#20252b);transform:translateX(-1px)}
 .status-line{display:flex;align-items:center;gap:8px;padding:10px 12px;border-left:2px solid var(--evcc-glow);border-radius:7px;background:linear-gradient(100deg,color-mix(in srgb,var(--evcc-glow) 10%,transparent),transparent);margin-bottom:12px}.status-line ha-icon{--mdc-icon-size:18px;flex:none;color:var(--evcc-glow)}.status-line strong{font-size:14px;font-weight:600}.status-line p{font-size:11px;line-height:1.4;margin:2px 0 0;color:var(--secondary-text-color,#666)}
 .live-readings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.live-readings>div{padding:10px 12px;background:var(--secondary-background-color,#eee);border-radius:7px;min-width:0}.live-value{font-size:24px;font-weight:650;line-height:1.35;font-variant-numeric:tabular-nums;letter-spacing:-.03em}.live-sub{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);display:block;overflow-wrap:anywhere}
 dl{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.metrics>div{min-width:0}.metrics dt{font-size:11px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere;line-height:1.4;margin-bottom:2px}.metrics dd{margin:0;min-width:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -1140,9 +1715,72 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content{--ui-metric-tone:var(--tone)}.charging-status{margin-top:16px}.content[data-density=compact] .charging-status{margin-top:12px}
 .charging-readings{margin:0}.car-stage .battery-row{margin-top:0}.car-stage header{margin-top:0;padding-top:8px}.content[data-density=compact] .car-stage .battery-row,.content[data-density=compact] .car-stage header{margin-top:0}.content[data-density=compact] .car-stage header{padding-top:6px}
 .header-region .ui-metric-value button{font:inherit;line-height:inherit;letter-spacing:inherit;min-height:0}.header-region .ui-metric-info button{font:inherit;line-height:inherit;min-height:0;vertical-align:baseline}
-.hero{padding-top:0}.battery-track,.battery-fill{border-radius:var(--ui-metric-radius,8px)}
+.hero{padding-top:0}
 .battery-row [data-ui-primary-value]{max-width:160px}
+/* Vehicle media follows the complete summary in both Auto and EVCC. */
+.car-stage{grid-template-columns:minmax(0,1fr);min-height:0}
+.car-stage .picture{position:relative;grid-column:1;grid-row:2;inset:auto;width:100%;height:145px;margin-top:12px}
+[data-ui-metric] .ui-metric-icon{grid-row:1}
+[data-ui-metric] .ui-metric-value{grid-column:1/-1;overflow-wrap:normal;word-break:normal;white-space:nowrap}
+[data-ui-metric] .ui-metric-title{overflow-wrap:normal;word-break:normal}
+[data-ui-metric] .ui-metric-value button{overflow-wrap:normal;word-break:normal;white-space:inherit}
+.car-status .ui-metric-value,.charging-status .ui-metric-value{white-space:normal}
+@container(max-width:340px){.car-readings,.charging-readings{grid-template-columns:minmax(0,1fr);row-gap:12px}}
+.content[data-density=compact] .car-stage{min-height:0}
+.content[data-density=compact] .car-stage .picture{height:108px}
+/* Opt in locally; shared tab defaults remain protected for House. */
+.mode-options [data-ui-button]{min-height:44px;border-bottom:0;text-decoration:none}
+.mode-options [aria-pressed=true],.mode-options button[aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
+/* EVCC-only refinement: regular Auto keeps its approved renderer and paint. */
+.content[data-evcc] h2{font-size:16px;font-weight:600}
+.content[data-evcc] .gallery-top{margin:0 0 12px;padding:0;background:none}
+.content[data-evcc] .hero{padding:0;margin:0}
+.content[data-evcc] .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:12px;min-height:0;padding:0}
+.content[data-evcc] .car-stage::before,.content[data-evcc] .car-stage::after{content:none}
+.content[data-evcc] .car-stage .battery-row{grid-column:1;grid-row:1;min-width:0;margin:0;z-index:1}
+.content[data-evcc] .battery-row [data-ui-primary-value]{max-width:100%;width:100%}
+.content[data-evcc] .car-stage .picture{position:relative;grid-column:2;grid-row:1;width:100%;height:112px;min-height:0;margin:0;inset:auto;overflow:hidden;z-index:0}
+.content[data-evcc] .picture img{position:absolute;width:100%;height:100%;left:calc(50% + var(--evcc-image-offset-x,0px));bottom:calc(-1 * var(--evcc-image-offset-y,0px));max-width:none;margin:0;object-fit:contain;filter:none;transform:translateX(-50%) scale(var(--evcc-image-scale,1));transform-origin:center center}
+.content[data-evcc] .picture ha-icon{--mdc-icon-size:64px}
+.content[data-evcc] .battery-meta{display:none}
+.hero>.battery-progress{margin-top:8px}
+.content[data-evcc] .charging-status{margin-top:0}
+.content[data-evcc] [data-ui-metric]{background:var(--secondary-background-color);--ui-metric-tone:var(--secondary-text-color)}
+.content[data-evcc] .charging-status .ui-metric-icon{color:var(--status-accent)}
+.content[data-evcc] [data-ui-metric] .ui-metric-value::before{content:none}
+.content[data-evcc] .charging-readings{column-gap:12px;grid-template-columns:repeat(var(--evcc-reading-columns,2),minmax(0,1fr))}
+.content[data-evcc] .ui-metric-title,.content[data-evcc] .ui-metric-info{overflow-wrap:normal;word-break:normal}
+.content[data-evcc] .evcc-panel{padding-top:12px}
+.content[data-evcc] .evcc-tabs{margin-top:16px}
+.content[data-evcc] .mode-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,64px),1fr));gap:8px}
+.content[data-evcc] button:focus-visible,.content[data-evcc] input:focus-visible,.content[data-evcc] .plot:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.content[data-evcc] .mode-options [data-ui-button]{padding:8px 4px;font-size:13px}
+.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true],.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));border-bottom:0;text-decoration:none;box-shadow:var(--eleven-material-selection-well,none)}
+.content[data-evcc] input[data-solar-share]{min-height:44px;accent-color:var(--accent-color,var(--primary-color))}
+.content[data-evcc] .evcc-number{display:inline-block;white-space:nowrap}
+.content[data-evcc] .ui-metric-icon{grid-row:1}
+.content[data-evcc] [data-ui-metric] .ui-metric-value{grid-column:1/-1}
+.content[data-evcc] [data-ui-tabs][data-ui-card-tabs]{overflow:visible}
+.content[data-evcc] [data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 1 88px;min-width:min-content;max-width:100%;overflow:visible;text-overflow:clip}
+.content[data-evcc] .car-stage[data-hero-stacked]{grid-template-columns:minmax(0,1fr)}
+.content[data-evcc] .car-stage[data-hero-stacked] .picture{grid-column:1;grid-row:2}
+/* Axes share the plot bounds, with a fixed label gutter at every card width. */
+.history .chart-head{justify-content:flex-start;gap:6px;margin-bottom:8px}
+.history{padding-top:0;border-top:0}
+.history .chart-head{font-size:12px}
+.history-chart{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:0;row-gap:4px;min-width:0;padding:8px 12px 8px 8px;box-sizing:border-box}
+.history-chart>.axis-unit{grid-column:1/-1;grid-row:1;color:var(--secondary-text-color);font-size:10px;font-weight:600;line-height:1.2}
+.chart-scale{grid-column:1;grid-row:2;position:relative;min-width:0}
+.chart-scale .axis-y{left:auto;right:8px;text-align:end}
+.history-chart>.plot{grid-column:2;grid-row:2;min-width:0}
+.history-chart>.chart-axis{grid-column:2;grid-row:3;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:0;margin:0;line-height:1.4}
+.history-chart>.chart-axis>span{min-width:0;overflow-wrap:anywhere}
+.history-chart>.chart-axis>span:nth-child(2){text-align:center}
+.history-chart>.chart-axis>span:last-child{text-align:end}
+${uiBarStyles()}
 `; }
+
+
 
 
 
@@ -1196,7 +1834,7 @@ class EvccCard extends HTMLElement {
   this._render();
  }
  get hass() { return this._hass; }
- disconnectedCallback() { this._motionCleanup?.(); this._motionCleanup=null; this._cancelMode(); this._cancelSolar(); this._tabController?.disconnect(); clearInterval(this._clockTimer); this._clockTimer = null; this._resetHistory(); this._signature = null; }
+ disconnectedCallback() { this._evccLayoutObserver?.disconnect(); this._motionCleanup?.(); this._motionCleanup=null; this._cancelMode(); this._cancelSolar(); this._tabController?.disconnect(); clearInterval(this._clockTimer); this._clockTimer = null; this._resetHistory(); this._signature = null; }
  _cancelMode() { clearTimeout(this._modeTimer); this._pendingMode = null; this._actionVersion++; }
  getCardSize() { return this._config?.compact ? 8 : 12; }
  getGridOptions() { return {columns: 12, min_columns: 6, rows: this._config?.compact ? 10 : 12, min_rows: 3}; }
@@ -1212,9 +1850,10 @@ class EvccCard extends HTMLElement {
   const unit=field==='power'&&sourceUnit==='W'?'kW':sourceUnit;
   let markup=uiEscape(value??'\u2014');
   if(value!=null&&['remaining_duration','charge_duration'].includes(field)&&evccDuration(entity,dutch?'nl':'en')){
-   markup=markup.replace(/(\d+) (u|h|min)\b/g,'$1 <span class="ui-metric-unit">$2</span>');
+   markup=markup.replace(/(\d+) (u|h|min)\b/g,'<span class="evcc-number">$1</span> <span class="ui-metric-unit">$2</span>');
   }else if(value!=null&&evccNumber(entity)!=null&&unit&&value.endsWith(' '+unit)){
-   markup=uiEscape(value.slice(0,-unit.length).trimEnd())+' <span class="ui-metric-unit">'+uiEscape(unit)+'</span>';
+   markup='<span class="evcc-number">'+uiEscape(value.slice(0,-unit.length).trimEnd())+'</span> <span class="ui-metric-unit">'+uiEscape(unit)+'</span>';
+  }else if(value!=null&&evccNumber(entity)!=null){markup='<span class="evcc-number">'+uiEscape(value)+'</span>';
   }
   if(!interactive)return id?markup:'\u2014';
   return id ? `<button type="button" data-entity="${uiEscape(id)}" title="${uiEscape(id)}" aria-label="${uiEscape(evccLabel(field, dutch) + ': ' + (value ?? unavailable))}">${markup}${value == null ? `<span class="sr-only"> ${unavailable}</span>` : ''}</button>` : '—';
@@ -1280,9 +1919,28 @@ class EvccCard extends HTMLElement {
   return '<div class="charging-readings" data-ui-metric-grid>'+uiMetric({title:evccLabel('power',dutch),valueContent:this._reading('power',dutch,technical.length>0),action:!technical.length&&!!this._entities.power,attrs:!technical.length?{'data-entity':this._entities.power||''}:{},infoContent:technical.join(' &middot; '),icon:'mdi:lightning-bolt-outline',compact:this._config.compact})+uiMetric({title:view.kind==='done'?(dutch?'Laaddoel':'Charge target'):evccLabel('remaining_duration',dutch),valueContent:time,action:charging&&!!this._entities.remaining_duration,attrs:charging?{'data-entity':this._entities.remaining_duration||''}:{},info:this._config.compact?'':hint,icon:'mdi:timer-outline',compact:this._config.compact})+'</div>';
  }
 
+ _fitEvccLayout() {
+  this._evccLayoutObserver?.disconnect();
+  if (!this.isConnected || !this._config.evcc_enabled) return;
+  const root=this.shadowRoot,stage=root.querySelector('.car-stage'),primary=root.querySelector('.primary-value'),grid=root.querySelector('.charging-readings');
+  if(!stage||!primary)return;
+  const ctx=document.createElement('canvas').getContext('2d');
+  const width=(node,text=node.textContent)=>{const s=getComputedStyle(node);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;return ctx.measureText(text).width+Math.max(0,text.length-1)*(parseFloat(s.letterSpacing)||0);};
+  const fit=()=>{
+   if(!this.isConnected||!this._config.evcc_enabled||!stage.isConnected){this._evccLayoutObserver?.disconnect();return;}
+   const number=primary.querySelector('.primary-number'),unit=primary.querySelector('small'),s=getComputedStyle(primary),base=parseFloat(s.fontSize),slot=(stage.clientWidth-12)/3,reserve=(unit?.getBoundingClientRect().width||0)+(parseFloat(s.columnGap)||0),natural=width(primary,number?.textContent||'');
+   const stacked=base>48&&natural+reserve>slot;stage.toggleAttribute('data-hero-stacked',stacked);
+   if(number){const size=Math.floor(base*Math.min(1,Math.max(20,(stacked?stage.clientWidth:slot)-reserve)/Math.max(1,natural))*100)/100+'px';if(number.style.fontSize!==size)number.style.fontSize=size;}
+   const textWidth=node=>node.classList?.contains('evcc-number')?width(node.closest('.ui-metric-value,dd'),node.textContent):[...node.childNodes].reduce((total,child)=>total+(child.nodeType===3?width(node,child.textContent):textWidth(child)+(parseFloat(getComputedStyle(child).marginInlineStart)||0)),0);
+   if(grid){const minimum=Math.max(...[...grid.children].map(tile=>{const value=tile.querySelector('.ui-metric-value'),label=tile.querySelector('.ui-metric-title');return Math.max(textWidth(value),...label.textContent.split(/\s+/).map(word=>width(label,word)+34))+24;}));const columns=minimum*2+12<=grid.clientWidth?'2':'1';if(grid.style.getPropertyValue('--evcc-reading-columns')!==columns)grid.style.setProperty('--evcc-reading-columns',columns);}
+   for(const span of root.querySelectorAll('.evcc-number')){const parent=span.closest('.ui-metric-value,dd');if(!parent||!parent.clientWidth)continue;const base=parseFloat(getComputedStyle(parent).fontSize),size=Math.floor(base*Math.min(1,parent.clientWidth/Math.max(1,width(parent,span.textContent)))*100)/100+'px';if(span.style.fontSize!==size)span.style.fontSize=size;}
+  };
+  fit();this._evccLayoutObserver=new ResizeObserver(fit);
+  for(const el of [stage,primary,primary.querySelector('small'),grid,...root.querySelectorAll('.ui-metric-value,.ui-metric-title')])if(el)this._evccLayoutObserver.observe(el);
+ }
  _render() {
   if (!this._config) return;
-  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
+  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.history-chart',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
   const hass = this._hass, states = hass.states ?? {}, dutch = evccDutch(hass), config = this._config;
   this._ensureClock();
   const previousSolar = this._entities?.solar_share, previousPower = this._entities?.power;
@@ -1305,12 +1963,16 @@ class EvccCard extends HTMLElement {
   const configured = Object.values(this._entities).some(Boolean), status = offline ? 'unknown' : evccStatus(this._entities, states);
   const vehicle = evccVehicleName(states[this._entities.vehicle]) || (dutch ? 'Elektrische auto' : 'Electric vehicle');
   const soc = evccPercent(states[this._entities.soc]), target = evccPercent(states[this._entities.target_soc]);
+  const speed = powerMotion(states[this._entities.power], {maxKw: config.animation_max_kw, speed: config.animation_speed});
+  const charging = !offline && speed.moving && ['solar','charging'].includes(view.kind);
+  const barDuration = 3.8 / config.animation_speed;
+  const batteryBar = uiBar({value:soc,target,charging,label:dutch?'Accuniveau':'Battery level',valueText:soc==null?'':`${soc}% · ${view.title}${target==null?'':` · ${dutch?'Laaddoel':'Charge target'} ${target}%`}`,attrs:{class:'battery-progress',style:`--ui-bar-duration:${barDuration}s;--ui-bar-delay:${-(now/1000%barDuration)}s`}});
   const image = this._vehicleImage ? this._vehicleImage() : evccImageUrl(states[config.image_entity], hass);
   const imageWarning = dutch ? 'Autoafbeelding niet beschikbaar' : 'Vehicle image unavailable';
-  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
+  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.history-chart',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-evcc data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
    <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene"><div class="gallery-top">${!configured ? `<header><h2>${uiEscape(this._title(dutch))}</h2></header>` : ''}
    ${offline ? `<p class="notice warning" role="status">${dutch ? 'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.' : 'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>` : ''}
-   ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${(this._hasVehicleImage?.()??config.image_entity) ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? `<div class="battery-track" role="progressbar" aria-label="${dutch ? 'Accuniveau' : 'Battery level'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${soc}"><div class="battery-fill" style="width:${soc}%"></div>${target != null ? `<span class="target-marker" style="left:${target}%"></span>` : ''}</div>` : ''}</div>
+   ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({layout:'uniform',value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${(this._hasVehicleImage?.()??config.image_entity) ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? batteryBar : ''}</div>
     </div>${this._statusMarkup(view)}</div>${this._liveMarkup(dutch, view, now)}</div>
     ${this._tabsMarkup(dutch)}` : `<p class="empty">${dutch ? 'Kies de EVCC-laadvermogensensor van je laadpunt in de configuratie. Je kunt ook afzonderlijke entiteiten opgeven.' : 'Select your loadpoint’s EVCC charge power sensor in the editor, or configure individual entities.'}</p>`}
    ${configured ? '' : '</div></div></div>'}</div></ha-card>`;
@@ -1320,7 +1982,7 @@ class EvccCard extends HTMLElement {
   if (this._motionState !== view.kind || this._motionEntity !== this._entities.power) {
    this._motionState = view.kind; this._motionEntity = this._entities.power; this._powerClock = null;
   }
-  const speed = powerMotion(states[this._entities.power], {maxKw: config.animation_max_kw, speed: config.animation_speed}), previous = this._powerClock;
+  const previous = this._powerClock;
   const moving = !offline && speed.moving && ['solar', 'charging'].includes(view.kind);
   const phase = previous ? previous.phase + (previous.moving ? (now - previous.time) / 1000 / previous.seconds : 0) : 0;
   this._powerClock = {phase, time: now, seconds: speed.seconds, moving};
@@ -1340,6 +2002,7 @@ class EvccCard extends HTMLElement {
   else if (focusedEntity) [...this.shadowRoot.querySelectorAll('[data-entity]')].find(button => button.dataset.entity === focusedEntity)?.focus({preventScroll: true});
   else if (focusedMode) [...this.shadowRoot.querySelectorAll('[data-mode]')].find(button => button.dataset.mode === focusedMode)?.focus({preventScroll: true});
   else if (focusedTab) ([...this.shadowRoot.querySelectorAll('[data-ui-tab]')].find(tab => tab.dataset.uiTab === focusedTab) ?? this.shadowRoot.querySelector('[role="tab"][aria-selected="true"]'))?.focus({preventScroll: true});
+  this._fitEvccLayout();
   this._syncHistory();
  }
 }
@@ -1506,7 +2169,7 @@ const CAR_EDITOR_HELPERS={
  image_scale:['Vergroot de auto binnen de vaste headerhoogte. Een grote afbeelding kan vóór het percentage komen.','Scale the car within the fixed header height. A large image may overlap the percentage.'],
  image_offset_y:['Negatief = omhoog, positief = omlaag. De headerhoogte blijft gelijk.','Negative moves up, positive moves down. Header height stays fixed.'],
  image_offset_x:['Negatief = naar links, positief = naar rechts. Nul plaatst de afbeelding horizontaal in het midden van de kaart.','Negative moves left, positive moves right. Zero centers the image horizontally in the card.'],
- battery_style:['Kies een klassieke balk, slanke capsule, zacht licht (standaard) of fijne lijn.','Choose a classic bar, slim capsule, soft light (default) or fine line.'],
+ battery_style:['Alle balken gebruiken dezelfde verzonken stijl. Standaard 12 px, slank 8 px of een fijne lijn van 4 px.','All bars share the recessed style. Default 12 px, slim 8 px or a fine 4 px line.'],
  animation_speed:['Snelheidsfactor: 0,5× is half zo snel, 2× is dubbel zo snel. Bij nul of onbekend laadvermogen pauzeert de animatie.','Speed factor: 0.5× is half speed, 2× is double speed. Zero or unknown charge power pauses animation.'],
  animation_max_kw:['Vermogen waarbij de animatie de hoogste snelheid bereikt. Dit verandert geen EVCC-laadlimiet.','Power at which animation reaches its maximum speed. This does not change EVCC charge limits.'],
  color:['Vaste accentkleur voor eigen gegevens. Met EVCC volgt de kleur de laadstatus.','Fixed accent for custom data. With EVCC the color follows charging state.'],
@@ -1526,7 +2189,7 @@ class CarEditor extends customTabsEditor(EvccEditor) {
   const config=this._config,evcc=config.evcc_enabled;
   const schema=[group('general',nl?'Algemeen':'General',[text('title'),boolean('evcc_enabled')],true),
    group('vehicle_image',nl?'Autoafbeelding':'Vehicle image',[select('image_source',[{value:'entity',label:nl?'Afbeelding-entiteit':'Image entity'},{value:'media',label:'Media'}]),...(config.image_source==='media'?[{name:'image_media',selector:{media:{accept:['image/*']}}}]:[entity('image_entity','image')]),number('image_scale',50,300,5,'%'),number('image_offset_x',-150,150,1,'px'),number('image_offset_y',-150,150,1,'px')]),
-   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',headerBackgroundOptions(nl)),number('background_strength',0,100,5,'%'),boolean('animate_background'),select('battery_style',[{value:'classic',label:nl?'Klassiek · 12 px':'Classic · 12 px'},{value:'slim',label:nl?'Slanke capsule · 8 px':'Slim capsule · 8 px'},{value:'soft',label:nl?'Zacht licht · 8 px (standaard)':'Soft light · 8 px (default)'},{value:'line',label:nl?'Fijne lijn · 4 px':'Fine line · 4 px'}]),...(!evcc?[select('color',CAR_COLORS.map(item=>({...item,label:item.label.split(' / ')[nl?0:1]})))]:[]),...(evcc?[number('animation_speed',0.25,3,0.25,'×'),number('animation_max_kw',0.1,500,0.1,'kW','box')]:[])])];
+   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',headerBackgroundOptions(nl)),number('background_strength',0,100,5,'%'),boolean('animate_background'),select('battery_style',[{value:'classic',label:nl?'Klassiek · 12 px':'Classic · 12 px'},{value:'slim',label:nl?'Slanke capsule · 8 px':'Slim capsule · 8 px'},{value:'soft',label:nl?'Verzonken · 12 px (standaard)':'Recessed · 12 px (default)'},{value:'line',label:nl?'Fijne lijn · 4 px':'Fine line · 4 px'}]),...(!evcc?[select('color',CAR_COLORS.map(item=>({...item,label:item.label.split(' / ')[nl?0:1]})))]:[]),...(evcc?[number('animation_speed',0.25,3,0.25,'×'),number('animation_max_kw',0.1,500,0.1,'kW','box')]:[])])];
   if(!evcc){
    schema.push(group('percentage_settings',nl?'Percentage':'Percentage',[entity('percentage_entity'),...(!config.percentage_entity?[number('percentage',0,100,1,'%')]:[])],true));
    schema.push(group('range_settings',nl?'Actieradius':'Range',[
@@ -1603,11 +2266,13 @@ class CarEditor extends customTabsEditor(EvccEditor) {
 
 
 
+
+
 const carDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
 
 class CarCard extends EvccCard {
  constructor(){super();this._mediaImage=new CarMediaImage(()=>{this._signature=null;this._render();});}
- disconnectedCallback(){this._mediaImage.reset();super.disconnectedCallback();}
+ disconnectedCallback(){this._carLayoutObserver?.disconnect();this._mediaImage.reset();super.disconnectedCallback();}
  _hasVehicleImage(){return this._config.image_source==='media'?!!this._config.image_media?.media_content_id:!!this._config.image_entity;}
  _vehicleImage(){return this._config.image_source==='media'?this._mediaImage.url:carImageUrl(this._hass?.states?.[this._config.image_entity],this._hass);}
  static async getConfigElement(){
@@ -1634,12 +2299,9 @@ class CarCard extends EvccCard {
   return id?`<button type="button" data-entity="${uiEscape(id)}" aria-label="${uiEscape(label+': '+value)}">${markup}</button>`:markup;}
  _extraSignature(){return this._config.custom_tabs.flatMap(tab=>tab.entities.map(row=>this._hass?.states?.[row.entity]));}
  _extraStyles(){return `
-  .content[data-battery-style=slim] .battery-track,.content[data-battery-style=soft] .battery-track{height:8px}
-  .content[data-battery-style=line] .battery-track{height:4px}
-  .content:is([data-battery-style=slim],[data-battery-style=soft],[data-battery-style=line]) .target-marker{top:-2px;height:calc(100% + 4px);width:1px}
-  .content[data-battery-style=soft] .battery-fill{background:color-mix(in srgb,var(--primary-color) 65%,var(--secondary-background-color));box-shadow:0 0 8px color-mix(in srgb,var(--primary-color) 18%,transparent)}
-  .content[data-battery-style=soft] .battery-fill::before{filter:opacity(.45)}
-  .content[data-battery-style=line] .battery-fill::before{background:linear-gradient(100deg,transparent,#ffffff99,transparent)}
+  .hero>.battery-progress{margin-top:10px}
+  .content[data-battery-style=slim] .battery-progress{--ui-bar-height:8px}
+  .content[data-battery-style=line] .battery-progress{--ui-bar-height:4px}
  `;}
  _applyPresentation(){
   const content=this.shadowRoot.querySelector('.content');if(!content)return;
@@ -1674,31 +2336,89 @@ class CarCard extends EvccCard {
   const label=config['field_'+i+'_label']||entity?.attributes?.friendly_name||id||(nl?'Gegevensveld '+i:'Data field '+i);
   const value=carFieldReading(entity,this._hass,config,i);
   const plain=carFieldReading(entity,this._hass,{...config,['field_'+i+'_show_unit']:false},i),split=value.startsWith(plain);
-  return uiMetric({title:label,value:plain==='\u2014'?null:split?plain:value,unit:split?value.slice(plain.length).trim():'',icon:config['field_'+i+'_icon']||(i===2?'mdi:map-marker-distance':'mdi:counter'),compact:config.compact,action:!!id,attrs:{class:i===1?'car-status':'car-field','data-entity':id||'','data-car-field':String(i)}});
+  const numeric=plain!=='\u2014'&&Number.isFinite(Number(config['field_'+i+'_attribute']?entity?.attributes?.[config['field_'+i+'_attribute']]:entity?.state));
+  return uiMetric({title:label,value:plain==='\u2014'?null:split?plain:value,valueContent:plain==='\u2014'?'':`<span class="${numeric?'car-number':'car-text'}">${uiEscape(split?plain:value)}</span>`,unit:split?value.slice(plain.length).trim():'',icon:config['field_'+i+'_icon']||(i===2?'mdi:map-marker-distance':'mdi:counter'),compact:config.compact,action:!!id,attrs:{class:i===1?'car-status':'car-field','data-value-kind':numeric?'number':'text','data-entity':id||'','data-car-field':String(i)}});
+ }
+ _fitCarReadings(){
+  this._carLayoutObserver?.disconnect();
+  if(this._config.evcc_enabled||!this.isConnected)return;
+  const root=this.shadowRoot,grid=root.querySelector('.car-readings'),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+
+  const fit=()=>{
+   const stage=root.querySelector('.car-stage'),primary=root.querySelector('.primary-value'),number=primary?.querySelector('.primary-number');
+   if(stage&&number){
+    // Keep ordinary hero tracks 1:2; enlarged text may use the full row.
+    // Measure from the stable parent font so fitting cannot compound itself.
+    const s=getComputedStyle(primary),base=parseFloat(s.fontSize),unit=primary.querySelector('small');
+    ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+    const natural=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0);
+    const reserve=unit?unit.getBoundingClientRect().width+(parseFloat(s.columnGap)||0):0;
+    const slot=(stage.clientWidth-12)/3,normal=parseFloat(getComputedStyle(root.querySelector('.content')).getPropertyValue('--ui-primary-size'));
+    const stacked=base>normal*1.1&&natural+reserve>slot;
+    stage.toggleAttribute('data-hero-stacked',stacked);
+    const available=stacked?stage.clientWidth:slot,size=Math.floor(base*Math.min(1,Math.max(44,available-reserve)/Math.max(1,natural))*100)/100+'px';
+    if(number.style.fontSize!==size)number.style.fontSize=size;
+   }
+   if(grid){const fields=[...grid.children],available=grid.clientWidth;
+    const needed=Math.max(0,...fields.map(field=>{const number=field.querySelector('.car-number'),value=field.querySelector('.ui-metric-value'),label=field.querySelector('.ui-metric-title');let n=0;
+     if(number){const s=getComputedStyle(value);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;n=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0);}
+     const s=getComputedStyle(label);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;const word=Math.max(0,...label.textContent.split(/\s+/).map(w=>ctx.measureText(w).width));return Math.max(n,word+34)+24;}));
+    const columns=fields.length>1&&needed*fields.length+12*(fields.length-1)<=available?fields.length:1;
+    if(grid.style.getPropertyValue('--ui-metric-columns')!==String(columns))grid.style.setProperty('--ui-metric-columns',String(columns));
+   }
+   for(const number of root.querySelectorAll('.car-number')){const value=number.parentElement,s=getComputedStyle(value),base=parseFloat(s.fontSize);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;const natural=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0),size=base*Math.min(1,value.clientWidth/Math.max(1,natural));const px=Math.floor(size*100)/100+'px';if(number.style.fontSize!==px)number.style.fontSize=px;}
+  };
+  fit();this._carLayoutObserver=new ResizeObserver(fit);
+  for(const node of [root.querySelector('.content'),...root.querySelectorAll('.primary-value,.primary-value small,.ui-metric-value,.ui-metric-title')])if(node)this._carLayoutObserver.observe(node);
  }
  _render(){
   if(!this._config)return;
   if(this.isConnected)this._mediaImage.update(this._hass,this._config.image_source==='media'?this._config.image_media:null);
-  if(this._config.evcc_enabled){super._render();this._applyPresentation();return;}
+  if(this._config.evcc_enabled){this._carLayoutObserver?.disconnect();super._render();this._applyPresentation();return;}
   const config=this._config,hass=this._hass,states=hass?.states??{},nl=carDutch(hass),percent=carPercentage(config,states);
   const offline=hass?.connected===false||hass?.connection?.connected===false;
   const signature=JSON.stringify([config,hass?.themes?.darkMode,hass?.locale,hass?.language,offline,...[config.percentage_entity,config.range_entity,config.image_entity,config.field_1_entity,config.field_2_entity,config.field_3_entity].map(id=>states[id]),this._extraSignature()]);
   if(signature===this._signature)return;this._signature=signature;
   const scroll=this.shadowRoot.querySelector('.content')?.scrollTop??0,focused=this.shadowRoot.activeElement?.dataset.entity,focusedTab=this.shadowRoot.activeElement?.dataset.uiTab;
   const title=config.title||(nl?'Mijn auto':'My car'),image=this._vehicleImage(),percentage=percent==null?'\u2014':carReading({state:String(percent),attributes:{unit_of_measurement:'%'}},hass);
-  const fields=[2,3].filter(i=>config['show_field_'+i]);
+  const fields=[1,2,3].filter(i=>config['show_field_'+i]);
   this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${evccCardStyles()}${this._extraStyles()}
-   .car-status{margin-top:16px}.car-readings{margin:0}.content{--ui-metric-tone:var(--tone)}
-   .content[data-density=compact] .car-status{margin-top:12px}
-   .content .header-scene[data-no-readings]{padding-bottom:0}
-   .range-value{font-size:12px;font-weight:600;color:var(--primary-text-color,#20252b)}
-  </style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
+   /* Regular Auto only: EVCC keeps its independent presentation. */
+   :host,ha-card{height:auto;min-height:0}.content{height:auto;overflow:visible}
+   .gallery-top{margin:0;padding:0;background:none}.hero{margin:0;padding:0}
+   .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;padding:0;min-height:0}
+   .car-stage .battery-row{grid-column:1;grid-row:1;align-items:stretch}
+   .car-stage::before,.car-stage::after{content:none}
+   .battery-row [data-ui-primary-value]{max-width:100%}
+   .car-stage .picture{position:relative;inset:auto;grid-column:2;grid-row:1;width:100%;height:auto;aspect-ratio:3.05;min-height:0;margin:0;overflow:hidden}
+   .car-stage .picture img{position:absolute;inset:0;left:var(--evcc-image-offset-x,0px);bottom:auto;top:var(--evcc-image-offset-y,0px);width:100%;height:100%;max-width:none;margin:0;object-fit:contain;transform:scale(var(--evcc-image-scale,1));transform-origin:center;filter:none}
+   .car-stage[data-hero-stacked]{grid-template-columns:minmax(0,1fr)}
+   .car-stage[data-hero-stacked] .picture{grid-column:1;grid-row:2}
+   .content[data-density=compact] .car-stage .picture{height:auto;aspect-ratio:3.5}
+   .car-stage .picture:has(ha-icon),.car-stage .picture:has(img[hidden]){min-height:88px;aspect-ratio:auto}
+   .picture small{font-size:12px;line-height:1.4;overflow-wrap:break-word}.picture:has(img[hidden]) small{padding:12px}
+   .car-status,.content[data-density=compact] .car-status{margin-top:0}
+   .car-readings{margin-top:12px;row-gap:12px;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr))}
+   [data-ui-metric]{background:var(--secondary-background-color);padding:12px;min-height:44px;row-gap:4px}
+   [data-ui-metric] .ui-metric-title{font-size:12px;overflow-wrap:break-word;line-height:1.4}
+   [data-ui-metric] .ui-metric-value{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;white-space:normal;overflow-wrap:break-word;word-break:normal;line-height:1.3}
+   [data-ui-metric] .car-text{min-width:0;max-width:100%;overflow-wrap:break-word}
+   [data-ui-metric] .car-number{display:inline-block;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+   [data-ui-metric] .ui-metric-unit{font-size:12px;line-height:1.4;margin:0;white-space:normal;overflow-wrap:break-word}
+   [data-ui-metric] .ui-metric-icon{color:var(--secondary-text-color);transform:none;width:22px;height:22px}
+   .content[data-density=compact] [data-ui-metric]{padding:10px}
+   .content .header-scene{padding-bottom:0}.car-readings:empty{display:none}
+   .content button[data-entity],.metrics button{min-height:44px}
+   .content button:focus-visible{outline-color:var(--accent-color,var(--primary-color))}
+   .metrics{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}.metrics dt{font-size:12px;overflow-wrap:break-word}.metrics dd{overflow-wrap:break-word}.metrics button{overflow-wrap:break-word}
+  ${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
    <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
     ${offline?`<p class="notice warning" role="status">${nl?'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.':'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>`:''}
-    <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}</div>
+    <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({layout:'uniform',value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}
+    </div>
      <div class="picture">${image?`<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:`<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>${this._hasVehicleImage()?`<small>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:''}`}</div>
-    </div><div class="battery-track" ${percent==null?`aria-label="${nl?'Percentage niet beschikbaar':'Percentage unavailable'}"`:`role="progressbar" aria-label="Percentage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"`}><div class="battery-fill" style="width:${percent??0}%"></div></div></div>
-   </div>${config.show_field_1?`${this._field(1,nl)}`:''}</div>
+   </div>${uiBar({value:percent,label:percent==null?(nl?'Percentage niet beschikbaar':'Percentage unavailable'):(nl?'Accuniveau':'Battery level'),attrs:{class:'battery-progress'}})}</div>
+   </div></div>
    ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:${fields.length}">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;
   const content=this.shadowRoot.querySelector('.content');content.style.setProperty('--evcc-image-scale',String(config.image_scale/100));content.style.setProperty('--evcc-image-offset-y',config.image_offset_y+'px');content.scrollTop=scroll;
   for(const button of this.shadowRoot.querySelectorAll('[data-entity]'))button.addEventListener('click',()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:button.dataset.entity},bubbles:true,composed:true})));
@@ -1707,11 +2427,12 @@ class CarCard extends EvccCard {
   this._tabController=bindUITabs({tabs:this.shadowRoot.querySelectorAll('[data-ui-tab]'),panels:this.shadowRoot.querySelectorAll('[data-ui-tab-panel]'),onSelect:value=>{this._activeTab=value;}});
   if(focusedTab)(Array.from(this.shadowRoot.querySelectorAll('[data-ui-tab]')).find(tab=>tab.dataset.uiTab===focusedTab)??this.shadowRoot.querySelector('[role=tab][aria-selected=true]'))?.focus({preventScroll:true});
   this._applyPresentation();
+  this._fitCarReadings();
   const img=this.shadowRoot.querySelector('img');if(img)img.addEventListener('error',()=>{img.hidden=true;const hint=this.shadowRoot.querySelector('.picture small');if(hint)hint.hidden=false;},{once:true});
  }
 }
 
-if(!customElements.get('eleven-car-card'))customElements.define('eleven-car-card',CarCard);
+if(!customElements.get('eleven-car-card'))customElements.define('eleven-car-card',withCardBackground(CarCard));
 window.customCards=window.customCards||[];
 if(!window.customCards.some(card=>card.type==='eleven-car-card'))window.customCards.push({type:'eleven-car-card',name:'Eleven Car (beta)',description:'Vehicle image, percentage and configurable readings, with optional EVCC charging integration.',preview:true});
 })();

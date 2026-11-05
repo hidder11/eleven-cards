@@ -2,6 +2,8 @@
 
 Horizontal status-history bars, one per entity. Uses Home Assistant Recorder history; missing history remains unknown and is never replaced by the current state. Read-only: no devices or automations are controlled.
 
+Use the graph directly or its arrow-key navigation to browse state changes; Home/End jump to the bounds and Escape dismisses the details. Sensor labels have a 44px minimum height. Short intervals retain their accurate width on the time scale.
+
 ## Installation
 
 The Graph and Timeline cards share one header implementation, including title typography, responsive spacing and stroke-based SVG icons. The visual editor’s Show title / Titel tonen switch (`show_title`, default `true`) hides only the heading, preserving its configured text and the zoom and History controls.
@@ -81,3 +83,7 @@ From the collection root, run `npm test` and `npm run check`. Timeline tests and
 Serve the repository over HTTP and open `tests/fixtures/timeline-popups.html` to exercise repeated updates while the card's slot renders asynchronously. It includes timeframe/information popup checks, theme and width switches, zoom, hover, and cancellation during rendering. Append `?fallback=1` to test browsers without the native Popover API. Popup placement waits for the trigger's layout and is updated after `ha-card.updateComplete` and trigger resizing; obsolete callbacks are disconnected when the card rerenders.
 
 For scroll restoration, use a short viewport (for example a 360 px high iframe) and choose **Tijdvak scrollen + verversen**. The reported `before` and `after` scroll offsets should match and be greater than zero, including after repeated pending renders. For outside dismissal, choose **Informatie + herhaald verversen**, wait for it to reopen, then click **Buitenklik**. Verify that the popup closes and stays closed after another update, especially with `?fallback=1`.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

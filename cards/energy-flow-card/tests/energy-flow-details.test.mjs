@@ -36,10 +36,10 @@ test('device totals avoid duplicate and nested meters but retain measured childr
  const historical=energyFlowDeviceRows(prefs,hass,true,{parent:[{change:10}],child:[{change:4}]});assert.equal(energyFlowDeviceTotal(historical),10);
 });
 const host=(history=false)=>({_view:history?'history':'live',_hass:{language:'en',config:{currency:'EUR',time_zone:'UTC'},states:{}},_prefs:{energy_sources:[]},_offline:()=>false,_start:Date.now()-3600000,_end:Date.now()});
-test('detail content escapes device/source names and explains absent devices without extra configuration',()=>{
+test('detail content escapes device/source names and keeps home totals without configured devices',()=>{
  const h=host();h._prefs.device_consumption=[{name:'<img src=x onerror=alert(1)>',stat_consumption:'x',stat_rate:'sensor.x'}];h._hass.states['sensor.x']=state(1,'kW');
  const html=energyFlowDetailContent(h,'home',{home:2});assert.ok(html.includes('&lt;img'));assert.ok(!html.includes('<img'));assert.ok(!html.includes('No measurement'));
- h._prefs.device_consumption=[];assert.ok(energyFlowDetailContent(h,'home',{home:0}).includes('No individual devices'));
+ h._prefs.device_consumption=[];const empty=energyFlowDetailContent(h,'home',{home:0});assert.ok(empty.includes('Home total'));assert.ok(empty.includes('Estimated base consumption'));assert.ok(!empty.includes('No individual devices'));
  h._prefs.energy_sources=[{type:'solar',stat_energy_from:'pv',name:'<img src=x onerror=alert(1)>'},{type:'solar',stat_energy_from:'pv2',name:'Other roof'}];const solar=energyFlowDetailContent(h,'sun',{solar:3,home:2,export:1});assert.ok(solar.includes('&lt;img'));assert.ok(!solar.includes('<img'));
 });
 test('solar attribution is suppressed with battery storage, unknown balances and impossible exports',()=>{

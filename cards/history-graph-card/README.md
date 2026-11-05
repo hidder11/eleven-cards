@@ -330,3 +330,7 @@ python3 -m http.server 18766 --bind 127.0.0.1
 Serve the project root, not `qa/`. The fixture emulates `ha-card` and `hass.callApi` using explicitly **synthetic** temperature history, including compressed-style REST rows, reversed entity order and an unavailable interval. Fixture-only language, theme and response controls are not card settings. `window.runChecks()` measures tooltip bounds, round markers, line dashes, Escape and page overflow. It is not proof of live HA integration or real native editor compatibility.
 
 The manual Eleven installation uses `/local/eleven-cards/eleven-history-graph-card.js`; a cache query may be appended for updates. This preparation does not change any live resources or publish a release.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.
