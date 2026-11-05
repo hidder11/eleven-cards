@@ -335,4 +335,5 @@ The manual Eleven installation uses `/local/eleven-cards/eleven-history-graph-ca
 
 The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.
 
+Hover tooltips use the available visible card height, rather than being restricted to a short plot. This keeps ordinary multi-sensor lists readable without a scrollbar. Lists taller than the available card or viewport still respect those bounds; touch or keyboard inspection pins the tooltip for scrolling.
 Legend entries use their own width and wrap when the row is full, rather than occupying two fixed columns. Long sensor names and values wrap inside the card; sensor visibility and keyboard isolation remain available.
