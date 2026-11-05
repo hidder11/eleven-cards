@@ -1,7 +1,8 @@
 import {cardThemeStyles} from '../../../shared/card-theme.js';
 import {uiPrimaryValue,uiPrimaryValueStyles} from '../../../shared/ui-primary-value.js';
 import {uiMetric,uiMetricStyles} from '../../../shared/ui-metric.js';
-import {uiEscape,uiButtonStyles} from '../../../shared/ui-button.js';
+import {uiEscape,uiButton} from '../../../shared/ui-button.js';
+import {uiActionButtonStyles} from '../../../shared/ui-action-button.js';
 import {uiTabs,bindUITabs,uiTabsStyles,uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';
 import {normalizeWeatherConfig,weatherDutch,weatherCondition,weatherNumber,weatherForecastType,weatherForecastRows,weatherDate,weatherVisibleTabs,weatherField,WEATHER_FORECAST_FIELDS,weatherForecastFields} from './weather-utils.js';
 import {WeatherEditor} from './weather-editor.js';
@@ -87,7 +88,7 @@ export class WeatherCard extends HTMLElement {
   const rows=weatherForecastRows(this._forecast,this._config.forecast_count,Date.now(),this._forecastType,this._hass);
   let body;
   if(this._offline())body=`<p class="notice">${nl?'Verwachting niet beschikbaar zonder verbinding.':'Forecast unavailable while offline.'}</p>`;
-  else if(this._forecastStatus==='error')body=`<p class="notice" role="status">${nl?'Verwachting niet beschikbaar.':'Forecast unavailable.'}</p><button class="retry">${nl?'Opnieuw proberen':'Retry'}</button>`;
+  else if(this._forecastStatus==='error')body=`<p class="notice" role="status">${nl?'Verwachting niet beschikbaar.':'Forecast unavailable.'}</p>${uiButton({variant:'action',className:'retry',text:nl?'Opnieuw proberen':'Retry'})}`;
   else if(this._forecastStatus==='loading')body=`<p class="notice" role="status">${nl?'Verwachting laden…':'Loading forecast…'}</p>`;
   else if(!rows.length)body=`<p class="notice">${nl?'Geen verwachting beschikbaar.':'No forecast available.'}</p>`;
   else body=`<ol class="forecast-list" tabindex="0" aria-label="${heading}">${rows.map(row=>{
@@ -147,7 +148,7 @@ export class WeatherCard extends HTMLElement {
   const focusedEntity=this.shadowRoot.activeElement?.dataset?.entity,focusedStatus=this.shadowRoot.activeElement?.classList.contains('weather-status');
   const number=(value,unit='',digits=0)=>weatherNumber(available?value:null,hass,unit,digits);
   const unit=attributes.temperature_unit||'°C';
-  patchWeatherDOM(this.shadowRoot,`<style>${uiButtonStyles()}${uiTabsStyles()}${weatherStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}
+  patchWeatherDOM(this.shadowRoot,`<style>${uiActionButtonStyles()}${uiTabsStyles()}${weatherStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}
 .weather-status{margin-top:16px}.weather-metrics{margin:0}.header-region{--ui-metric-tone:var(--weather-icon-tone)}.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}.content[data-compact=true] .weather-status{margin-top:12px}.hero{padding-top:0;grid-template-columns:minmax(0,1fr)}.hero .temperature{max-width:50%;position:relative;z-index:1}.content[data-icon-style] .hero>.art{inset:0 auto 0 50%;width:50%;transform:translate(calc(-50% + var(--weather-icon-x,0px)),var(--weather-icon-y,0px)) scale(var(--weather-icon-scale,1));transform-origin:center;min-width:0}.hero .art svg{max-width:100%}.hero .temperature{margin-top:0;font-size:inherit;letter-spacing:inherit}.content[data-compact=true] .hero .temperature{margin-top:0}
 /* Reserve the icon for the label row; keep readings and their units together. */
 [data-ui-metric] .ui-metric-icon{grid-row:1}

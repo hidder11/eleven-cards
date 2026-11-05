@@ -5,7 +5,7 @@ import {plannerCSS} from '../src/styles.js';
 const src=readFileSync(new URL('../src/appliance-planner.js',import.meta.url),'utf8');
 test('daily card exposes only Today/Tomorrow with explicit end-of-day meaning',()=>{
  assert.match(src,/<legend>Klaar vóór einde van<\/legend>/);
- assert.match(src,/data-day=/);
+ assert.match(src,/'data-day':this.today\(i\)/);
  assert.doesNotMatch(src,/deadline-date|deadline-time|timeDraft|timeInvalid|keepDeadlineInputs|validTime/);
 });
 test('one reading well groups start/end and estimated cost; header has no decorative brand',()=>{

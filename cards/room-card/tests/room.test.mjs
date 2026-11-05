@@ -1,5 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+test('room title matches the collection heading size and weight in source and standalone',()=>{
+ for(const path of ['../src/room-card.js','../dist/eleven-room-card.js']){
+  const css=readFileSync(new URL(path,import.meta.url),'utf8').match(/\.name\{([^}]+)\}/)?.[1];
+  assert.ok(css,`${path}: room title rule exists`);
+  assert.match(css,/(?:^|;)font-size:16px(?:;|$)/,path);
+  assert.match(css,/(?:^|;)font-weight:600(?:;|$)/,path);
+ }
+});
 const mod = await import('../src/room-utils.js').catch(()=>({}));
 test('config weigert externe navigatie en niet-lampen; temperatuur respecteert eenheid en ontbrekende data',()=>{
  assert.equal(typeof mod.normalizeRoom,'function');

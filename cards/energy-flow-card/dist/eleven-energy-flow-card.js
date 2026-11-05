@@ -1479,7 +1479,7 @@ header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}
 button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(--secondary-background-color,#eee);border-radius:7px;padding:12px}.status{display:flex;gap:12px;align-items:center;width:100%;text-align:left;border:0;min-height:0;margin:16px 0 0}.status-icon{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:10px;color:var(--tone);background:color-mix(in srgb,var(--tone) 13%,transparent)}.status-icon svg{width:30px;height:30px}.status strong{font-size:13px;line-height:1.4;font-weight:600}.status small{display:block;font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}
 .metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0}.metrics:has(.metric:only-child){grid-template-columns:minmax(0,1fr)}.metric{min-width:0;display:grid;grid-template-rows:auto auto;gap:2px;align-content:start}.metric dt{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin:0;overflow-wrap:anywhere}.metric dd{font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:0;overflow-wrap:anywhere}
 .forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--weather-text-tone)}
-.notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.retry{background:transparent;color:var(--primary-color,#2196f3);border:0;min-height:32px;padding:4px 0}.status:focus-visible,.retry:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
+.notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.status:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
 @container(max-width:320px){.hero{min-height:150px}.temperature{font-size:65px;margin-top:-17px}header{margin-top:-17px;padding-top:14px}.art svg{height:100px}.forecast-list{grid-auto-columns:minmax(46px,1fr)}}
 @supports(grid-template-rows:subgrid){.metrics{grid-template-rows:auto auto;row-gap:2px}.metric{grid-row:span 2;grid-template-rows:subgrid}}
 .forecast-panel{padding-top:16px}.forecast-panel[hidden]{display:none!important}
@@ -1557,14 +1557,14 @@ const weatherCalmStyles=`
 [data-ui-metric] .ui-metric-value{white-space:nowrap;overflow-wrap:normal;word-break:normal}
 .weather-status{min-height:44px}
 .ui-metric-unit{font-size:12px;white-space:nowrap}
-[data-ui-tabs] [role=tab]:focus-visible,.retry:focus-visible,button[data-ui-metric]:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+[data-ui-tabs] [role=tab]:focus-visible,button[data-ui-metric]:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
 .forecast-list{grid-auto-columns:minmax(max-content,1fr);gap:8px;padding-bottom:4px}
 .forecast-list li{min-width:max-content}
 .forecast-list time{font-size:12px;white-space:nowrap}
 .forecast-atomic{display:inline-block;white-space:nowrap;overflow-wrap:normal;word-break:normal}
 .forecast-label{font-size:11px;white-space:normal;overflow-wrap:normal;word-break:normal}
 .forecast-low,.rain-chance,.forecast-extra{font-size:12px}
-.retry{min-height:44px;padding:8px 12px;border-radius:var(--eleven-material-control-radius,12px);color:var(--accent-color,var(--primary-color));background:var(--secondary-background-color);font-size:13px}
+
 `;
 
 // Retain live nodes, focus, scroll offsets and running SVG animations on telemetry updates.
@@ -1978,7 +1978,7 @@ const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 .energy-device-sort select:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
 @container(max-width:360px){.energy-home-summary dd{font-size:16px}}
 
-:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--detail-bar-radius:8px;--detail-home:var(--house,var(--primary-color,#578d83));--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,#9576bb)}
+:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--detail-bar-radius:8px;--detail-home:var(--house,var(--primary-color,#578d83));--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
 :is([data-energy-popup],[data-energy-panel]) .ui-popup-heading>strong{font-size:14px;font-weight:600}
 :is([data-energy-popup],[data-energy-panel]) button{border-radius:8px}
 .energy-grid-metrics>.energy-grid-net{grid-column:1/-1}
@@ -2029,17 +2029,18 @@ button.circle-node:focus-visible{outline-offset:-3px}
 
 const energyFlowStyles=`
 ha-card{border-radius:var(--ha-card-border-radius,12px)}
-.content [data-ui-metric],.content .circle-node[data-ui-metric]{--ui-metric-radius:8px;background:var(--secondary-background-color,#eee)}
+.content [data-ui-metric]:not(.circle-node){--ui-metric-radius:8px;background:var(--secondary-background-color,#eee)}
 .content [data-ui-button],.content .period-trigger,.content .period-custom input,.content [data-ui-popup]{border-radius:8px}
 
 :host{height:100%;min-height:0}ha-card{height:100%;min-height:0;overflow:auto;overscroll-behavior:auto;scrollbar-width:thin}
-.content{--tone:#d9b77c;--solar:#d9b77c;--grid:#91a9c7;--house:#9bc9b2}
-.content[data-dark=false]{--tone:#92641c;--solar:#946800;--grid:#356da6;--house:#34785d}
+.content{--tone:#ffd45c;--solar:var(--energy-solar-color,#ffd45c);--grid:var(--energy-grid-consumption-color,#76cafa);--house:#74d8ac;--return:var(--energy-grid-return-color,#b8a7ff)}
+.content[data-dark=false]{--tone:#f3b51b;--solar:var(--energy-solar-color,#f3b51b);--grid:var(--energy-grid-consumption-color,#269ad5);--house:#269b79;--return:var(--energy-grid-return-color,#8873dc)}
 .content[data-color=waiting]{--tone:#82b8e8}.content[data-color=done]{--tone:#7ed79c}.content[data-color=planned]{--tone:#8fa5ff}.content[data-color=off]{--tone:#a7a9b2}
 .content[data-dark=false][data-color=waiting]{--tone:#386c9b}.content[data-dark=false][data-color=done]{--tone:#277441}.content[data-dark=false][data-color=planned]{--tone:#4455ad}.content[data-dark=false][data-color=off]{--tone:#656975}
 .header-region{display:grid;grid-template-columns:minmax(0,1fr);gap:16px 20px;align-items:start}
 .energy-topline{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:start;gap:12px 20px;min-width:0}
 .energy-heading{flex:0 1 auto;min-width:0;max-width:100%}
+.energy-heading [data-ui-primary-value][data-primary-layout=uniform] .primary-label:not(button){min-height:0}
 .toolbar{display:flex;align-items:start;flex:0 1 auto;width:auto;max-width:100%;min-width:0;margin-inline-start:auto;padding-top:2px}
 .content[data-view=history] .toolbar{flex:1 1 260px;min-width:min(100%,260px)}
 .toolbar .header-actions{margin:0;min-width:0;width:100%;max-width:100%}
@@ -2054,22 +2055,32 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .toolbar .view-period .period-trigger svg{width:14px;height:14px}
 .circle-flow{grid-column:1/-1;min-width:0}
 .circle-flow *{box-sizing:border-box}
-.circle-scene{position:relative;width:100%;aspect-ratio:412/164;margin:0 auto}
-.circle-scene foreignObject{overflow:visible}
-.circle-scene>svg{display:block;width:100%;height:100%;overflow:visible}
+/* Only routes scale. HTML rows grow with localized values and enlarged text.
+   The first half of the node row ends at SVG y=104, keeping the original
+   horizontal routes through the button centers without a resize observer. */
+.circle-scene{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:minmax(40px,auto) auto minmax(36px,1fr) minmax(36px,1fr);width:100%;margin:0 auto}
+.flow-routes{position:relative;grid-area:1/1/4/-1;min-width:0;pointer-events:none}
+.flow-routes>svg{position:absolute;inset:0 auto auto 0;display:block;width:100%;height:calc(100% * 164 / 104);overflow:visible}
+.circle-scene>[data-node]{grid-row:3/5;z-index:1;align-self:stretch;justify-self:center}
+.circle-scene>[data-node=sun]{grid-column:1;justify-self:start}
+.circle-scene>[data-node=home]{grid-column:2/4}
+.circle-scene>[data-node=grid]{grid-column:4;justify-self:end}
+.circle-scene>[data-flow-value=return]{grid-area:1/1/2/-1;padding-top:16px;padding-bottom:8px}
+.circle-scene>[data-flow-value=solar]{grid-area:2/1/3/3}
+.circle-scene>[data-flow-value=grid]{grid-area:2/3/3/5}
 .flow-route[data-route=solar]{color:var(--solar)}
-.flow-route[data-route=return]{color:#b4a0db}.content[data-dark=false] .flow-route[data-route=return]{color:#8060b1}
+.flow-route[data-route=return]{color:var(--return)}
 .flow-route[data-route=grid]{color:var(--grid)}
 .flow-bed{fill:none;stroke:currentColor;stroke-width:8;stroke-opacity:.16;stroke-linecap:round;stroke-linejoin:round}
 .flow-wire{fill:none;stroke:currentColor;stroke-width:2.1;stroke-opacity:.9;stroke-linecap:round;stroke-linejoin:round}
 .flow-route[data-active=false] .flow-bed{stroke:var(--divider-color,#ddd);stroke-width:2;stroke-opacity:.7}
 .flow-route[data-active=false] .flow-wire{stroke-opacity:.12}
 .flow-dot{fill:currentColor;r:3;offset-distance:0%;offset-rotate:0deg;animation:energy-flow-travel var(--route-duration,4s) linear infinite}
-.circle-node[data-ui-metric]{--node-ink:var(--ui-metric-tone);width:100%;height:100%;position:relative;isolation:isolate;grid-template-columns:minmax(0,1fr);grid-template-rows:22px 16px;align-content:center;justify-items:center;row-gap:4px;column-gap:0;border:0;border-radius:8px;background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--node-ink) 10%,transparent),color-mix(in srgb,var(--node-ink) 3%,transparent) 30%,transparent 70%),var(--secondary-background-color,#eee)}
-.circle-node[data-ui-metric][data-density] .ui-metric-icon,.circle-node[data-ui-metric][data-density] .ui-metric-icon svg{width:22px;height:22px}
-.circle-node .ui-metric-value{display:none}.circle-node[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:2;justify-self:center;text-align:center;font-size:11px;font-weight:500;line-height:16px}
+.circle-node[data-ui-metric]{--node-ink:var(--ui-metric-tone);width:max-content;max-width:none;min-width:72px;min-height:72px;height:auto;position:relative;isolation:isolate;grid-template-columns:minmax(0,1fr);grid-template-rows:22px auto;align-content:center;justify-items:center;row-gap:4px;column-gap:0;border:0;border-radius:8px}
+.circle-node[data-ui-metric][data-density] .ui-metric-icon,.circle-node[data-ui-metric][data-density] .ui-metric-icon svg,.circle-node[data-ui-metric][data-density] .ui-metric-icon ha-icon{width:22px;height:22px;--mdc-icon-size:22px}
+.circle-node .ui-metric-value{display:none}.circle-node[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:2;justify-self:center;text-align:center;font-size:12px;font-weight:500;line-height:1.35;white-space:nowrap;overflow-wrap:normal;word-break:normal}
 .circle-node[data-ui-metric][data-density] .ui-metric-icon{position:relative;grid-row:1;grid-column:1;justify-self:center;align-self:center;transform:none;color:var(--node-ink);overflow:visible}
-.flow-reading{fill:var(--primary-text-color,#20252b);font-family:inherit;font-size:18px;font-weight:600;letter-spacing:-.4px;font-variant-numeric:tabular-nums}.flow-reading[data-long=true]{font-size:12px}.flow-unit{fill:var(--secondary-text-color,#626a78);font-size:11px;font-weight:400;letter-spacing:0}
+.flow-reading{position:relative;z-index:1;min-width:0;padding:0 4px 8px;color:var(--primary-text-color,#20252b);font-family:inherit;font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.4px;text-align:center;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.flow-reading[data-long=true]{font-size:12px}.flow-unit{color:var(--secondary-text-color,#626a78);font-size:12px;font-weight:400;letter-spacing:0;white-space:nowrap}
 .flow-arrow{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.flow-route[data-active=false] .flow-arrow{opacity:.24}
 .header-region>[data-ui-metric]{grid-column:1/-1}
 .flow-secondary{margin-top:12px}
@@ -2083,19 +2094,32 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 @media(prefers-reduced-motion:reduce){.circle-scene .flow-dot{display:none}}
 .toolbar .period-menu-navigation{display:none}
 ${segmentedControlStyles('.toolbar .chart-controls','.toolbar [data-view-button],.toolbar .period-trigger,.toolbar .chart-controls>[data-period]',{first:'.toolbar .period-trigger,.toolbar .view-period>[data-view-button]',last:'.toolbar [data-view-button]',dividers:'.toolbar .chart-controls>[data-period],.toolbar .chart-controls>[data-view-button]'})}
+/* Keep these after the shared segmented recipe, which defaults to 36px. */
+.toolbar .chart-controls{flex-wrap:wrap}
+.toolbar .view-period{flex:1 1 120px;max-width:100%;min-width:max-content;flex-wrap:wrap}
+.toolbar .chart-controls>[data-period],.toolbar .chart-controls [data-view-button],.toolbar .view-period .period-trigger{min-width:44px;min-height:44px;height:auto;width:auto;max-width:100%;padding:6px;font-size:12px;line-height:1.35;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.toolbar .chart-controls>[data-period]{width:44px}
+.toolbar .chart-controls>[data-period=now]{width:auto;min-width:44px}
+.toolbar .view-period .period-controls{min-width:max-content}
+.toolbar .view-period .period-trigger{width:100%}
+.toolbar .view-period .period-trigger>span{overflow:visible;text-overflow:clip;white-space:nowrap;overflow-wrap:normal;text-align:start}
+@container(max-width:340px){.content[data-view=history] .toolbar .view-period{flex-basis:100%}}
 
 `;
 
-// One stroke family for the diagram and shared metric surfaces.
-const energyFlowIconPaths={
- solar:'M3 12h15l2 9H1l2-9ZM4 16h14M7 12l-1 9m7-9 1 9M6 23h9M10 21v2M18 2v2m0 4v2m-4-4h-2m12 0h-2m-7-3-1-1m7 1 1-1M20 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0',
- sun:'M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0',
- grid:'m12 2-7 20m7-20 7 20M8 7h8M6 13h12M3 22h18M12 2v20M8 7l10 6M16 7 6 13',
- home:'m3 10 9-7 9 7M5 9v12h14V9m-6 2-4 6h4l-1 4 4-6h-4l1-4',
- import:'m8 8 6-5 7 5M10 8v13h10V8M2 14h12m-4-4 4 4-4 4',
- export:'m3 8 6-5 6 5M4 8v13h10v-4M10 12h12m-4-4 4 4-4 4'
+// Native HA/MDI glyphs; keep energy colors and accessible parent labels.
+const energyFlowIconNames={
+ solar:'mdi:solar-power-variant',
+ sun:'mdi:weather-sunny',
+ grid:'mdi:transmission-tower',
+ home:'mdi:home',
+ import:'mdi:home-import-outline',
+ export:'mdi:home-export-outline'
 };
-function energyFlowIcon(kind){return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-energy-icon="${kind}"><path d="${energyFlowIconPaths[kind]??energyFlowIconPaths.home}"/></svg>`;}
+function energyFlowIcon(kind){
+ const key=Object.hasOwn(energyFlowIconNames,kind)?kind:'home';
+ return `<ha-icon icon="${energyFlowIconNames[key]}" aria-hidden="true" data-energy-icon="${key}"></ha-icon>`;
+}
 
 
 
@@ -2113,18 +2137,19 @@ function energyFlowDiagram(data,history,nl,format,{detailView='popup',tabs=[],id
   const active=amount!=null&&amount>0,duration=6-Math.min(1,(amount||0)/Math.max(total,1))*4.5;
   return `<g class="flow-route" data-route="${name}" data-active="${active}"><path class="flow-bed" d="${path}"/><path class="flow-wire" d="${path}"/><path class="flow-arrow" d="${arrow}"/>${active&&!history?`<circle class="flow-dot" r="2.7" style="offset-path:path('${path}');--route-duration:${duration}s"/>`:''}</g>`;
  };
- const node=(kind,label,value,x,tone)=>{
+ const node=(kind,label,value,tone)=>{
   const aria=kind==='grid'?`${text('Netafname','Grid import')} ${number(incoming)} ${unit}, ${text('Teruglevering','Grid export')} ${number(outgoing)} ${unit}`:`${label}: ${number(value)} ${unit}`;
-  return `<foreignObject x="${x-36}" y="68" width="72" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="height:100%">${uiMetric({action:true,title:label,value:label,iconContent:energyFlowIcon(kind),compact:true,attrs:{class:'circle-node','data-node':kind,'data-direction':kind==='grid'?direction:'','data-active':String(value!=null&&value>0),'data-energy-detail':kind,'aria-haspopup':detailView==='popup'?'dialog':null,'aria-controls':detailView==='tabs'&&tabs.includes(kind)?id+'-tabs-panel-'+kind:null,disabled:detailView==='tabs'&&!tabs.includes(kind),'aria-label':aria,style:`--ui-metric-tone:var(--${tone})`}})}</div></foreignObject>`;
+  return uiMetric({action:true,title:label,value:label,iconContent:energyFlowIcon(kind),compact:true,attrs:{class:'circle-node','data-node':kind,'data-direction':kind==='grid'?direction:'','data-active':String(value!=null&&value>0),'data-energy-detail':kind,'aria-haspopup':detailView==='popup'?'dialog':null,'aria-controls':detailView==='tabs'&&tabs.includes(kind)?id+'-tabs-panel-'+kind:null,disabled:detailView==='tabs'&&!tabs.includes(kind),'aria-label':aria,style:`--ui-metric-tone:var(--${tone})`}});
  };
- const reading=(name,value,x,y)=>`<text class="flow-reading" data-flow-value="${name}" data-long="${number(value).length>6}" x="${x}" y="${y}" text-anchor="middle">${uiEscape(number(value))}${value==null?'':`<tspan class="flow-unit"> ${unit}</tspan>`}</text>`;
- return `<div class="circle-flow" role="group" aria-label="${text('Energiestromen tussen zon, woning en net','Energy flows between solar, home and grid')}"><div class="circle-scene"><svg viewBox="4 0 412 164">
+ const reading=(name,value)=>`<div class="flow-reading" data-flow-value="${name}" data-long="${number(value).length>6}">${uiEscape(number(value))}${value==null?'':`<span class="flow-unit"> ${unit}</span>`}</div>`;
+ return `<div class="circle-flow" role="group" aria-label="${text('Energiestromen tussen zon, woning en net','Energy flows between solar, home and grid')}"><div class="circle-scene"><div class="flow-routes" aria-hidden="true"><svg viewBox="4 0 412 164" preserveAspectRatio="none">
   ${route('solar','M66 104H184',own,'M126 100l5 4-5 4')}
   ${route('return','M40 78V18A8 8 0 0 1 48 10H372A8 8 0 0 1 380 18V78',returned,'M126 6l5 4-5 4M289 6l5 4-5 4')}
   ${route('grid','M354 104H236',incoming,'M294 100l-5 4 5 4')}
-  ${node('sun',text('Zon','Solar'),solar,40,'solar')}${node('home',text('Woning','Home'),home,210,'house')}${node('grid',text('Net','Grid'),incoming==null||outgoing==null?null:incoming+outgoing,380,'grid')}
-  ${reading('return',returned,210,36)}${reading('solar',own,128,89)}${reading('grid',incoming,292,89)}
- </svg></div></div>`;
+  </svg></div>
+  ${node('sun',text('Zon','Solar'),solar,'solar')}${node('home',text('Woning','Home'),home,'house')}${node('grid',text('Net','Grid'),incoming==null||outgoing==null?null:incoming+outgoing,'grid')}
+  ${reading('return',returned)}${reading('solar',own)}${reading('grid',incoming)}
+ </div></div>`;
 }
 
 
@@ -2134,7 +2159,7 @@ function energyFlowMetrics(data,history,nl,format,compact=false,config={}){
  const field=(key,title,icon,tone)=>uiMetric({title,iconContent:energyFlowIcon(icon),value:data[key]==null?null:format(data[key]),unit,compact,attrs:{'data-metric':key,style:`--ui-metric-tone:var(--${tone})`}});
  return {
   solar:config.show_field_1===false?'':field('solar',text('Zonne-energie','Solar generation'),'solar','solar'),
-  grid:config.show_field_2===false&&config.show_field_3===false?'':`<div class="flow-secondary" data-ui-metric-grid style="--ui-metric-columns:${config.show_field_2===false||config.show_field_3===false?1:2}">${config.show_field_2===false?'':field('import',text('Netafname','Grid import'),'import','grid')}${config.show_field_3===false?'':field('export',text('Teruglevering','Grid export'),'export','solar')}</div>`
+  grid:config.show_field_2===false&&config.show_field_3===false?'':`<div class="flow-secondary" data-ui-metric-grid style="--ui-metric-columns:${config.show_field_2===false||config.show_field_3===false?1:2}">${config.show_field_2===false?'':field('import',text('Netafname','Grid import'),'import','grid')}${config.show_field_3===false?'':field('export',text('Teruglevering','Grid export'),'export','return')}</div>`
  };
 }
 
@@ -2241,8 +2266,8 @@ class EnergyFlowCard extends HTMLElement{
  set hass(hass){const changed=this._hass?.connection!==hass?.connection||this._offline()!==(hass?.connected===false||hass?.connection?.connected===false);this._hass=hass;if(changed)this._reset();this.render();this._sync();}
  get hass(){return this._hass;}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
- connectedCallback(){this._attached=true;this._connectTimeframe();if(this._view==='history')this._reloadPeriod();this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._sync());this.render();this._sync();}
- disconnectedCallback(){this._tabController?.disconnect();this._attached=false;this._connected=false;this._timeframeKey=null;disconnectTimeframeSync(this);this._motionCleanup?.();this._motionCleanup=null;disconnectPeriodControls(this);this._reset();}
+ connectedCallback(){this._attached=true;this._connectTimeframe();if(this._view==='history')this._reloadPeriod();this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._sync());this._readingResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._readingResize=new ResizeObserver(()=>this._fitPrimaryReading());this._readingResize.observe(this);}this.render();this._sync();}
+ disconnectedCallback(){this._readingResize?.disconnect();this._readingResize=null;this._tabController?.disconnect();this._attached=false;this._connected=false;this._timeframeKey=null;disconnectTimeframeSync(this);this._motionCleanup?.();this._motionCleanup=null;disconnectPeriodControls(this);this._reset();}
  _reset(){this._dismissDetails();this._baseVersion=(this._baseVersion??0)+1;this._baseResult=null;this._basePendingKey=null;this._detailVersion=(this._detailVersion??0)+1;this._detailResult=null;this._detailLoading=false;this._detailError=false;this._detailInfo=null;this._version++;clearTimeout(this._timer);this._timer=null;this._loading=false;this._prefs=null;this._statistics=null;this._error=null;this._requested=0;}
  _connectTimeframe(){
   this._connected=!!this._attached&&this._view==='history';
@@ -2353,6 +2378,14 @@ class EnergyFlowCard extends HTMLElement{
    if(version!==this._version)return;this._loading=false;this.render();this._sync();
   });
  }
+ _fitPrimaryReading(){
+  const content=this.shadowRoot.querySelector('.content'),number=this.shadowRoot.querySelector('.energy-heading .primary-number');
+  if(!content||!number||!content.clientWidth)return;
+  number.style.removeProperty('font-size');
+  const row=number.parentElement,unit=row.querySelector('small'),styles=getComputedStyle(content),available=content.clientWidth-parseFloat(styles.paddingLeft)-parseFloat(styles.paddingRight)-(unit?.getBoundingClientRect().width??0)-6;
+  const width=Math.max(number.scrollWidth,number.getBoundingClientRect().width),size=parseFloat(getComputedStyle(number).fontSize);
+  if(width>available&&available>0)number.style.fontSize=Math.max(12,size*available/width*.98)+'px';
+ }
  render(){
   if(!this._config)return;
   const config=this._config,nl=energyFlowDutch(this._hass),text=(a,b)=>nl?a:b,history=this._view==='history',offline=this._offline();
@@ -2379,7 +2412,7 @@ class EnergyFlowCard extends HTMLElement{
   const toolbar=`<div class="toolbar"><div class="header-actions"><div class="chart-controls" role="group" aria-label="${text('Weergave en tijdvak','View and timeframe')}"><div class="view-period">${history?period.picker:switchButton}</div>${history?period.navigation+switchButton:''}</div></div></div>`;
   let notice=offline?text('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'):this._error?text('Energy-gegevens laden mislukt. Controleer de Energy-configuratie en Recorder.','Could not load Energy data. Check Energy configuration and Recorder.'):!this._prefs?text('Energy-configuratie laden…','Loading Energy configuration…'):!configured?text('Stel elektriciteitsbronnen in via het Home Assistant Energy-dashboard.','Configure electricity sources in the Home Assistant Energy dashboard.'):this._loading&&history&&!this._statistics?text('Energiestatistieken laden…','Loading energy statistics…'):Object.values({solar:data.solar,import:data.import,export:data.export,home:data.home}).some(value=>value==null)?history?text('Niet alle energiestatistieken zijn beschikbaar voor deze periode.','Some energy statistics are unavailable for this period.'):text('Actueel vermogen ontbreekt. Stel vermogenssensoren in bij Energy of kies ze in de kaartconfiguratie.','Live power is missing. Configure power sensors in Energy or select them in the card editor.'):'';
   if(data.battery)notice+=(notice?' ':'')+text('Thuisbatterij meegerekend in woningverbruik.','Home consumption includes the battery balance.');
-  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiBalancedTabsStyles()}${uiPrimaryValueStyles()}${uiMetricStyles()}${cardThemeStyles({periodUI:true,wells:'.content [data-ui-metric],.circle-node[data-ui-metric],[data-ui-detail-surface]',controls:'.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'[data-ui-popup]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div><div class="energy-topline"><div class="energy-heading">${uiPrimaryValue({layout:'uniform',value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${toolbar}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
+  patchWeatherDOM(this.shadowRoot,`<style>${cardHeaderStyles()}${periodControlsStyles()}${weatherStyles}${energyFlowStyles}${energyFlowBackgroundStyles}${energyFlowDetailStyles}${energyFlowTabStyles}${uiBalancedTabsStyles()}${uiPrimaryValueStyles()}${uiMetricStyles()}${cardThemeStyles({periodUI:true,wells:'.content [data-ui-metric]:not(.circle-node),[data-ui-detail-surface]',controls:'.circle-node[data-ui-metric],.chart-controls,.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'[data-ui-popup]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}</style><ha-card><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-view="${this._view}" data-color="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&!this._error}" data-compact="${config.compact}" data-dark="${!!this._hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${energyFlowBackground(config.background)}</div><div class="energy-topline"><div class="energy-heading">${uiPrimaryValue({layout:'uniform',value:data.home==null?null:format(data.home),unit,subtitle:config.title||text('Woningverbruik','Home consumption'),compact:config.compact,attrs:{'data-metric':'home','data-long':String(data.home!=null&&format(data.home).length>6)}})}</div>${toolbar}</div>${energyFlowDiagram(data,history,nl,format,{detailView:config.detail_view,tabs:config.tabs,id:this._id})}${metrics.solar}</div>${metrics.grid}${notice?`<p class="notice" role="status">${uiEscape(notice)}</p>`:''}${this._error&&!offline?uiButton({text:text('Opnieuw proberen','Retry'),variant:'text',className:'retry',attrs:{'data-retry':true}}):''}${tabs}${details}</div></ha-card>`);
   if(!this._bound){this._bound=true;this.shadowRoot.addEventListener('click',event=>{
    const entity=event.target.closest?.('[data-entity]');
    if(entity){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:entity.dataset.entity},bubbles:true,composed:true}));return;}
@@ -2402,6 +2435,7 @@ class EnergyFlowCard extends HTMLElement{
   bindPeriodControls(this);
   if(openedDetail&&config.detail_view!=='tabs'){const popup=this.shadowRoot.querySelector(`[data-energy-popup=${openedDetail}]`);requestAnimationFrame(()=>{if(!popup.isConnected||this._detailNode!==openedDetail)return;popup.scrollTop=detailScroll;if(focusedPopupControl)popup.querySelector(focusedPopupControl)?.focus({preventScroll:true});else if(focusedEntity)[...popup.querySelectorAll('[data-entity]')].find(button=>button.dataset.entity===focusedEntity)?.focus({preventScroll:true});});}
   if(focusedDetail&&!openedDetail)this.shadowRoot.querySelector(`[data-energy-detail=${focusedDetail}]`)?.focus({preventScroll:true});
+  this._fitPrimaryReading();
   if(focused&&!this._periodMenuOpen)this.shadowRoot.querySelector('[data-view-button]')?.focus({preventScroll:true});
  }
 }

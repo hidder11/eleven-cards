@@ -6,6 +6,23 @@ Include each available style function once in the shadow root. `cardHeaderStyles
 
 The Calendar card reuses `periodControls()` and `bindPeriodControls()` in its list and column views. Month view uses a non-interactive month label and previous month / Now / next month buttons. An optional host-owned `_periodAdapter` supplies `standard`, `rolling`, `calendar`, `rollingLabel`, `range()`, `name()`, `choose()`, `custom()` and `move()`, so date-based future navigation can reuse the popup, keyboard behavior and custom-range validation without adopting graph history semantics. Without this adapter, graph behavior is unchanged. Shared segmented navigation uses the approved compact style: 36px minimum buttons, 2px vertical and 6px horizontal padding, 12px labels and 14px icons. Period-popup options retain their existing dimensions. Energy places its navigation beside the primary reading when both fit and wraps the complete group below it when space is limited.
 
+## Shared ordinary actions
+
+`uiActionButtonStyles()` from `ui-action-button.js` is an explicit opt-in for ordinary command buttons. It includes the legacy button stylesheet, then defines only `action*` variants. Existing `uiButton()` rendering and `uiButtonStyles()` output stay byte-identical, including approved compact chart controls and indirect House consumers. Do not change legacy defaults to migrate a card.
+
+Use the existing `uiButton()` renderer with one of these variants:
+
+- `action`: ordinary command. An `aria-pressed` value may describe confirmed device state, but does not add permanent selection paint.
+- `action-icon`: the same command base with a 44px square icon target.
+- `action-choice`: a real persistent choice, such as Today/Tomorrow. `aria-pressed="true"` gets the theme-owned shallow selected state and a single 1px press depth.
+- `action-danger`: explicit destructive confirmation, with semantic error border/text. Keep the existing dialog, target validation and confirmation flow.
+
+The shared base owns 44px minimum targets, 13px/500 text, native/Material face, radius, available hover, temporary press, disabled behavior, reduced motion and accent-derived keyboard focus. Paint continues to come from active HA/optional Material tokens; readable focus, selected and danger text are derived from the relevant accent/error and foreground when explicit theme roles are absent. Optional `--eleven-material-focus-color`, `--eleven-material-selection-color` and `--eleven-material-danger-color` are role overrides, not card-specific palettes. The opt-in does not recolor sensor/series/device-state data.
+
+Cards own layout and domain semantics: icon/name composition, button placement and groups, service requests, pending/error feedback, native form type, stable data/focus keys and dangerous confirmation. A small card adapter may call `uiButton()`; it must not reimplement the full base states. Preserve explicit `type:'submit'` only for actual form submission; all other commands default to `type:'button'`. `attrs`, text, labels and titles keep the existing escaping contract; `content` remains trusted caller-owned markup.
+
+Do not mechanically replace every native button: `uiMetric({action:true})`, `uiPrimaryValue()` and `uiLegend()` already provide specialized shared interactive renderers. Diagram hit regions, event/time segments, flat identity/list rows, waste-date geometry, native ranges/fields and `<details>/<summary>` remain specialized. Keep current approved 2A-1 tabs and compact segmented chart controls. Component-contract tests must check real renderer use and generated markup, not merely an import; exercise conditional error/retry/confirmation and pending/focus paths too.
+
 ## Button
 
 `uiButton()` in [ui-button.js](ui-button.js) renders a native button, or an anchor when `href` is supplied. Variants are `icon`, `surface`, `text`, `close` and `tab`. `type: 'submit'` preserves native form submission. Use `disabled` for buttons; anchors retain ordinary link semantics.

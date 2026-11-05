@@ -96,6 +96,24 @@ function uiButtonStyles(){return `
 `;}
 
 
+// Opt-in ordinary actions. Legacy uiButtonStyles() and its callers stay unchanged.
+// The active HA theme supplies paint; variants distinguish commands from choices.
+function uiActionButtonStyles(){return uiButtonStyles()+`
+[data-ui-button^="action"]{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;flex:none;gap:8px;min-width:44px;min-height:44px;width:auto;max-width:100%;overflow-wrap:break-word;height:auto;padding:8px 12px;border:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));font:inherit;font-size:13px;font-weight:500;line-height:1.4;text-align:center;white-space:normal;color:var(--primary-text-color);background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);transform:none;text-decoration:none;cursor:pointer;transition:background 120ms ease-out,transform 120ms ease-out,box-shadow 120ms ease-out}
+[data-ui-button="action-icon"]{width:44px;padding:8px}
+[data-ui-button^="action"]:not(:disabled):hover{background:var(--eleven-material-control-hover-background,color-mix(in srgb,var(--primary-text-color) 5%,var(--secondary-background-color,transparent)))}
+[data-ui-button^="action"]:not(:disabled):active{transform:translateY(1px);box-shadow:var(--eleven-material-well,none)}
+[data-ui-button^="action"]:focus-visible{outline:2px solid var(--eleven-material-focus-color,color-mix(in srgb,var(--accent-color,var(--primary-color,#2196f3)) 60%,var(--primary-text-color,currentColor)));outline-offset:-2px}
+[data-ui-button^="action"]:disabled{opacity:.45;cursor:default;transform:none}
+[data-ui-button="action-choice"][aria-pressed="true"]{color:var(--eleven-material-selection-color,color-mix(in srgb,var(--accent-color,var(--primary-color)) 40%,var(--primary-text-color)));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);transform:translateY(1px)}
+[data-ui-button="action-choice"][aria-pressed="true"]:not(:disabled):hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+[data-ui-button="action-choice"][aria-pressed="true"]:not(:disabled):active{transform:translateY(1px);box-shadow:var(--eleven-material-selection-well,none)}
+[data-ui-button="action-danger"]{color:var(--eleven-material-danger-color,color-mix(in srgb,var(--error-color) 55%,var(--primary-text-color)));border:1px solid var(--error-color)}
+@media(prefers-reduced-motion:reduce){[data-ui-button^="action"]{transition:none}}
+@media(forced-colors:active){[data-ui-button^="action"]{color:ButtonText;background:ButtonFace;border:1px solid ButtonText;box-shadow:none}[data-ui-button^="action"]:focus-visible{outline-color:Highlight}[data-ui-button="action-choice"][aria-pressed="true"]{color:HighlightText;background:Highlight;box-shadow:none}}
+`;}
+
+
 const CARD_BACKGROUNDS=Object.freeze([
  {value:'aurora',label:'Aurora sky',description:'Langzaam golvende lichtgordijnen met kleine sterren.'},
  {value:'lanes',label:'Energy Lanes',description:'Diagonale banen met een rustige lichtstroom.'},
@@ -552,14 +570,33 @@ class ElevenSceneEngineCard extends HTMLElement {
   static getStubConfig() { return {entity:'', reset_entity:'', show_details:true}; }
   constructor() {
     super(); this.attachShadow({mode:'open'}); this._generation = 0; this._pending = false;
-    this.shadowRoot.innerHTML = `<style>
-      :host{display:block;color:var(--primary-text-color,#202124);font-family:var(--ha-font-family,system-ui,sans-serif);font-size:14px;line-height:1.45;--ese-border:var(--divider-color,#dadce0);--ese-muted:var(--secondary-text-color,#5f6368);--ese-accent:var(--primary-color,#006b96)}
-      *{box-sizing:border-box}ha-card{display:block;padding:20px;background:var(--ha-card-background,var(--card-background-color,#fff));border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--ese-border));border-radius:var(--ha-card-border-radius,16px);box-shadow:var(--ha-card-box-shadow,none)}
-      h2,h3,p,dl{margin:0}h2{font-size:17px;line-height:1.4;font-weight:600}h3{font-size:18px} .eyebrow,.muted,dt{color:var(--ese-muted);font-size:12px}.eyebrow{margin-bottom:4px}.winner{border-left:3px solid var(--ese-accent);padding-left:12px;margin:20px 0 16px}.scene{font-size:22px;line-height:1.3;font-weight:600;margin:4px 0;overflow-wrap:anywhere}.raw{font-size:12px;color:var(--ese-muted);overflow-wrap:anywhere}.status{font-size:12px;color:var(--ese-muted);margin-top:4px}.meta{display:grid;grid-template-columns:1fr auto;gap:12px}.meta div{min-width:0}.meta dd{margin:2px 0 0;overflow-wrap:anywhere}.counts{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0;font-variant-numeric:tabular-nums}.counts span{color:var(--ese-muted)}.counts strong{color:var(--primary-text-color,#202124);font-weight:600}
-      details{border-top:1px solid var(--ese-border);padding-top:4px}summary{min-height:44px;cursor:pointer;align-content:center;font-weight:500}.requests{list-style:none;padding:0;margin:0}.requests li{padding:12px 0;border-top:1px solid var(--ese-border);overflow-wrap:anywhere}.request-title{font-weight:600}.diagnostics{padding:12px 0;overflow-wrap:anywhere;white-space:pre-line}.actions{margin-top:12px;padding-top:16px;border-top:1px solid var(--ese-border)}button{font:inherit;color:inherit;background:transparent;border:1px solid var(--ese-border);border-radius:8px;padding:10px 16px;min-height:44px;cursor:pointer}button:hover:not(:disabled){background:var(--secondary-background-color,#f1f3f5)}button:disabled{cursor:not-allowed;opacity:.5}button:focus-visible,summary:focus-visible{outline:3px solid var(--ese-accent);outline-offset:3px}.feedback{margin-top:8px;color:var(--ese-muted);font-size:12px;overflow-wrap:anywhere}.feedback.error{color:var(--error-color,#b3261e)}.unavailable{padding:16px 0}.hidden,[hidden]{display:none!important}
-      dialog{color:var(--primary-text-color,#202124);background:var(--card-background-color,#fff);border:1px solid var(--ese-border);border-radius:12px;width:min(420px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:20px;overflow:auto;font:inherit}dialog::backdrop{background:rgb(0 0 0 / .45)}dialog p{margin:12px 0;overflow-wrap:anywhere}.dialog-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:20px}.confirm{border-color:var(--error-color,#b3261e);color:var(--error-color,#b3261e)}@media(max-width:360px){ha-card{padding:16px}.meta{grid-template-columns:minmax(0,1fr) auto;gap:8px}}
-      ha-card{padding:var(--eleven-card-padding,16px)}header{display:flex;align-items:center;justify-content:space-between;gap:8px}h2{font-size:16px;line-height:1.3;color:var(--primary-text-color,#20252b);min-width:0;overflow-wrap:anywhere}.status:empty{display:none}.status{margin:0}.winner{border:0;padding:0;margin:0}.scene{font-size:18px;margin:0;font-weight:600}.counts{font-size:12px;margin:6px 0 0;gap:12px}.meta{margin:8px 0 12px}.actions{margin:0;padding:0;border:0}.feedback:empty{display:none}details{margin-top:8px;padding:0}summary{font-size:12px;color:var(--ese-muted)}#reset{font-size:12px;padding:6px 10px}#state{font-size:12px}@media(max-width:360px){ha-card{padding:var(--eleven-card-padding,16px)}}
-    ${cardThemeStyles({controls:'#reset,#cancel',surfaces:'dialog'})}</style><ha-card><header><h2 id="title"></h2><button id="reset" type="button">Reset</button></header><p class="status" id="state"></p><section id="content"></section><section class="actions"><p id="feedback" class="feedback" role="status" aria-live="polite"></p></section></ha-card><dialog aria-labelledby="dialog-title" aria-describedby="dialog-description"><h3 id="dialog-title">Engine resetten?</h3><p id="dialog-description"></p><p class="raw" id="target"></p><div class="dialog-actions"><button id="cancel" type="button" autofocus>Annuleren</button><button id="confirm" class="confirm" type="button">Ja, resetten</button></div></dialog>`;
+    this.shadowRoot.innerHTML = `<style>${uiActionButtonStyles()}
+      :host{display:block;color:var(--primary-text-color,#202124);font-family:var(--ha-font-family,system-ui,sans-serif);font-size:14px;line-height:1.45;--ese-border:var(--divider-color,#dadce0);--ese-muted:var(--secondary-text-color,#5f6368);--ese-accent:var(--accent-color,var(--primary-color,#006b96))}
+      *{box-sizing:border-box}ha-card{display:block;padding:var(--eleven-card-padding,16px);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--ese-border))}
+      h2,h3,p,dl{margin:0}h2{font-size:16px;line-height:1.3;font-weight:600;overflow-wrap:anywhere}h3{font-size:18px}header{margin-bottom:12px}
+      .muted,.raw,dt{color:var(--ese-muted)}.raw,.muted,.diagnostics{font-size:12px;overflow-wrap:anywhere}.raw{margin-top:4px}.status{font-size:12px;color:var(--ese-muted);margin-bottom:6px}.status:empty{display:none}
+      .winner{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:12px;row-gap:8px;padding:12px;background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent))}
+      .winner ha-icon{display:block;width:32px;height:32px;--mdc-icon-size:32px;align-self:center;color:var(--ese-accent);background:none;box-shadow:none}.winner[data-kind=idle] ha-icon,.winner[data-kind=default] ha-icon{color:var(--ese-muted)}
+      .winner.scene-wide{grid-template-columns:minmax(0,1fr);margin-inline:calc(-1 * max(0px,calc(var(--eleven-card-padding,16px) - 4px)));padding-inline:2px}.footer.stacked #details-slot>details>summary{width:100%}.footer.stacked #reset{top:calc(var(--ese-summary-height,44px) + 8px)}.footer.stacked{min-height:calc(var(--ese-summary-height,44px) + var(--ese-reset-height,44px) + 8px)}.footer.stacked #details-slot>details>.detail-body{margin-top:calc(var(--ese-reset-height,44px) + 16px)}
+      .scene{font-size:24px;line-height:1.25;font-weight:600;overflow-wrap:anywhere;min-width:0}
+      .meta{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;font-size:12px}.meta>div{display:flex;align-items:baseline;gap:6px;min-width:0}.meta>div:first-child{flex:1 1 max-content}.meta dt{font-size:inherit;flex:none}.meta dd{margin:0;overflow-wrap:anywhere;min-width:0}.meta>div:last-child dd{font-variant-numeric:tabular-nums}
+      .counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0;font-size:12px}.counts>div{display:flex;align-items:baseline;gap:8px;min-width:0}.counts strong{font-size:22px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.counts span{color:var(--ese-muted);overflow-wrap:anywhere}
+      .request-overview{padding:0;background:transparent}
+      table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px;line-height:1.45}th,td{padding:8px 6px;text-align:start;vertical-align:top;overflow-wrap:anywhere}thead th{font-size:12px;font-weight:500;color:var(--ese-muted);padding-top:0}thead th:nth-child(1){width:32%}thead th:nth-child(2){width:14%}thead th:nth-child(3){width:36%}thead th:nth-child(4){width:18%}tbody tr+tr{border-top:1px solid var(--ese-border)}td:nth-child(2){text-align:end;font-variant-numeric:tabular-nums}thead th:nth-child(2){text-align:end}td:first-child{font-weight:500}td:last-child{color:var(--ese-muted)}td::before{display:none}
+      .request-overview.reflow table,.request-overview.reflow tbody{display:block}.request-overview.reflow thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.request-overview.reflow tr{display:grid;grid-template-columns:minmax(0,1fr);padding:8px 0}.request-overview.reflow td{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:12px;text-align:start;padding:3px 0}.request-overview.reflow td::before{content:attr(data-label);display:block;font-size:12px;font-weight:400;color:var(--ese-muted)}.cell-value{min-width:0}.request-overview.reflow.value-wide td{grid-template-columns:minmax(0,1fr);gap:2px}.request-overview.reflow.value-wide td+td{padding-top:8px}
+      /* Independent raised controls above a separate inset reading surface.
+         The native details wrapper never paints behind the Reset action. */
+      .footer{position:relative;font-size:13px;min-height:44px}#details-slot>details{background:transparent;box-shadow:none;border-radius:0}
+      summary{display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;width:calc(100% - 7em - 8px);min-height:44px;padding:10px 12px;cursor:pointer;font-weight:500;border:1px solid var(--ese-border);font-size:inherit;overflow-wrap:anywhere}summary::-webkit-details-marker{display:none}summary::after{content:'';width:8px;height:8px;flex:none;margin:0 2px 4px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg)}details[open]>summary::after{transform:rotate(225deg);margin-bottom:0}
+      .detail-body{padding:12px;margin-top:8px;background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent))}.request-group+.request-group{margin-top:16px}.request-group h3{display:flex;justify-content:space-between;gap:12px;font-size:12px;font-weight:500;margin:0 0 4px;color:var(--ese-muted)}.requests{list-style:none;padding:0;margin:0}.requests li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px 0;overflow-wrap:anywhere}.requests li+li{border-top:1px solid var(--ese-border)}.request-title{font-size:13px;font-weight:600}.request-scene{font-size:12px;color:var(--ese-muted);margin-top:2px}.request-priority{font-size:14px;font-weight:500;font-variant-numeric:tabular-nums;text-align:end}.diagnostics{padding-top:12px;white-space:pre-line}.technical-requests{list-style:none;padding:0;margin:0}.technical-requests li{margin-top:12px}.technical-body{padding:0 0 8px;overflow-wrap:anywhere}
+      summary:focus-visible{outline:2px solid var(--ese-accent);outline-offset:3px}#reset{position:absolute;inset-inline-end:0;top:0;width:7em}.feedback{margin-top:8px;color:var(--ese-muted);font-size:12px;overflow-wrap:anywhere}.feedback:empty,[hidden]{display:none!important}.feedback.error{color:var(--error-color,#b3261e)}.unavailable{padding:12px 0;font-size:14px;overflow-wrap:anywhere}
+      dialog{color:var(--primary-text-color,#202124);background:var(--card-background-color,#fff);border:1px solid var(--ese-border);border-radius:var(--ha-card-border-radius,12px);width:min(420px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:20px;overflow:auto;font:inherit}dialog::backdrop{background:rgb(0 0 0 / .45)}dialog p{margin:12px 0;overflow-wrap:anywhere}.dialog-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:20px}
+      ${cardThemeStyles({wells:'.winner,.detail-body',controls:'summary',surfaces:'dialog'})}
+      /* Open is disclosure, not a pressed/selected or partly squared face. */
+      summary:not(:disabled):active{box-shadow:var(--eleven-material-disclosure-pressed-shadow,none)}
+      .footer details.technical{margin-top:8px;border-top:1px solid var(--ese-border);border-radius:0;background:none;box-shadow:none}.footer .technical>summary{width:100%;min-height:44px;padding:8px 0;border:0;border-radius:0;background:none;box-shadow:none;color:var(--ese-muted);font-size:12px}.footer .technical>summary:hover,.footer .technical>summary:active{background:none;box-shadow:none}.technical>summary::after{width:6px;height:6px}
+      @media(forced-colors:active){.winner,.detail-body{background:Canvas;box-shadow:none;border:1px solid CanvasText}summary{background:ButtonFace;color:ButtonText}.winner ha-icon{color:CanvasText}button:focus-visible,summary:focus-visible{outline-color:Highlight}}
+    </style><ha-card><header><h2 id="title"></h2></header><p class="status" id="state"></p><section id="content"></section><section class="footer"><div id="details-slot"></div>${uiButton({variant:'action',text:'Reset',attrs:{id:'reset'}})}</section><p id="feedback" class="feedback" role="status" aria-live="polite"></p></ha-card><dialog aria-labelledby="dialog-title" aria-describedby="dialog-description"><h3 id="dialog-title">Engine resetten?</h3><p id="dialog-description"></p><p class="raw" id="target"></p><div class="dialog-actions">${uiButton({variant:'action',text:'Annuleren',attrs:{id:'cancel',autofocus:true}})}${uiButton({variant:'action-danger',text:'Ja, resetten',className:'confirm',attrs:{id:'confirm'}})}</div></dialog>`;
     this.$('reset').addEventListener('click',()=>this._open());
     this.$('cancel').addEventListener('click',()=>this._close());
     this.shadowRoot.querySelector('dialog').addEventListener('close',()=>this.$('reset').focus());
@@ -570,6 +607,52 @@ class ElevenSceneEngineCard extends HTMLElement {
       if (event.shiftKey && active === this.$('cancel')) { event.preventDefault(); this.$('confirm').focus(); }
       else if (!event.shiftKey && active === this.$('confirm')) { event.preventDefault(); this.$('cancel').focus(); }
     });
+  }
+  connectedCallback() {
+    this._layoutObserver ||= new ResizeObserver(()=>this._fitLayout());
+    this._observeLayout();
+  }
+  disconnectedCallback() { this._layoutObserver?.disconnect(); }
+  _observeLayout() {
+    this._layoutObserver?.disconnect();
+    for (const target of [this.$('content'),this.shadowRoot.querySelector('.scene'),...this.shadowRoot.querySelectorAll('.request-overview,thead th,.cell-value'),this.shadowRoot.querySelector('.footer'),this.shadowRoot.querySelector('summary')]) {
+      if (target) this._layoutObserver?.observe(target);
+    }
+    this._fitLayout();
+  }
+  _fitLayout() {
+    if (!this.isConnected) return;
+    const canvas = document.createElement('canvas'), context = canvas.getContext('2d');
+    const width = element=>{ context.font = getComputedStyle(element).font; return Math.max(0,...element.textContent.split(/\s+/u).map(word=>context.measureText(word).width)); };
+    const scene = this.shadowRoot.querySelector('.scene'), winner = scene?.parentElement;
+    if (scene) {
+      const inner = this.$('content').clientWidth - 24;
+      // Compare to the original 12px-padded, two-column budget, never the
+      // expanded surface. This avoids a resize/unwrap oscillation at the edge.
+      winner.classList.toggle('scene-wide',width(scene) > inner - 44);
+    }
+    const overview = this.shadowRoot.querySelector('.request-overview');
+    if (overview) {
+      // Always compare against the un-reflowed four-column budget: no feedback
+      // from the chosen layout, so resize/text fitting cannot oscillate.
+      const fractions = [.32,.14,.36,.18];
+      const paint = getComputedStyle(overview);
+      const budget = overview.clientWidth - parseFloat(paint.paddingLeft) - parseFloat(paint.paddingRight);
+      const cells = [...overview.querySelectorAll('thead th')];
+      const minimums = cells.map(width);
+      for (const row of overview.querySelectorAll('tbody tr')) [...row.querySelectorAll('.cell-value')].forEach((cell,i)=>minimums[i]=Math.max(minimums[i],width(cell)));
+      overview.classList.toggle('reflow',minimums.some((w,i)=>w+12 > budget*fractions[i]));
+      overview.classList.toggle('value-wide',Math.max(...minimums) > (budget-12)*1.4/2.4);
+    }
+    const footer = this.shadowRoot.querySelector('.footer'), summary = footer.querySelector('summary');
+    if (summary) {
+      const budget = footer.clientWidth - this.$('reset').getBoundingClientRect().width - 8;
+      footer.classList.toggle('stacked',budget < width(summary) + 24 + 12 + 8);
+      // Enlarged labels may need two control rows. Reserve both before the
+      // independent detail surface, including when native details is closed.
+      footer.style.setProperty('--ese-summary-height',`${Math.ceil(summary.getBoundingClientRect().height)}px`);
+      footer.style.setProperty('--ese-reset-height',`${Math.ceil(this.$('reset').getBoundingClientRect().height)}px`);
+    } else footer.classList.remove('stacked');
   }
   $(id) { return this.shadowRoot.getElementById(id); }
   setConfig(config) {
@@ -603,47 +686,72 @@ class ElevenSceneEngineCard extends HTMLElement {
     const available = this._entityAvailable();
     this.$('title').textContent = this._config.name || a.engine || 'Scene engine';
     this.$('state').textContent = !this._hass ? 'Status laden…' : e?.state === 'unknown' ? 'Status onbekend' : !available ? 'Niet beschikbaar' : effective?.is_default ? 'Standaardscene' : '';
-    const content = this.$('content'), wasOpen = content.querySelector('details')?.open;
+    const content = this.$('content'), slot = this.$('details-slot'), wasOpen = slot.querySelector('details')?.open;
+    const technicalOpen = slot.querySelector('.technical')?.open;
     // A focused disclosure must survive frequent hass updates.
-    const focusSummary = this.shadowRoot.activeElement?.tagName === 'SUMMARY';
-    content.replaceChildren();
-    if (!available) content.append(node('p',this._reason(),'unavailable'));
+    const focusedSummary = this.shadowRoot.activeElement?.tagName === 'SUMMARY' ? (this.shadowRoot.activeElement.parentElement.classList.contains('technical') ? 'technical' : 'main') : null;
+    content.replaceChildren(); slot.replaceChildren();
+    if (!available) content.append(node('p',!this._hass ? 'Wachten op de engine' : 'Geen actuele scene','unavailable'));
     else {
-      const win = node('div',undefined,'winner');
       const scene = effective?.scene || (e.state !== 'idle' ? e.state : null);
-      win.append(node('p',scene ? this._name(scene) : 'Geen actieve scene','scene'));
-
-      content.append(win);
+      const win = node('section',undefined,'winner');
+      win.dataset.kind = !scene ? 'idle' : effective?.is_default ? 'default' : 'active';
+      win.setAttribute('aria-label','Gekozen scene');
+      const icon = node('ha-icon');
+      icon.setAttribute('icon',this._hass?.states?.[scene]?.attributes?.icon || a.icon || 'mdi:palette-outline');
+      icon.setAttribute('aria-hidden','true');
+      win.append(icon,node('p',scene ? this._name(scene) : 'Geen actieve scene','scene'));
       const meta = node('dl',undefined,'meta');
-      for (const [label,value] of [['Winnende aanvraag',effective?.is_default ? 'Standaard (fallback)' : effective?.identifier],['Prioriteit',effective?.priority]]) {
+      for (const [label,value] of [['Bron',effective?.is_default ? 'Standaard (fallback)' : effective?.identifier],['Prioriteit',effective?.priority]]) {
         const cell = node('div'); cell.append(node('dt',label),node('dd',text(value))); meta.append(cell);
       }
-
+      win.append(meta); content.append(win);
       const counts = node('div',undefined,'counts');
+      counts.setAttribute('aria-label','Aanvragen');
       for (const [label,count] of [['actief',a.active_request_count ?? a.active_requests?.length],['niet actief',a.non_active_request_count ?? a.non_active_requests?.length]]) {
-        const item = node('span'); item.append(node('strong',text(count)),document.createTextNode(' '+label)); counts.append(item);
+        const item = node('div'); item.append(node('strong',text(count)),node('span',' '+label)); counts.append(item);
       }
       content.append(counts);
       if (this._config.show_details !== false) {
-        const details = node('details'); details.open = !!wasOpen; details.append(node('summary','Details'));
-        if (scene) details.append(node('p',scene,'raw'));
-        details.append(meta);
-        const list = node('ul',undefined,'requests');
-        const groups = [['Actief',a.active_requests],['Niet actief',a.non_active_requests]];
-        let total = 0;
-        for (const [label,requests] of groups) for (const request of Array.isArray(requests) ? requests : []) {
-          if (!request || typeof request !== 'object') continue;
-          total++; const row = node('li'); row.append(node('div',text(request.identifier),'request-title'));
-          row.append(node('div',`${label} · prioriteit ${text(request.priority)}`,'muted'));
-          if (request.scene) row.append(node('div',request.scene,'raw'));
-          if (request.requires) row.append(node('div',`Vereist: ${text(request.requires)}`,'raw'));
-          if (request.until) row.append(node('div',`Tot: ${this._date(request.until)}`,'raw'));
-          list.append(row);
+        const details = node('details'); details.open = !!wasOpen;
+        details.append(node('summary','Details'));
+        details.addEventListener('toggle',()=>this._fitLayout());
+        const body = node('div',undefined,'detail-body');
+        const requests = this._requests(a);
+      const overview = node('section',undefined,'request-overview');
+      const table = node('table'); table.setAttribute('aria-label','Requests'); table.setAttribute('role','table');
+      const labels = ['Request','Prio','Afhankelijk van','Actief'];
+      const head = node('thead'), headings = node('tr'); headings.setAttribute('role','row');
+      for (const label of labels) { const th=node('th',label);th.scope='col';th.setAttribute('role','columnheader');headings.append(th); }
+      head.append(headings); table.append(head);
+      const tbody=node('tbody'); tbody.setAttribute('role','rowgroup');
+      for (const request of requests) {
+        const row=node('tr'); row.setAttribute('role','row');
+        const values=[request.identifier,request.priority,request.requires,request.active];
+        values.forEach((value,i)=>{const cell=node('td');cell.setAttribute('role','cell');cell.dataset.label=labels[i];cell.append(node('span',text(value),'cell-value')); row.append(cell);});
+        tbody.append(row);
+      }
+      table.append(tbody); overview.append(table);
+      if (!requests.length) overview.append(node('p',Array.isArray(a.requests)||Array.isArray(a.active_requests)||Array.isArray(a.non_active_requests)?'Geen aanvragen.':'Aanvraagdetails ontbreken.','muted'));
+        body.append(overview);
+        const technical = node('details',undefined,'technical'); technical.open = !!technicalOpen;
+        technical.append(node('summary','Technisch'));
+        const technicalBody = node('div',undefined,'technical-body');
+        if (scene) technicalBody.append(node('p',scene,'raw'));
+        const technicalList=node('ul',undefined,'technical-requests');
+        for (const request of requests) {
+          const raw=node('li');raw.append(node('div',text(request.identifier),'request-title'));
+          if (request.scene) raw.append(node('div',request.scene,'raw'));
+          if (request.requires) raw.append(node('div',`Vereist: ${text(request.requires)}`,'raw'));
+          if (request.until) raw.append(node('div',`Tot: ${this._date(request.until)}`,'raw'));
+          technicalList.append(raw);
         }
-        if (!total) list.append(node('li',a.requests?.length ? 'Aanvraagdetails ontbreken.' : 'Geen aanvragen.'));
-        details.append(list,node('p','Niet actief kan ook een ondersteunende aanvraag zonder scene zijn.','muted'));
-        details.append(node('p',`Revisie ${text(a.revision)} · bron ${text(a.snapshot_source)}\nStandaard: ${text(a.default_scene)}`,'diagnostics muted'));
-        content.append(details); if (focusSummary) details.querySelector('summary').focus();
+        technicalBody.append(technicalList);
+        technicalBody.append(node('p','Niet actief kan ook een ondersteunende aanvraag zonder scene zijn.','muted'));
+        technicalBody.append(node('p',`Revisie ${text(a.revision)} · bron ${text(a.snapshot_source)}\nStandaard: ${text(a.default_scene)}`,'diagnostics muted'));
+        technical.append(technicalBody); body.append(technical);
+        details.append(body); slot.append(details);
+        if (focusedSummary) (focusedSummary === 'technical' ? technical : details).querySelector('summary').focus();
       }
     }
     this.$('reset').disabled = this._pending || !!this._reason();
@@ -651,6 +759,22 @@ class ElevenSceneEngineCard extends HTMLElement {
     this.$('feedback').classList.toggle('error',!!this._error);
     this.$('feedback').textContent = this._feedback ? this._feedback + (this._refreshed && !this._error ? ' Nieuwe status ontvangen; dit bevestigt niet dat de opbouw klaar is.' : '') : this._reason();
     if (this._reason() && this.shadowRoot.querySelector('dialog').open) this._close();
+    this._observeLayout();
+  }
+  _requests(a) {
+    const active = Array.isArray(a.active_requests) ? a.active_requests : [];
+    const inactive = Array.isArray(a.non_active_requests) ? a.non_active_requests : [];
+    const source = Array.isArray(a.requests) ? a.requests : [...active,...inactive];
+    const identifier = r=>typeof r === 'string' ? r : r && typeof r.identifier === 'string' && r.identifier ? r.identifier : null;
+    const yes = new Set(active.map(identifier).filter(Boolean)), no = new Set(inactive.map(identifier).filter(Boolean));
+    const seen = new Set();
+    return source.flatMap(raw=>{
+      const r=raw && typeof raw==='object' && !Array.isArray(raw) ? raw : {identifier:typeof raw==='string'?raw:null};
+      const id=identifier(r);
+      if (id && seen.has(id)) return [];
+      if (id) seen.add(id);
+      return [{...r,active:id && yes.has(id) && !no.has(id) ? 'Ja' : id && no.has(id) && !yes.has(id) ? 'Nee' : '—'}];
+    });
   }
   _date(value) { const d = new Date(value); if (Number.isNaN(d.getTime())) return text(value); try { return d.toLocaleString(this._hass?.locale?.language || 'nl-NL'); } catch { return d.toLocaleString('nl-NL'); } }
   _open() {

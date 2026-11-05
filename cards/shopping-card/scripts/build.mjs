@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const root=new URL('../',import.meta.url);
 const theme=(await readFile(new URL('../../shared/card-theme.js',root),'utf8')).replace(/^export /gm,'');
-const backgroundSource=(await Promise.all(['ui-button.js','ui-card-background.js','card-background.js'].map(file=>readFile(new URL('../../shared/'+file,root),'utf8')))).map(source=>source.replace(/^import .*;\s*$/gm,'').replace(/^export /gm,'')).join('\n');
+const backgroundSource=(await Promise.all(['ui-button.js','ui-action-button.js','ui-card-background.js','card-background.js'].map(file=>readFile(new URL('../../shared/'+file,root),'utf8')))).map(source=>source.replace(/^import .*;\s*$/gm,'').replace(/^export /gm,'')).join('\n');
 const source=await readFile(new URL('src/eleven-shopping-card.js',root),'utf8');
 // Deliberately dependency-free: the source is already a closed, import-free IIFE.
 if(/^import\s/m.test(source))throw Error('Standalone source must not contain imports');

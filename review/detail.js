@@ -1,4 +1,4 @@
-import {applyReviewTheme} from './theme.js';
+import {applyReviewTheme,readReviewPreferences,saveReviewPreferences} from './theme.js';
 import {configs,createFixture,cardType,calendarPreviewFixture} from './fixtures.js';
 const selected=new URLSearchParams(location.search).get('card'),entry=configs.find(([name])=>name===selected);
 const example=(title,description,changes={},states={})=>({title,description,changes,states});
@@ -49,11 +49,11 @@ const catalog={
   example('Historische energie','Start bij de historische verdeling in kWh.',{default_view:'history'}),
   example('Details in tabbladen','Zon, woning en net als tabbladen onder het huidige diagram.',{detail_view:'tabs',default_tab:'sun'})],
  'scene-engine-card':[
-  example('Aanvragen en status','De bestaande engine met de reset-knop.'),
-  example('Zonder aanvraagdetails','Een rustiger overzicht van de actieve scène.',{show_details:false}),
-  example('Eigen naam','Geef de engine een herkenbare naam.',{name:'Verlichting woonkamer',show_details:true})],
+  example('Requests in Details','Open Details voor naam, prioriteit, afhankelijkheid en actieve status. De hoofdkaart is behouden.'),
+  example('Zonder Details','De goedgekeurde hoofdkaart zonder het optionele uitvouwbare requestoverzicht.',{show_details:false},{'scene_engine.living':{state:'scene.relax',attributes:{engine:'Woonkamer',effective_request:{scene:'scene.relax',is_default:true,priority:0},active_request_count:0,non_active_request_count:1,non_active_requests:[{scene:'scene.movie',identifier:'Filmstand',priority:90,requires:'Mediaspeler'}],default_scene:'scene.relax'}}}),
+  example('Geen requests','Een rustige lege toestand, zonder verzonnen aanvragen.',{name:'Verlichting woonkamer'},{'scene_engine.living':{state:'idle',attributes:{engine:'Woonkamer',active_request_count:0,non_active_request_count:0,active_requests:[],non_active_requests:[]}}})],
  'actions-card':[
-  example('Drie kolommen','De bestaande scènes en acties.',{columns:3}),
+  example('Drie kolommen','Control Pad voor scènes en scripts.',{columns:3}),
   example('Twee kolommen','Dezelfde acties met meer ruimte per knop.',{columns:2}),
   example('Korte lijst met bevestiging','Drie acties in één kolom, met bevestiging voor uitvoeren.',{columns:1,confirmation:true,actions:['scene.evening','scene.movie','script.lights_off']})],
  'controls-card':[
@@ -61,8 +61,8 @@ const catalog={
   example('Alleen verlichting','Een kaart voor de dimbare verlichting.',{entities:['light.living']}),
   example('Alleen de thermostaat','Een aparte kaart voor de temperatuurinstelling.',{entities:['climate.living']})],
  'waste-card':[
-  example('Papier','De bestaande ophaaldatum uit een sensor.'),
-  example('Meerdere afvalstromen','Papier en GFT naast de eerstvolgende ophaaldatum.',{entities:[{entity:'sensor.waste',name:'Papier',source:'date',color:'#2196f3'},{entity:'sensor.waste_green',name:'GFT',source:'date',color:'#4c956c'}]},{'sensor.waste_green':{state:new Date(Date.now()+5*86400000).toISOString().slice(0,10),attributes:{friendly_name:'GFT'}}}),
+  example('Papier','De bestaande ophaaldatum uit één sensor.',{entities:[{entity:'sensor.waste',name:'Papier',source:'date',color:'#2196f3'}]}),
+  example('Meerdere afvalstromen','Papier, Restafval en GFT met elk een eigen ophaaldatum.'),
   example('Aantal dagen als bron','Gebruik een sensor met het aantal resterende dagen.',{entities:[{entity:'sensor.waste_days',name:'Restafval',source:'days',color:'#8a8f99'}]},{'sensor.waste_days':{state:'3',attributes:{friendly_name:'Restafval'}}})],
  'room-card':[
   example('Woonkamer','Twee lampen, temperatuur en luchtvochtigheid, met dezelfde achtergrond en bediening als de overige kaarten.',{icon:'mdi:sofa-outline',lights:['light.living','light.reading']},{'light.reading':{state:'on',attributes:{friendly_name:'Leeslamp',brightness:190,supported_color_modes:['brightness']}}}),
@@ -92,6 +92,7 @@ if(!entry){
   card.setConfig(config);const hass=name==='calendar-card'?calendarPreviewFixture(createFixture(name,sample.states)):createFixture(name,sample.states);card.hass=hass;records.push({name,card,hass});detailExamples.push({card,config,title:sample.title});
  }
 }
-let dark=false;
-function theme(){applyReviewTheme(dark);const button=document.querySelector('#mode');button.textContent=dark?'Licht thema':'Donker thema';button.setAttribute('aria-pressed',String(dark));for(const r of records){r.hass={...r.hass,themes:{darkMode:dark}};r.card.hass=r.hass;}}
-document.querySelector('#mode').onclick=()=>{dark=!dark;theme();};document.querySelector('#width').onchange=e=>document.documentElement.style.setProperty('--preview-width',e.target.value+'px');theme();window.detailFixtureReady=true;
+let {dark,paint}=readReviewPreferences();
+function theme(){applyReviewTheme(dark,paint);document.querySelector('#paint').value=paint;const button=document.querySelector('#mode');button.textContent=dark?'Licht thema':'Donker thema';button.setAttribute('aria-pressed',String(dark));for(const r of records){r.hass={...r.hass,themes:{...r.hass.themes,darkMode:dark}};r.card.hass=r.hass;}}
+document.querySelector('#paint').onchange=e=>{paint=e.target.value;saveReviewPreferences({dark,paint});theme();};
+document.querySelector('#mode').onclick=()=>{dark=!dark;saveReviewPreferences({dark,paint});theme();};document.querySelector('#width').onchange=e=>document.documentElement.style.setProperty('--preview-width',e.target.value+'px');theme();window.detailFixtureReady=true;

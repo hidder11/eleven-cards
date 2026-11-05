@@ -54,6 +54,8 @@ try {
  await send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/review/index.html`});
  for(let i=0;i<100;i++){if(await evaluate('!!window.themeFixtureReady'))break;await delay(60);}
  assert.equal(await evaluate('records.length'),18);
+ assert.ok(await evaluate('records.every(r=>r.card._elevenBackgroundConfig.card_background===false&&!r.card.shadowRoot.querySelector("[data-ui-card-background]"))'),'All 18 overview cards start without optional decorative backgrounds');
+ await evaluate('records.forEach(r=>r.card.setCardBackground({variant:"isobars",coverage:"header",height:240,colorMode:"accent",transparency:65,animated:true}))');
  const mounted=()=>evaluate('records.every(r=>r.card.shadowRoot.querySelectorAll("[data-ui-card-background]").length===1&&r.card.shadowRoot.querySelectorAll("style[data-ui-background-styles]").length===1)');
  assert.ok(await mounted(),'All 18 examples use one production background');
  for(const width of [360,1440])for(const dark of [false,true]){

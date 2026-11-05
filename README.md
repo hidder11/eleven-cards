@@ -55,9 +55,9 @@ The collection module contains the twelve cards listed above. The following loca
 
 | Card | What it shows | Resource and documentation |
 | --- | --- | --- |
-| **Scenes & actions** | Buttons for scenes and scripts, with optional confirmation. | [Standalone controls](cards/home-controls/README.md) - `cards/home-controls/dist/eleven-home-controls-card.js` |
-| **Controls** | Thermostat and light controls. | [Standalone controls](cards/home-controls/README.md) - same module as Scenes & actions |
-| **Waste** | Upcoming waste collection dates. | [Standalone controls](cards/home-controls/README.md) - same module as Scenes & actions |
+| **Control Pad** | Buttons for scenes and scripts, with optional confirmation. | [Standalone controls](cards/home-controls/README.md) - `cards/home-controls/dist/eleven-home-controls-card.js` |
+| **Controls** | Thermostat and light controls. | [Standalone controls](cards/home-controls/README.md) - same module as Control Pad |
+| **Waste** | Upcoming waste collection dates. | [Standalone controls](cards/home-controls/README.md) - same module as Control Pad |
 | **Room** | Room scenes, lighting, temperature, humidity and dashboard navigation. | [Room documentation](cards/room-card/README.md) - `cards/room-card/dist/eleven-room-card.js` |
 | **Appliance Planner** | Tariff-based advice for an appliance run before a deadline. | [Planner documentation](cards/appliance-planner/README.md) - `cards/appliance-planner/dist/eleven-appliance-planner.js` |
 | **Scene Engine** | Effective scene request, active requests and optional reset. | [Scene Engine documentation](cards/scene-engine-card/frontend/README.md) - `cards/scene-engine-card/dist/eleven-scene-engine-card.js` |
@@ -144,11 +144,11 @@ Use an existing Home Assistant to-do list for shopping or other tasks. Add items
 
 ![Shopping card with fictional data](docs/images/shopping-card.png)
 
-### Scenes & actions
+### Control Pad
 
 Run selected scenes and scripts from a responsive button grid. Choose the column limit, labels and icons, and enable confirmation when appropriate. [Configuration and options](cards/home-controls/README.md).
 
-![Scenes & actions card with fictional data](docs/images/actions-card.png)
+![Control Pad card with fictional data](docs/images/actions-card.png)
 
 ### Controls
 

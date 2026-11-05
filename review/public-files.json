@@ -24,5 +24,7 @@
   "shared/ui-bar.js",
   "review/background-cards.html",
   "review/background-cards.css",
-  "review/background-cards.js"
+  "review/background-cards.js",
+  "review/control-pad.html",
+  "review/control-pad.js"
 ]

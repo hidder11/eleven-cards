@@ -6,7 +6,9 @@ This is a locally installed beta. These cards are not yet included in the collec
 
 ## Card types
 
-### Scenes & actions — `custom:eleven-actions-card`
+### Eleven Control Pad — `custom:eleven-actions-card`
+
+Formerly Scenes & actions. The picker name is **Eleven Control Pad** and the default heading is **Control Pad** in Dutch and English. This is a display-name change only: existing `custom:eleven-actions-card` configurations, `actions` entries and explicit `title` values (including the old name) remain unchanged. No new card type or alias is required.
 
 `actions` is an ordered list of scene/script entities or objects: `entity`, optional `name`, `icon`, `description`, `aria_label`, `confirmation` message. The visual editor supports adding, removing, reordering and editing each action. Only available scene/script entities can execute.
 
@@ -58,7 +60,9 @@ entities:
 
 Calendar sources use HA's authenticated read-only calendar event API, refreshed every five minutes, and show events up to 60 days ahead. Use `filter` for a shared calendar; `name` overrides event summary if one fixed stream name is desired. Multiple calendar events can appear. Failed reads show a retry action; empty calendar ranges, unavailable sources, invalid dates and expired dates are distinguished. Existing valid sensor rows remain visible when another source fails. Disconnection/configuration changes invalidate stale asynchronous responses and clean timers.
 
-The next pickup date leads, types sharing a date are grouped, later dates are compact rows. Uses HA timezone and locale; Today/Tomorrow and UI labels follow Dutch/English. Other languages retain locale-aware date/number formatting with English UI labels.
+Upcoming pickups are shown in a horizontal calendar strip, ordered by date: weekday, day, month, stream icon/name and days remaining. The first upcoming pickup has stronger date typography. A maximum of three columns is used per row; additional pickups remain visible on following rows. Available width and measured text determine the effective column count, including enlarged text, so long names may use fewer columns. There is no new layout configuration. Each unique entity/date/name pickup is a native info button opening Home Assistant's own more-info; simultaneous streams and multiple events for one calendar remain independently accessible. Keyboard focus is retained through sensor/timer updates and calendar retry recovery.
+
+Uses HA timezone and locale; Today/Tomorrow and UI labels follow Dutch/English while the absolute calendar date remains visible. Dates in a different year display that year. Other languages retain locale-aware date/number formatting with English UI labels. The card follows native HA surface colours; the optional Eleven Material theme provides the existing recessed-strip depth without embedding a palette in the card.
 
 ```yaml
 type: custom:eleven-waste-card
