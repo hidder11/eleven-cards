@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Room shared actions synthetic QA</title><style>body{margin:0;font:14px system-ui;background:var(--primary-background-color)}main{width:100%;max-width:480px;margin:auto}</style><main><eleven-room-card></eleven-room-card></main><script type="module">
+import '/review/ha-stub.js';import '/cards/room-card/dist/eleven-room-card.js';
+import {createFixture} from '/review/fixtures.js';
+window.card=document.querySelector('eleven-room-card');window.calls=[];window.moreInfo=[];window.pending=false;
+window.hass=createFixture('room-card');hass.connected=true;hass.callService=(...args)=>{calls.push(args);return pending?new Promise(resolve=>window.resolveService=resolve):Promise.resolve()};
+card.addEventListener('hass-more-info',event=>moreInfo.push(event.detail));
+card.setConfig({type:'custom:eleven-room-card',name:'Woonkamer',lights:['light.living'],scenes:['scene.evening','scene.movie','scene.read'],show_scene_names:true,temperature_entity:'sensor.temperature',humidity_entity:'sensor.humidity'});card.hass=hass;window.ready=true;
+</script>

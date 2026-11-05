@@ -20,7 +20,7 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 15px;margin:0 0 12px;font-size:11px;color:var(--secondary-text-color,#666)}
 .legend-item{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;min-height:26px;padding:3px 0;border:0;border-radius:4px;background:transparent;color:inherit;font:inherit;text-align:start;cursor:pointer}.legend-item[aria-pressed="false"]{opacity:.45}.legend-item[aria-pressed="false"] span{text-decoration:line-through}.legend-item:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.legend-item span{overflow-wrap:anywhere}.dot{width:7px;height:7px;border-radius:2px;flex:none;background:var(--event-color)}
 .status{font-size:12px;line-height:1.45;color:var(--secondary-text-color,#666);margin:6px 0 12px}
-.status.error{color:var(--error-color,#db4437)}.status button{font:inherit;cursor:pointer;margin-inline-start:8px;padding:3px 8px;border:1px solid var(--divider-color,#ddd);border-radius:5px;background:transparent;color:inherit}
+.status.error{color:var(--error-color,#db4437)}.status button{margin-inline-start:8px}
 .day-list{display:grid}
 
 .day-title time{font-size:11px;font-weight:400;color:var(--secondary-text-color,#666)}
@@ -119,7 +119,7 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .empty-day{color:var(--secondary-text-color,#666);margin:0;font-size:12px;line-height:1.5;padding:8px 0}
 .day-list .empty-day{font-size:11px;line-height:1.3;padding:2px 0}
 
-.compact .month-more,.status button,.popup-more summary{min-height:44px;min-width:44px;box-sizing:border-box}
+.compact .month-more,.popup-more summary{min-height:44px;min-width:44px;box-sizing:border-box}
 .popup-calendar{overflow-wrap:anywhere;font-size:12px}.popup-calendar .dot{flex:none}
 .popup-date time,.popup-date-range time{min-width:0;overflow-wrap:anywhere}
 .content [data-ui-popup] [data-ui-button]{min-height:44px;min-width:44px;box-sizing:border-box}

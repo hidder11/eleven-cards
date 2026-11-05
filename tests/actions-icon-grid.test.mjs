@@ -19,6 +19,6 @@ test('Columns validation is Actions only; Controls/Waste stay compatible',()=>{
 test('Actions-only styles establish vertical icon hierarchy and a fixed maximum grid',()=>{
  const c=card('actions');c.setConfig({actions:[]});
  assert.match(c.shadowRoot.innerHTML,/repeat\(var\(--actions-columns,3\),minmax\(0,1fr\)\)/);
- assert.match(c.shadowRoot.innerHTML,/--mdc-icon-size:32px;width:32px;height:32px;color:var\(--secondary-text-color\)/);
+ assert.match(c.shadowRoot.innerHTML,/--mdc-icon-size:28px;width:28px;height:28px;color:var\(--secondary-text-color\)/);
  const s=card('controls');s.setConfig({entities:[]});assert.doesNotMatch(s.shadowRoot.innerHTML,/--actions-columns/);
 });

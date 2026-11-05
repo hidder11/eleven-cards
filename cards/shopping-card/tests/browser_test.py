@@ -6,6 +6,8 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
+EVIDENCE = Path(os.environ['EVIDENCE']) if os.environ.get('EVIDENCE') else ROOT.parents[1]/'qa-evidence/shopping-style'/('built-behavior' if os.environ.get('BUILT') else 'source-behavior')
+EVIDENCE.mkdir(parents=True,exist_ok=True)
 FIXTURE = '''<style>body{margin:0;padding:16px;background:var(--primary-background-color,#f4f5f7);font-family:Arial;color:#202124}eleven-shopping-card{display:block;max-width:440px;margin:auto}ha-card{display:block;background:var(--card-background-color,white);border-radius:12px}</style><script>
 window.calls=[];window.subs=[];window.unsubs=0;window.fail=false;
 window.items=[{uid:'a',summary:'Volkoren brood',status:'needs_action'},{uid:'b',summary:'Tomaten',status:'needs_action'},{uid:'c',summary:'Koffie',status:'completed'}];
@@ -29,9 +31,13 @@ class BrowserTests(unittest.TestCase):
         self.page.set_content(FIXTURE)
         source = ROOT / 'dist/eleven-shopping-card.js' if __import__('os').environ.get('BUILT') else ROOT / 'src/eleven-shopping-card.js'
         if not os.environ.get('BUILT'):
-            # Source fixture gets its real shared dependency, just as the build does.
-            theme=(ROOT.parents[1]/'shared/card-theme.js').read_text().replace('export function','function')
-            self.page.add_script_tag(content=theme)
+            # Inject the exact real dependency closure preceding the source IIFE
+            # in the standalone build (theme + background + UI dependencies).
+            built=(ROOT/'dist/eleven-shopping-card.js').read_text()
+            original=(ROOT/'src/eleven-shopping-card.js').read_text()
+            assert original in built, 'Build Shopping before running source fixture'
+            closure=built[:built.index(original)]
+            self.page.add_script_tag(content=closure.replace('(()=>{\n','',1))
         if source.exists(): self.page.add_script_tag(content=source.read_text())
     def tearDown(self):
         self.page.close()
@@ -214,17 +220,17 @@ class BrowserTests(unittest.TestCase):
         self.assertTrue(self.page.evaluate("window.customCards?.some(c=>c.type==='eleven-shopping-card')") is True)
         self.assertEqual(self.page.evaluate("card.constructor.getStubConfig(h).entity"),'todo.test')
         self.assertGreater(self.page.evaluate('card.getCardSize()'),0)
-        self.page.evaluate("window.editor=card.constructor.getConfigElement();editor.setConfig({type:'custom:eleven-shopping-card',entity:'todo.test',title:'Mijn lijst'});editor.hass=h;document.body.append(editor);editor.addEventListener('config-changed',e=>window.changed=e.detail.config)")
+        self.page.evaluate("async()=>{window.editor=await card.constructor.getConfigElement();editor.setConfig({type:'custom:eleven-shopping-card',entity:'todo.test',title:'Mijn lijst'});editor.hass=h;document.body.append(editor);editor.addEventListener('config-changed',e=>window.changed=e.detail.config)}")
         form=self.page.locator('eleven-shopping-card-editor ha-form')
         self.assertEqual(form.evaluate('(f)=>f.schema[0].selector.entity.domain'),'todo')
-        self.page.evaluate("editor.shadowRoot.querySelector('ha-form').dispatchEvent(new CustomEvent('value-changed',{detail:{value:{entity:'todo.other',title:'Andere lijst'}}}))")
+        self.page.evaluate("editor.shadowRoot.querySelector('eleven-shopping-card-editor').shadowRoot.querySelector('ha-form').dispatchEvent(new CustomEvent('value-changed',{detail:{value:{entity:'todo.other',title:'Andere lijst'}}}))")
         self.assertEqual(self.page.evaluate('changed'),{'type':'custom:eleven-shopping-card','entity':'todo.other','title':'Andere lijst'})
         self.assertTrue(self.page.evaluate("(()=>{try{card.setConfig({entity:'sensor.invalid'});return false}catch{return true}})()"))
         self.assertEqual(self.errors,[])
 
     def test_visual_responsive_keyboard_states(self):
         self.mount()
-        out=ROOT/'tests/evidence';out.mkdir(exist_ok=True)
+        out=EVIDENCE;out.mkdir(exist_ok=True)
         for width in [1280,390,320]:
             self.page.set_viewport_size({'width':width,'height':900})
             for dark in [False,True]:
@@ -233,7 +239,7 @@ class BrowserTests(unittest.TestCase):
                 fit=self.card.evaluate('(c)=>({width:c.clientWidth,scroll:c.shadowRoot.querySelector("ha-card").scrollWidth,heading:getComputedStyle(c.shadowRoot.querySelector("h2")).fontSize,padding:getComputedStyle(c.shadowRoot.querySelector(".content")).padding})')
                 self.assertLessEqual(fit['scroll'],fit['width'])
                 self.assertEqual(fit['heading'],'16px')
-                self.assertEqual(fit['padding'],'18px')
+                self.assertEqual(fit['padding'],'16px')
         self.page.evaluate("items[0].summary='Heel erg lange productnaam met aanvullende instructies voor de boodschappenlijst en ongebrokenwoord'.repeat(3);push()")
         self.card.get_by_role('button',name='Volgorde wijzigen').click()
         self.card.screenshot(path=str(out/'320-long-reorder.png'))
@@ -356,7 +362,7 @@ class BrowserTests(unittest.TestCase):
         draft.fill('Halfvolle melk');draft.press('Enter')
         draft.fill('Volkoren crackers met zaden en extra lange productomschrijving');draft.press('Enter')
         draft.fill('Volgend product')
-        out=ROOT/'tests/evidence'
+        out=EVIDENCE
         for width in [1280,390,320]:
             self.page.set_viewport_size({'width':width,'height':900})
             for dark in [False,True]:
@@ -406,7 +412,7 @@ class BrowserTests(unittest.TestCase):
         select=self.card.get_by_label('Soort deadline')
         self.assertGreaterEqual(select.bounding_box()['height'],44)
         self.assertEqual(select.evaluate('(e)=>getComputedStyle(e).color'),'rgb(229, 231, 235)')
-        self.card.screenshot(path=str(ROOT/'tests/evidence/320-edit-dark.png'))
+        self.card.screenshot(path=str(EVIDENCE/'320-edit-dark.png'))
         self.assertLessEqual(self.card.evaluate('(c)=>c.shadowRoot.querySelector("ha-card").scrollWidth'),self.card.evaluate('(c)=>c.clientWidth'))
         self.assertEqual(self.errors,[])
 
@@ -435,11 +441,11 @@ class BrowserTests(unittest.TestCase):
         self.mount('hold=true')
         expect(self.card).to_contain_text('Laden…')
         self.page.set_viewport_size({'width':320,'height':900})
-        self.card.screenshot(path=str(ROOT/'tests/evidence/320-loading.png'))
+        self.card.screenshot(path=str(EVIDENCE/'320-loading.png'))
         self.page.evaluate('subFail=true;card.remove();document.body.append(card)')
         expect(self.card.get_by_role('status')).to_contain_text('Offline')
         expect(self.card).not_to_contain_text('Laden…')
-        self.card.screenshot(path=str(ROOT/'tests/evidence/320-error.png'))
+        self.card.screenshot(path=str(EVIDENCE/'320-error.png'))
         self.assertEqual(self.errors,[])
 
     def test_touch_phone(self):
@@ -452,7 +458,7 @@ class BrowserTests(unittest.TestCase):
         self.card.get_by_role('button',name='Volgorde wijzigen').tap()
         self.card.get_by_role('button',name='Omhoog: Tomaten').tap()
         self.assertEqual(self.page.evaluate('calls.at(-1).type'),'todo/item/move')
-        self.card.screenshot(path=str(ROOT/'tests/evidence/320-touch.png'))
+        self.card.screenshot(path=str(EVIDENCE/'320-touch.png'))
         self.assertEqual(self.errors,[])
 
     def test_quiet_shopping_header_and_existing_edit_affordance(self):
@@ -460,10 +466,9 @@ class BrowserTests(unittest.TestCase):
         heading=self.card.locator('h2')
         self.assertEqual(heading.evaluate('(e)=>getComputedStyle(e).fontSize'),'16px')
         self.assertEqual(heading.evaluate('(e)=>getComputedStyle(e).fontWeight'),'600')
-        icon=self.card.locator('.title-icon')
-        self.assertEqual(icon.get_attribute('aria-hidden'),'true')
-        self.assertEqual(icon.evaluate('(e)=>getComputedStyle(e).boxShadow'),'none')
-        self.assertEqual(icon.bounding_box()['width'],20)
+        self.assertEqual(self.card.locator('header .title-icon,header h2 svg').count(),0)
+        self.assertTrue(heading.evaluate('(e)=>e.parentElement.firstElementChild===e'))
+        self.assertEqual(heading.evaluate('(e)=>e.getBoundingClientRect().left-e.closest(".content").getBoundingClientRect().left'),16)
         self.assertEqual(self.card.locator('[data-edit] .edit-hint[aria-hidden=true]').count(),3)
         self.assertEqual(self.card.locator('[data-edit] .summary-text').all_text_contents(),['Volkoren brood · 2 stuks','Tomaten · 500 g','Koffie'])
         self.assertEqual(self.errors,[])

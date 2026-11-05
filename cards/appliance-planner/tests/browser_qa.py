@@ -3,7 +3,7 @@ import asyncio,json,os,subprocess,urllib.request,hashlib
 from pathlib import Path
 from playwright.async_api import async_playwright
 ROOT=Path(__file__).resolve().parents[3]
-OUT=ROOT/'qa-evidence/appliance-planner'
+OUT=Path(os.environ.get('PLANNER_QA_OUT',str(ROOT/'qa-evidence/appliance-planner')))
 OUT.mkdir(parents=True,exist_ok=True)
 CLOCK="""{const RealDate=Date;const fixed=Date.parse('2026-10-28T09:07:00Z');window.Date=class extends RealDate{constructor(...a){super(...(a.length?a:[fixed]));}static now(){return fixed;}};}"""
 

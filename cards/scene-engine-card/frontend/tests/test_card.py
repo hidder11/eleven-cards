@@ -2,14 +2,15 @@
 import functools
 import http.server
 import json
+import os
 from pathlib import Path
 import threading
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[4]
-EVIDENCE = ROOT / 'qa-evidence/scene-engine'
-EVIDENCE.mkdir(exist_ok=True)
+EVIDENCE = ROOT / 'qa-evidence/scene-request-overview' / ('behavior-bundle' if os.environ.get('SCENE_CARD_BUNDLE') else 'behavior')
+EVIDENCE.mkdir(parents=True, exist_ok=True)
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -27,7 +28,7 @@ def run():
         if not executable:
             candidates = sorted(Path('/opt/hermes/tools').glob('chromium-*/chrome-linux*/chrome'))
             executable = str(candidates[-1]) if candidates else None
-        browser = p.chromium.launch(headless=True, executable_path=executable, args=['--no-sandbox'])
+        browser = p.chromium.launch(headless=True, executable_path=executable, args=['--no-sandbox','--disable-dev-shm-usage'])
         page = browser.new_page(viewport={'width':390,'height':844}, device_scale_factor=1)
         errors, external = [], []
         page.on('pageerror', lambda error: errors.append(str(error)))
@@ -39,23 +40,26 @@ def run():
             else:
                 req.continue_()
         page.route('**/*', route)
-        page.goto(f'http://127.0.0.1:{server.server_port}/cards/scene-engine-card/frontend/demo.html')
+        page.goto(f'http://127.0.0.1:{server.server_port}/cards/scene-engine-card/frontend/demo.html' + ('?bundle' if os.environ.get('SCENE_CARD_BUNDLE') else ''))
         page.wait_for_function('window.ready === true')
         card = page.locator('eleven-scene-engine-card')
         reset = card.locator('#reset')
         confirm = card.locator('#confirm')
         dialog = card.locator('dialog')
         feedback = card.locator('#feedback')
-        assert card.bounding_box()['height'] <= 180, 'Default card must fit a compact dashboard tile'
-        expect(card.locator('details')).not_to_have_attribute('open', '')
-        passed('default compact tile <=180px with collapsed details')
+        # Approved redesign replaces the old <=180px compressed text tile:
+        # visible inset scene, source/priority, two counts and 44px footer controls.
+        assert not card.locator('table').is_visible(), 'Request table is ONLY visible after opening Details'
+        assert card.bounding_box()['height']<=280
+        expect(card.locator('#details-slot>details')).not_to_have_attribute('open', '')
+        passed('approved card retained with collapsed request details')
         compact_height = card.bounding_box()['height']
         card.screenshot(path=str(EVIDENCE/'compact-390-light.png'))
         expect(card.locator('.scene')).to_have_text('Filmavond')
-        expect(card.locator('.meta')).to_contain_text('80')
-        expect(card.locator('.counts')).to_have_text('2 actief1 niet actief')
+        expect(card.locator('tbody tr').first.locator('.cell-value').nth(1)).to_have_text('80')
+        expect(card.locator('tbody tr td:last-child .cell-value')).to_have_text(['Ja','Ja','Nee'])
         assert page.evaluate('calls.length') == 0
-        passed('winner, counts, priority and no automatic call')
+        passed('secondary scene, request memberships, priority and no automatic call')
         page.evaluate('''() => {const old=hass.states['eleven_scene_engine.woonkamer']; hass.states['scene_engine.woonkamer']={...old,entity_id:'scene_engine.woonkamer'}; card.setConfig({entity:'scene_engine.woonkamer',reset_entity:'button.eleven_scene_engine_woonkamer_reset'}); card.hass=hass;}''')
         expect(card.locator('.scene')).to_have_text('Filmavond')
         expect(reset).to_be_enabled()
@@ -81,11 +85,11 @@ def run():
         passed('missing/unknown/unavailable/offline engine, missing/unavailable button and service unavailable')
         page.evaluate('load("empty")')
         expect(card.locator('.scene')).to_have_text('Geen actieve scene')
-        expect(card.locator('.counts')).to_have_text('0 actief0 niet actief')
+        expect(card.locator('tbody tr')).to_have_count(0)
         page.screenshot(path=str(EVIDENCE/'empty-390-light.png'),full_page=True)
         page.evaluate('load("default")')
         expect(card.locator('#state')).to_have_text('Standaardscene')
-        expect(card.locator('.meta')).to_contain_text('Standaard (fallback)')
+        expect(card.locator('.scene')).to_contain_text('Rustig thuis')
         page.screenshot(path=str(EVIDENCE/'default-390-light.png'),full_page=True)
         passed('empty and fallback states')
         page.evaluate('load()')
@@ -118,9 +122,9 @@ def run():
         page.evaluate('card.shadowRoot.querySelector("#reset").click();card.shadowRoot.querySelector("#confirm").click()')
         assert page.evaluate('calls') == [['button','press',{'entity_id':'button.eleven_scene_engine_woonkamer_reset'}]]
         page.screenshot(path=str(EVIDENCE/'pending-390-light.png'),full_page=True)
-        card.locator('summary').focus()
+        card.locator('#details-slot>details>summary').focus()
         page.evaluate('resolveService()')
-        expect(card.locator('summary')).to_be_focused()
+        expect(card.locator('#details-slot>details>summary')).to_be_focused()
         expect(feedback).to_contain_text('Resetverzoek bevestigd.')
         expect(feedback).to_contain_text('Wacht op nieuwe status')
         expect(feedback).not_to_contain_text('Nieuwe status ontvangen')
@@ -171,21 +175,23 @@ def run():
         expect(reset).to_be_disabled()
         expect(feedback).to_contain_text('Status laden')
         page.evaluate('load();delete hass.states["eleven_scene_engine.woonkamer"].attributes.active_request_count;card.hass=hass')
-        expect(card.locator('.counts')).to_contain_text('2 actief')
+        expect(card.locator('tbody tr td:last-child .cell-value')).to_have_text(['Ja','Ja','Nee'])
         page.evaluate('delete hass.states["eleven_scene_engine.woonkamer"].attributes.active_requests;card.hass=hass')
-        expect(card.locator('.counts')).to_contain_text('— actief')
+        expect(card.locator('tbody tr td:last-child .cell-value')).to_have_text(['—','—','Nee'])
         page.evaluate('load();configure({show_details:false})')
-        expect(card.locator('details')).to_have_count(0)
-        passed('loading, count fallback/unknown and optional details')
-        page.evaluate('configure();load();hass.states["eleven_scene_engine.woonkamer"].attributes.effective_request.priority=0;card.hass=hass')
-        expect(card.locator('.meta dd').nth(1)).to_have_text('0')
-        card.locator('summary').focus()
+        expect(card.locator('#details-slot>details')).to_have_count(0)
+        expect(card.locator('table')).to_have_count(0)
+        passed('loading, explicit memberships/unknown and optional Details only')
+        page.evaluate('configure();load();hass.states["eleven_scene_engine.woonkamer"].attributes.requests[0].priority=0;card.hass=hass')
+        expect(card.locator('tbody tr').first.locator('.cell-value').nth(1)).to_have_text('0')
+        card.locator('#details-slot>details>summary').focus()
         page.evaluate('card.hass={...hass}')
-        expect(card.locator('summary')).to_be_focused()
+        expect(card.locator('#details-slot>details>summary')).to_be_focused()
         passed('zero priority and disclosure focus across updates')
         page.evaluate('configure({name:"<img src=x onerror=window.pwned=1>"});load();hass.states["eleven_scene_engine.woonkamer"].attributes.effective_request.identifier="<svg onload=window.pwned=1>";card.hass=hass')
         expect(card.locator('h2')).to_have_text('<img src=x onerror=window.pwned=1>')
-        assert card.locator('img,svg').count() == 0
+        assert card.locator('img,[onerror],[onload]').count() == 0
+        # Legitimate ha-icon/background SVG is allowed; injected handlers are not.
         assert page.evaluate('window.pwned') is None
         passed('untrusted labels escaped as text')
         schema = page.evaluate('''() => { const C=customElements.get('eleven-scene-engine-card');const f=C.getConfigForm();f.assertConfig({});let rejects=0;for(const c of [{entity:[]},{reset_entity:4},{show_details:'yes'}])try{f.assertConfig(c)}catch{rejects++}let invalid=0;for(const c of [{},{entity:'other_engine.bad',reset_entity:'button.test'},{entity:'eleven_scene_engine.test',reset_entity:'scene.bad'}])try{card.setConfig(c)}catch{invalid++}return {schema:f.schema,rejects,invalid,label:f.computeLabel(f.schema[0])}}''')
@@ -206,8 +212,8 @@ def run():
         ]:
             page.set_viewport_size({'width':width,'height':height})
             page.evaluate('([theme,scenario])=>{document.body.classList.toggle("dark",theme==="dark");load(scenario)}',[theme,scenario])
-            if card.locator('details').count():
-                card.locator('details').evaluate('(e,open)=>e.open=open', details)
+            if card.locator('#details-slot>details').count():
+                card.locator('#details-slot>details').evaluate('(e,open)=>e.open=open', details)
             overflow = page.evaluate('document.documentElement.scrollWidth>innerWidth')
             assert not overflow, (width,theme,scenario)
             assert card.evaluate('(e)=>e.shadowRoot.querySelector("ha-card").scrollWidth<=e.clientWidth')
