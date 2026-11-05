@@ -177,4 +177,11 @@ ${segmentedControlStyles('.navigation','.navigation>.period-controls>.period-tri
 .month-chip,.list-event .event-button,.column .event-button{background:color-mix(in srgb,var(--event-color) 10%,transparent);border-inline-start:2px solid var(--event-color)!important;border-radius:0 6px 6px 0!important;box-shadow:0 2px 4px color-mix(in srgb,var(--eleven-material-shadow,rgba(0,0,0,.18)) 85%,transparent)}
 .month-chip[data-past-event],.list-event .event-button[data-past-event],.column .event-button[data-past-event]{box-shadow:0 1px 3px color-mix(in srgb,var(--eleven-material-shadow,rgba(0,0,0,.18)) 45%,transparent)}
 .compact .event-meta{display:none}
+/* Compact day lists keep readable rows without expanded-mode whitespace. */
+.compact .day-list .list-day{padding:8px!important}
+.compact .day-list .list-day+.list-day{margin-top:8px;padding-top:8px!important}
+.compact .day-list .day-heading{margin-bottom:4px;padding-bottom:4px}
+.compact .day-list .list-event{padding:2px 0}
+.compact .day-list .list-event>.event-time{padding-top:4px}
+.compact .day-list .event-button{min-height:32px!important;padding:4px 4px 4px 9px!important}
 `;}
