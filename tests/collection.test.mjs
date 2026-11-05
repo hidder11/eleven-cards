@@ -4,7 +4,7 @@ import {readFileSync,existsSync} from 'node:fs';
 import vm from 'node:vm';
 
 const slugs=['dynamic-energy-price-card','history-graph-card','timeline-card','overview-card','bar-chart','heatmap-card','calendar-card','weather-card','car-card','energy-flow-card','shopping-card'];
-test('every card offers Sections sizing and a finite masonry size before configuration',()=>{
+test('chart/status cards offer Sections sizing and a finite masonry size before configuration',()=>{
  const registry=new Map(),context=vm.createContext({HTMLElement:class{},window:{},customElements:{get:n=>registry.get(n),define:(n,c)=>registry.set(n,c)}});
  vm.runInContext(readFileSync(new URL('../dist/eleven-cards.js',import.meta.url),'utf8'),context);
  for(const slug of slugs){
@@ -21,7 +21,7 @@ test('every card offers Sections sizing and a finite masonry size before configu
   assert.ok(Number.isFinite(card.getCardSize())&&card.getCardSize()>0,slug);
  }
 });
-test('all Eleven modules coexist in either load order and tolerate repeat loads',()=>{
+test('chart/status standalone modules coexist in either load order and tolerate repeat loads',()=>{
  for(const order of [slugs,[...slugs].reverse()]) {
   const registry=new Map(),window={};
   const context=vm.createContext({HTMLElement:class{},window,customElements:{get:n=>registry.get(n),define:(n,c)=>{assert.ok(!registry.has(n));registry.set(n,c);}}});
@@ -31,7 +31,7 @@ test('all Eleven modules coexist in either load order and tolerate repeat loads'
  }
 });
 test('README relative links and images resolve and examples use Eleven types',()=>{
- for(const rel of ['README.md',...slugs.map(s=>`cards/${s}/README.md`)]) {
+ for(const rel of ['README.md',...slugs.map(s=>`cards/${s}/README.md`),'cards/house-card/README.md','cards/home-controls/README.md','cards/appliance-planner/README.md','cards/room-card/README.md','cards/scene-engine-card/frontend/README.md']) {
   const url=new URL(`../${rel}`,import.meta.url),text=readFileSync(url,'utf8');
   for(const match of text.matchAll(/\]\(([^)]+)\)|src="([^"]+)"/g)) {
    const target=match[1]??match[2];

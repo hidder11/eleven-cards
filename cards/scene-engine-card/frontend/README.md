@@ -1,6 +1,6 @@
-# Eleven Scene Engine Card — lokaal voorstel
+# Eleven Scene Engine Card
 
-Geen installatie uitgevoerd. Geen Home Assistant-verbinding in de demo.
+Opgenomen in de rootcollectie `dist/eleven-cards.js`; volg de [collectie-installatie](../../../README.md#installation). De zelfstandige module blijft beschikbaar als alternatief, niet als extra resource naast de collectie. De afzonderlijke Scene Engine-integratie en bijbehorende entiteiten blijven vereist. Een build installeert niets; de demo maakt geen Home Assistant-verbinding.
 
 ## Inhoud
 
@@ -38,7 +38,7 @@ name: Woonkamer
 show_details: true
 ```
 
-`entity` en `reset_entity` zijn verplicht. Kies de reset-knop van dezelfde engine; de kaart kan dat niet via alleen de aangeleverde state-gegevens bewijzen. Geen afgeleid doel. Het native `getConfigForm()` schema biedt beide entiteitselecties plus naam en details. De daadwerkelijke HA-editor is niet getest; YAML is het expliciete contract. Er is geen resource-registratie, backend frontend-route of deployment toegevoegd.
+`entity` en `reset_entity` zijn verplicht. Kies de reset-knop van dezelfde engine; de kaart kan dat niet via alleen de aangeleverde state-gegevens bewijzen. Geen afgeleid doel. Het native `getConfigForm()` schema biedt beide entiteitselecties plus naam en details. De daadwerkelijke HA-editor is niet getest; YAML is het expliciete contract. De collectie registreert de kaart, maar installeert geen backend frontend-route en wijzigt geen dashboardresources.
 
 ## Gedrag
 
@@ -50,7 +50,7 @@ Reset vraagt altijd bevestiging, toont het exacte doel en waarschuwt voor een mo
 
 ## Beperkingen
 
-Alle QA gebruikt synthetische data en mocks. Geen echte HA runtime, grafische editor, rechtenmodel, echte reset/rebuild of resourcelevering geverifieerd. Licht/donker gecontroleerd met lokale HA-themawaarden, niet met alle mogelijke gebruikersthema's. Chrome/Chromium getest; andere browsers niet. Ontwerp is een voorstel, nog geen gebruikersgoedkeuring.
+Alle QA gebruikt synthetische data en mocks. Geen echte HA runtime, grafische editor, rechtenmodel, echte reset/rebuild of resourcelevering geverifieerd. Licht/donker gecontroleerd met lokale HA-themawaarden, niet met alle mogelijke gebruikersthema's. Chrome/Chromium getest; andere browsers niet. Vrijgave is toegestaan; publiceren en installeren blijven afzonderlijke handelingen.
 
 ## Shared card background
 
