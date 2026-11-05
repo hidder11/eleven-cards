@@ -1,0 +1,11 @@
+{
+  "name": "eleven-shopping-card",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/build.test.mjs && BUILT=1 python3 tests/browser_test.py",
+    "check": "node --check dist/eleven-shopping-card.js"
+  }
+}

@@ -11,7 +11,7 @@ export function seriesAppearance(config,index,seen=new Set()) {
  const option=config.series_options?.find(s=>s.entity===config.entities[index])??{};
  const inherited=option.gradient_stops??(option.color?[]:config.gradient_stops??[]);
  const color_mode=option.color_mode??(inherited.length?'gradient':'fixed');
- const row={entity:config.entities[index],visible:option.visible??true,...(option.name?{name:option.name}:{}),
+ const row={entity:config.entities[index],visible:option.visible??true,...(option.name?{name:option.name}:{}),...(option.sum_entities?{sum_entities:structuredClone(option.sum_entities)}:{}),
   line_width:option.line_width??config.line_width??3.5,line_style:option.line_style??config.line_style??(index%2?'dashed':'solid'),
   line_interpolation:option.line_interpolation??config.line_interpolation??'step',connect_gaps:option.connect_gaps??false,
   color_mode,color:option.color||config.line_color||SERIES_COLORS[index%SERIES_COLORS.length],
@@ -30,7 +30,7 @@ export function seriesAppearance(config,index,seen=new Set()) {
  return structuredClone(row);
 }
 export function editorConfig(config) {
- const data={hours_to_show:24,data_source:'auto',graph_mode:'lines',aggregation_period:'none',aggregation_method:'avg',show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,align_zero:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,...config,...timeframeSyncConfig(config,{draft:true}),entities:(config.entities??[]).map((entity,index)=>{
+ const data={hours_to_show:24,data_source:'auto',graph_mode:'lines',aggregation_period:'none',aggregation_method:'avg',show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,show_y_grid:false,connect_nulls:false,align_zero:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,...config,...timeframeSyncConfig(config,{draft:true}),entities:(config.entities??[]).map((entity,index)=>{
   const row=seriesAppearance(config,index);
   for(const key of ['color','fill_color'])if(validColor(row[key]))row[key]=[...rgb(row[key])];
   row.gradient_stops=row.gradient_stops.map(s=>({...s,color:validColor(s.color)?[...rgb(s.color)]:s.color}));
@@ -96,7 +96,7 @@ export function validateConfig(config) {
  const hours=config.hours_to_show??24;
  if(typeof hours!=='number'||!Number.isFinite(hours)||hours<1||hours>8760) throw new Error('hours');
  if(config.title!==undefined&&typeof config.title!=='string') throw new Error('title');
- const result={line_interpolation:'step',line_width:3.5,show_fill:false,fill_fade:true,fill_opacity:0.18,show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,align_zero:true,sync_hover:true,hover_sync_group:'',...config,entities:[...entities],hours_to_show:hours};
+ const result={line_interpolation:'step',line_width:3.5,show_fill:false,fill_fade:true,fill_opacity:0.18,show_hover_line:true,show_legend:true,show_title:true,show_navigation:true,show_grid:true,show_y_grid:false,connect_nulls:false,align_zero:true,sync_hover:true,hover_sync_group:'',...config,entities:[...entities],hours_to_show:hours};
  Object.assign(result,timeframeSyncConfig(config));
  if(typeof result.sync_hover!=='boolean')throw new Error('sync_hover');
  if(result.hover_sync_group==null)result.hover_sync_group='';
@@ -114,7 +114,7 @@ export function validateConfig(config) {
  if(!Number.isFinite(result.line_width)||result.line_width<1||result.line_width>8) throw new Error('line_width');
  if(result.line_style!=null&&!['solid','dashed','dotted'].includes(result.line_style)) throw new Error('line_style');
  for(const key of ['line_color','fill_color']) if(result[key]!=null&&result[key]!==''&&!validColor(result[key])) throw new Error(key);
- for(const key of ['show_fill','fill_fade','show_hover_line','show_legend','show_navigation','show_grid','align_zero']) if(typeof result[key]!=='boolean') throw new Error(key);
+ for(const key of ['show_fill','fill_fade','show_hover_line','show_legend','show_navigation','show_grid','show_y_grid','connect_nulls','align_zero']) if(typeof result[key]!=='boolean') throw new Error(key);
  if(!Number.isFinite(result.fill_opacity)||result.fill_opacity<0||result.fill_opacity>1) throw new Error('fill_opacity');
  const stops=result.gradient_stops??[];
  if(!Array.isArray(stops)||(stops.length!==0&&stops.length<2)||stops.length>32||stops.some(s=>!s||!Number.isFinite(s.value)||!validColor(s.color))||new Set(stops.map(s=>s.value)).size!==stops.length) throw new Error('gradient_stops');
@@ -131,6 +131,7 @@ export function validateConfig(config) {
  const options=result.series_options??[];
  if(!Array.isArray(options)||options.some(s=>!s||!entities.includes(s.entity)||(s.name!=null&&typeof s.name!=='string')||(s.color!=null&&s.color!==''&&!validColor(s.color)))||new Set(options.map(s=>s.entity)).size!==options.length)throw new Error('series_options');
  result.series_options=options.map(s=>{
+  if(s.sum_entities!==undefined&&(!Array.isArray(s.sum_entities)||s.sum_entities.length>7||s.sum_entities.some(id=>typeof id!=='string'||!/^sensor\.[a-z0-9_]+$/.test(id)||id===s.entity)||new Set(s.sum_entities).size!==s.sum_entities.length))throw new Error('sum_entities');
   if(s.line_style_source!=null&&s.line_style_source!==''&&(typeof s.line_style_source!=='string'||!entities.includes(s.line_style_source)||s.line_style_source===s.entity))throw new Error('line_style_source');
   if(s.line_width!=null&&(!Number.isFinite(s.line_width)||s.line_width<1||s.line_width>8))throw new Error('series_line_width');
   for(const [key,allowed] of Object.entries({line_style:['solid','dashed','dotted'],line_interpolation:['smooth','linear','step'],color_mode:['fixed','gradient'],fill_mode:['line','own']}))if(s[key]!=null&&!allowed.includes(s[key]))throw new Error('series_'+key);
@@ -139,7 +140,7 @@ export function validateConfig(config) {
   if(s.fill_color!=null&&s.fill_color!==''&&!validColor(s.fill_color))throw new Error('series_fill_color');
   if(s.color_mode==='gradient'&&(!Array.isArray(s.gradient_stops)||s.gradient_stops.length<2))throw new Error('series_gradient_stops');
   if(s.gradient_mode!=null&&!['smooth','steps'].includes(s.gradient_mode))throw new Error('series_gradient_mode');
-  const row={...s,color:Array.isArray(s.color)?[...s.color]:s.color,fill_color:Array.isArray(s.fill_color)?[...s.fill_color]:s.fill_color};
+  const row={...s,...(s.sum_entities?{sum_entities:[...s.sum_entities]}:{}),color:Array.isArray(s.color)?[...s.color]:s.color,fill_color:Array.isArray(s.fill_color)?[...s.fill_color]:s.fill_color};
   if(s.gradient_stops!=null){const stops=s.gradient_stops;if(!Array.isArray(stops)||(stops.length!==0&&stops.length<2)||stops.length>32||stops.some(s=>!s||!Number.isFinite(s.value)||!validColor(s.color))||new Set(stops.map(s=>s.value)).size!==stops.length)throw new Error('series_gradient_stops');row.gradient_stops=stops.map(s=>({value:s.value,color:Array.isArray(s.color)?[...s.color]:s.color})).sort((a,b)=>a.value-b.value);}
   return row;
  });
@@ -167,7 +168,38 @@ export function statisticsPeriod(config,end=Date.now()){
 }
 // HA has used epoch seconds and milliseconds across Recorder versions.
 function statisticTime(value){return typeof value==='number'?(value<1e12?value*1000:value):Date.parse(value);}
+// The displayed identity stays the primary sensor; contributors are fetched once.
+export function seriesSourceIds(config,id){return [id,...(config.series_options?.find(s=>s.entity===id)?.sum_entities??[])];}
+export function historyEntityIds(config){return [...new Set(config.entities.flatMap(id=>seriesSourceIds(config,id)))];}
+export function sumHistorySeries(series,config,start,end){
+ const byId=new Map(series.map(s=>[s.id,s]));
+ return config.entities.map(id=>{
+  const ids=seriesSourceIds(config,id),sources=ids.map(source=>byId.get(source)??{id:source,points:[]});
+  if(ids.length===1)return sources[0];
+  const times=[...new Set([start,...sources.flatMap(s=>s.points.map(p=>p.t).filter(t=>t>=start&&t<=end))])].sort((a,b)=>a-b);
+  const points=times.map(t=>{const values=sources.map(s=>valueAt(s.points,t)),sum=values.reduce((a,b)=>a+b,0);return {t,v:values.every(Number.isFinite)&&Number.isFinite(sum)?sum:null};});
+  return {id,...(sources.every(s=>s.source==='statistics')?{source:'statistics'}:{}),points};
+ });
+}
 export async function loadHistorySeries(hass,config,start,end){
+ const entities=historyEntityIds(config);
+ const summed=config.entities.some(id=>seriesSourceIds(config,id).length>1);
+ if(!summed)return loadIndividualHistorySeries(hass,config,start,end);
+ const before=seriesMetadata(hass,config.entities,config.series_options);
+ const units=Object.fromEntries(entities.map(id=>[id,hass.states?.[id]?.attributes?.unit_of_measurement??'']));
+ const extrema=['min','max'].includes(config.aggregation_method);
+ if(extrema&&config.data_source==='statistics')throw new Error('sum_statistics');
+ const fetchConfig={...config,entities,_history_units:units,...(extrema?{data_source:'history'}:{})};
+ let series=await loadIndividualHistorySeries(hass,fetchConfig,start,end);
+ // A statistic increment is not a raw counter, nor a summary an observation.
+ // If a sum would mix sources, refetch its contributors as one raw batch.
+ const mixed=config.entities.some(id=>{const sources=seriesSourceIds(config,id).map(source=>series.find(s=>s.id===source)?.source==='statistics');return sources.some(Boolean)&&sources.some(v=>!v);});
+ if(mixed)series=await loadIndividualHistorySeries(hass,{...fetchConfig,data_source:'history'},start,end);
+ const after=seriesMetadata(hass,config.entities,config.series_options);
+ if(before.items.some((item,i)=>item.unit!==after.items[i].unit))throw new Error('sum_unit');
+ return sumHistorySeries(series,config,start,end);
+}
+async function loadIndividualHistorySeries(hass,config,start,end){
  const period=statisticsPeriod(config,end),strict=config.data_source==='statistics',selected=new Map();
  if(period){
   try{
@@ -196,7 +228,7 @@ export async function loadHistorySeries(hass,config,start,end){
  const missing=config.entities.filter(id=>!selected.has(id));
  if(missing.length){
   const response=await hass.callApi('GET',historyUrl({...config,entities:missing},end));
-  for(const s of decodeHistory(response,missing,start,end))selected.set(s.id,s);
+  for(const s of decodeHistory(response,missing,start,end,config._history_units))selected.set(s.id,s);
  }
  return config.entities.map(id=>selected.get(id));
 }
@@ -204,14 +236,14 @@ export function numericState(state) {
  if(typeof state!=='string'||state.trim()==='') return null;
  const number=Number(state); return Number.isFinite(number)?number:null;
 }
-export function decodeHistory(response,entities,start,end) {
+export function decodeHistory(response,entities,start,end,units) {
  if(!Array.isArray(response)||response.some(rows=>!Array.isArray(rows))) throw new Error('response');
  const byId=new Map();
  for(const rows of response) {
   if(!rows.length) continue;
   const id=rows[0]?.entity_id;
   if(!entities.includes(id)) continue;
-  const points=rows.map(row=>({t:Date.parse(row.last_updated??row.last_changed),v:numericState(row.state)})).filter(p=>Number.isFinite(p.t)&&p.t<=end).sort((a,b)=>a.t-b.t);
+  const points=rows.map(row=>({t:Date.parse(row.last_updated??row.last_changed),v:units&&(row.attributes?.unit_of_measurement??'')!==units[id]?null:numericState(row.state)})).filter(p=>Number.isFinite(p.t)&&p.t<=end).sort((a,b)=>a.t-b.t);
   const previous=points.filter(p=>p.t<start).at(-1);
   const clipped=points.filter(p=>p.t>=start);
   if(previous) clipped.unshift({...previous,t:start});
@@ -239,7 +271,9 @@ export function seriesMetadata(hass,entities,options=[]) {
  const items=entities.map(id=>{
   const state=hass.states?.[id]; if(!state) throw new Error('missing');
   const option=options.find(s=>s.entity===id);
-  return {id,name:option?.name||state.attributes?.friendly_name||id,unit:state.attributes?.unit_of_measurement??''};
+  const unit=state.attributes?.unit_of_measurement??'',ids=[id,...(option?.sum_entities??[])];
+  const names=ids.map(source=>{const value=hass.states?.[source];if(!value)throw new Error('missing');if((value.attributes?.unit_of_measurement??'')!==unit)throw new Error('sum_unit');return value.attributes?.friendly_name||source;});
+  return {id,name:option?.name||names.join(' + '),unit};
  });
  return {items,unit:items[0]?.unit??''};
 }
@@ -414,5 +448,6 @@ export function stackSeries(series,start,end){
 export function historyUrl(config,end) {
  const start=new Date(end-config.hours_to_show*3600000).toISOString();
  const query=new URLSearchParams({filter_entity_id:config.entities.join(','),end_time:new Date(end).toISOString(),minimal_response:'',no_attributes:'',significant_changes_only:'0'});
+ if(config._history_units){query.delete('minimal_response');query.delete('no_attributes');}
  return `history/period/${encodeURIComponent(start)}?${query}`;
 }

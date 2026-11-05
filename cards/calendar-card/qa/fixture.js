@@ -46,7 +46,7 @@ document.getElementById('audit').onclick=async()=>{
   check('configuratie werkt vóór koppeling met Home Assistant',detached.shadowRoot.querySelectorAll('.list-day').length===8);
   detached.disconnectedCallback();
   const features=document.createElement('eleven-calendar-card');features.setConfig({entities:['calendar.family'],days_to_show:3,hide_empty_days:true});features.hass=hass;
-  features._events={'calendar.family':[entry(nextCalendarDayKey(today),'Eerstvolgende testafspraak',10)]};features._statuses={'calendar.family':'ready'};features._render();
+  features._events={'calendar.family':[entry(nextCalendarDayKey(today),'Eerstvolgende testafspraak',10)]};features._statuses={'calendar.family':'ready'};features._eventRevision=(features._eventRevision??0)+1;features._render();
   check('lege dagen worden alleen uit de daglijst verborgen',features.shadowRoot.querySelectorAll('.list-day').length===1);
   check('eerstvolgende afspraak heeft een markering',features.shadowRoot.querySelector('.event-button[data-next-event]')?.textContent.includes('Eerstvolgende testafspraak'));
   features.setConfig({...features._config,view:'columns'});
@@ -54,7 +54,7 @@ document.getElementById('audit').onclick=async()=>{
   features._statuses['calendar.family']='error';features._render();
   check('legenda identificeert de agenda met een laadfout',!!features.shadowRoot.querySelector('[data-calendar="calendar.family"][data-calendar-error] .legend-error'));
   features._statuses['calendar.family']='ready';features._render();check('waarschuwing verdwijnt na herstel',!features.shadowRoot.querySelector('[data-calendar-error]'));
-  features.setConfig({...features._config,view:'list'});features._events={};features._render();
+  features.setConfig({...features._config,view:'list'});features._events={};features._eventRevision=(features._eventRevision??0)+1;features._render();
   check('lege gefilterde lijst houdt een melding',!features.shadowRoot.querySelector('.list-day')&&features.shadowRoot.querySelector('.calendar-body').textContent.includes('Geen afspraken'));
   features.disconnectedCallback();
   await new Promise(resolve=>setTimeout(resolve,30));
@@ -116,7 +116,7 @@ document.getElementById('audit').onclick=async()=>{
   check('volgende maand geopend',card.shadowRoot.querySelector('.range').textContent!==monthLabel);
   card.shadowRoot.querySelector('[data-nav=now]').click();await new Promise(resolve=>setTimeout(resolve,20));
   check('huidige maand hersteld',card.shadowRoot.querySelector('.range').textContent===monthLabel);
-  document.getElementById('new-event').click();
+  document.getElementById('new-event').click();await Promise.resolve();
   check('live agenda-update verwerkt',card.shadowRoot.textContent.includes('Nieuw ontvangen afspraak'));
   card.setConfig({...card._config,view:'list'});
   await new Promise(resolve=>setTimeout(resolve,20));
@@ -147,7 +147,7 @@ document.getElementById('editor-audit').onclick=async()=>{
   check('aantal dagen opgeslagen',changed?.days_to_show===7);
   const month=global.querySelector('[name=view]');month.value='month';month.dispatchEvent(new Event('change',{bubbles:true}));
   check('maandweergave opgeslagen',changed?.view==='month');
-  const density=global.querySelector('[name=density]');density.value='compact';density.dispatchEvent(new Event('change',{bubbles:true}));
+  const compact=global.querySelector('[name=compact]');compact.checked=true;compact.dispatchEvent(new Event('change',{bubbles:true}));
   check('compacte weergave opgeslagen',changed?.density==='compact');
   const hideEmpty=global.querySelector('[name=hide_empty_days]');hideEmpty.checked=true;hideEmpty.dispatchEvent(new Event('change',{bubbles:true}));
   check('lege-dagenfilter opgeslagen',changed?.hide_empty_days===true);

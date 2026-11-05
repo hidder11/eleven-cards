@@ -1,4 +1,4 @@
-# Bar Chart beta verification
+# Bar Chart verification
 
 The new `custom:eleven-bar-chart` is a separate vertical-bar card based on the current History implementation. Default processing is hourly time-weighted average. Grouped bars retain `graph_mode: lines` for schema compatibility; stacked mode uses signed, unit-separated History stacks. No cumulative-energy delta or sum calculation is implied.
 

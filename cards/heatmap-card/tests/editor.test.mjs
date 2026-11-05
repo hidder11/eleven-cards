@@ -30,6 +30,22 @@ test('the native form emits flat configurations and keeps its identity through e
   assert.equal(form.schema.find(s=>s.name==='matrix_settings').title,'Grid appearance');
 });
 
+test('additional sensor native picker persists immutable drafts and empty roundtrips with localized helpers',()=>{
+ const extra=Object.freeze(['sensor.extra']),{instance,form,changes,change,error}=editor(Object.freeze({sum_entities:extra}));
+ const field=fieldList(form.schema).find(field=>field.name==='sum_entities');
+ assert.deepEqual(field?.selector,{entity:{domain:'sensor',multiple:true}});
+ assert.equal(form.computeLabel(field),'Sensoren optellen');assert.match(form.computeHelper(field),/hoofdsensor/);
+ assert.match(form.computeHelper(field),/eenheid/);assert.match(form.computeHelper(field),/nul/);
+ assert.notEqual(form.data.sum_entities,extra);
+ instance.addEventListener('config-changed',event=>{Object.freeze(event.detail.config.sum_entities);instance.setConfig(Object.freeze(event.detail.config));});
+ change({sum_entities:['sensor.extra','sensor.more'],name:'Total power'});
+ assert.deepEqual(changes.at(-1).sum_entities,['sensor.extra','sensor.more']);assert.equal(form.data.name,'Total power');
+ change({sum_entities:['']});assert.equal(error.hidden,false);assert.deepEqual(form.data.sum_entities,['']);
+ change({sum_entities:[]});assert.equal(error.hidden,true);assert.deepEqual(changes.at(-1).sum_entities,[]);
+ instance.hass={language:'en'};assert.equal(form.computeLabel(field),'Add sensors');assert.match(form.computeHelper(field),/primary/);
+ assert.match(form.computeHelper(field),/same unit/);assert.match(form.computeHelper(field),/zero/);
+});
+
 test('sensor name is an optional top-level text field',()=>{
   const {form,changes,change}=editor();
   const name=fieldList(form.schema).find(field=>field.name==='name');

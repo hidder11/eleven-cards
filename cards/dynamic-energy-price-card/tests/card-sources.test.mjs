@@ -4,13 +4,16 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import * as utils from '../src/price-utils.js';
-import * as graph from '../../../shared/graph.js';
+import * as graphModule from '../../../shared/graph.js';
+import {cardThemeStyles} from '../../../shared/card-theme.js';
+const graph={...graphModule,cardThemeStyles};
 import * as localization from '../src/localization.js';
 let Card;const timers=new Map();let timerId=0;
 vm.runInNewContext(readFileSync(new URL('../src/dynamic-energy-price-card.js',import.meta.url),'utf8').replace(/^import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];\s*/gm,''),{
  ...periods,...graph,...utils,...localization,Date,Intl,URLSearchParams,console,
  setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id),
- HTMLElement:class{attachShadow(){this.shadowRoot={querySelector:()=>null,querySelectorAll:()=>[]};}},
+ CustomEvent:class{constructor(type){this.type=type;}},
+ HTMLElement:class{attachShadow(){this.shadowRoot={querySelector:()=>null,querySelectorAll:()=>[]};}dispatchEvent(event){this.lastEvent=event;return true;}},
  customElements:{get:()=>undefined,define:(n,c)=>{if(n==='eleven-dynamic-energy-price-card')Card=c;}},window:{addEventListener(){},removeEventListener(){}}
 });
 test('new cards have no preselected entity and render a localized source prompt',()=>{
@@ -45,9 +48,20 @@ test('Tibber source calls read-only get_price in EUR with no sensor and caches/d
  assert.equal(utils.localDayKey(message.service_data.end_time,'Europe/Amsterdam'),utils.addDaysToKey(utils.localDayKey(new Date(),'Europe/Amsterdam'),2));
  assert.equal(utils.localHour(message.service_data.end_time,'Europe/Amsterdam'),0);
  assert.equal(c._sourceState('import').attributes.data[0].price_per_kwh,-.0123);
+ assert.equal(c.lastEvent.type,'eleven-prices-changed');
  assert.equal(c._hasExportSource(),true);
  c._ensureTibber('import');assert.equal(calls,1);
  c._tibberCache.values().next().value.fetchedAt-=300001;c._ensureTibber('import');await tick();assert.equal(calls,2);
+});
+
+test('background Price provider supplies current intervals and offsets without drawing a graph',async()=>{
+ const c=new Card(),start=Math.floor(Date.now()/900000)*900000;
+ c.setConfig({price_provider:true,import_source:'tibber_prices',export_source:'tibber_prices',export_price_offset:-.04});
+ c.hass={language:'en',config:{time_zone:'UTC',currency:'EUR'},states:{},callWS:async()=>({response:{success:true,price_info:[0,1].map(i=>({startsAt:new Date(start+i*900000).toISOString(),total:-.12}))}})};
+ await tick();assert.equal(c.currentPrices().import.value,-.12);assert.ok(Math.abs(c.currentPrices().export.value+.16)<1e-9);
+ assert.equal(c._chart,undefined);assert.equal(c.shadowRoot.innerHTML,undefined);assert.equal(c.lastEvent.type,'eleven-prices-changed');
+ assert.equal(c.currentPrices(new Date(start+1800000)).import,null);
+ c.disconnectedCallback();
 });
 test('get_price renders without an entity, preserves negative prices and handles missing service and non-EUR honestly',async()=>{
  const c=new Card();c.setConfig({import_source:'tibber_prices'});
@@ -117,6 +131,29 @@ test('get_price isolates two entries and does not keep stale data after a failed
  c._ensureTibber('import');await tick();
  assert.equal(c._sourceState('import'),null);assert.ok(c._sourceState('export'));
  assert.equal(c._tibberCache.get(c._tibberKey('import')).status,'error');
+});
+
+test('built-in Tibber fetches prices with start/end and no custom entry or sensor',async()=>{
+ const c=base();assert.doesNotThrow(()=>c.setConfig({import_source:'tibber',export_source:'tibber',graph_mode:'both'}));
+ const calls=[];c._hass={config:{currency:'EUR',time_zone:'Europe/Amsterdam'},states:{},callWS:async m=>{calls.push(m);return {response:{prices:{Home:[{start_time:'2026-10-15T00:00:00Z',price:-.01}]}}};}};
+ c._ensureTibber('import');c._ensureTibber('export');await tick();
+ assert.equal(calls.length,1);assert.equal(calls[0].domain,'tibber');assert.equal(calls[0].service,'get_prices');
+ assert.equal(calls[0].return_response,true);assert.deepEqual(Object.keys(calls[0].service_data).sort(),['end','start']);
+ assert.equal(c._sourceState('import').attributes.data[0].price_per_kwh,-.01);assert.equal(c._hasExportSource(),true);
+ const flat=s=>s.flatMap(f=>f.schema?flat(f.schema):[f]);
+ const fields=new Map(flat(Card.getConfigForm({import_source:'tibber'}).schema).map(f=>[f.name,f]));
+ assert.ok(fields.has('import_tibber_home'));assert.ok(!fields.has('import_tibber_entry'));assert.ok(!fields.has('entity'));
+});
+
+test('built-in home selection stays independent from custom entries, including cache keys and failures',async()=>{
+ const c=base();c.setConfig({import_source:'tibber',export_source:'tibber',graph_mode:'both',import_tibber_home:'A',export_tibber_home:'B',import_tibber_entry:'dormant',entity:'sensor.dormant'});
+ const calls=[];c._hass={config:{currency:'EUR',time_zone:'UTC'},states:{},callWS:async m=>{calls.push(m);return {response:{prices:{A:[{start_time:'2026-10-15T00:00:00Z',price:0}],B:[{start_time:'2026-10-15T00:00:00Z',price:.3}]}}};}};
+ c._ensureTibber('import');c._ensureTibber('export');await tick();assert.equal(calls.length,2);
+ assert.equal(c._sourceState('import').attributes.data[0].price_per_kwh,0);assert.equal(c._sourceState('export').attributes.data[0].price_per_kwh,.3);
+ for(const m of calls)assert.deepEqual(Object.keys(m.service_data).sort(),['end','start']);
+ const builtInKey=c._tibberKey('import');c._config.import_source='tibber_prices';c._config.import_tibber_entry='A';assert.notEqual(c._tibberKey('import'),builtInKey);
+ c._config.import_source='tibber';c._config.import_tibber_home='missing';c._ensureTibber('import');await tick();assert.equal(c._tibberCache.get(c._tibberKey('import')).status,'home');assert.equal(c._sourceState('import'),null);
+ c.disconnectedCallback();
 });
 
 test('data resolved before attachment still schedules a refresh on the attached cached render',async()=>{

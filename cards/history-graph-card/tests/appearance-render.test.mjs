@@ -69,8 +69,8 @@ test('native form exposes localized appearance and gradient controls',()=>{
 test('Y-axis has its own localized discoverable expansion with optional flat fields',async()=>{
  const form=C.getConfigForm(),group=form.schema.find(s=>s.name==='y_axis');
  assert.ok(group,'dedicated Y-axis group');assert.equal(group.type,'expandable');assert.equal(group.flatten,true);
- assert.deepEqual(group.schema.map(s=>s.name),['y_min','y_max','y_step','align_zero']);
- for(const field of group.schema.filter(s=>s.name!=='align_zero')){assert.notEqual(field.required,true);assert.equal(field.selector.number.step,'any');}
+ assert.deepEqual(group.schema.map(s=>s.name),['y_min','y_max','y_step','align_zero','show_y_grid']);
+ for(const field of group.schema.filter(s=>s.selector.number)){assert.notEqual(field.required,true);assert.equal(field.selector.number.step,'any');}
  assert.equal(form.computeLabel.call({hass:{language:'nl'}},group),'Y-as');
  assert.equal(form.computeLabel.call({hass:{language:'en'}},group),'Y-axis');
  assert.equal(form.computeLabel.call({hass:{language:'nl'}},{name:'y_step'}),'Stapgrootte Y-as');

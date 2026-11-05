@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="nl">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+ <title>Eleven Car EVCC — synthetische test</title>
+ <style>
+ body{margin:0;padding:20px;font:14px/1.45 system-ui,sans-serif;background:#f2f4f7;color:var(--primary-text-color);--primary-text-color:#20252b;--secondary-text-color:#626b78;--card-background-color:#fff;--secondary-background-color:#edf0f4;--divider-color:#dce1e8;--primary-color:#2563eb}
+ body.dark{background:#14171c;--primary-text-color:#e7e9ee;--secondary-text-color:#a7aeb9;--card-background-color:#22252c;--secondary-background-color:#2d323c;--divider-color:#3c434f;--primary-color:#86b9fb;--success-color:#81c784;--warning-color:#fbc02d;color-scheme:dark}
+ main{max-width:720px;margin:auto}h1{font-size:20px;margin:0}p{color:var(--secondary-text-color)}
+ .tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}button{font:inherit;padding:7px 12px;color:inherit;border:1px solid var(--divider-color);background:var(--card-background-color);border-radius:4px;cursor:pointer}
+ #host{width:100%;margin-bottom:16px}ha-card{border:1px solid var(--divider-color);border-radius:12px;box-sizing:border-box}
+ #editor{background:var(--card-background-color);padding:16px;border:1px solid var(--divider-color);border-radius:12px}
+ #editor label{display:grid;gap:4px;margin:10px 0}#editor input,#editor select{min-width:0;width:100%;box-sizing:border-box;font:inherit;color:inherit;background:var(--card-background-color);border:1px solid var(--divider-color);padding:8px}#editor input[type=checkbox]{width:auto;justify-self:start}
+ #editor details{border-top:1px solid var(--divider-color);padding:12px 0}#editor summary{cursor:pointer}#editor small{color:var(--secondary-text-color)}
+ </style>
+</head>
+<body><main>
+ <h1>Auto met EVCC-koppeling</h1><p>Synthetische gegevens voor een voorbeeldauto; geen verbinding met Home Assistant.</p>
+ <div class="tools"><button id="theme">Licht / donker</button><button id="charging">Laden / pauze</button><button id="unknown">Gegevens niet beschikbaar</button><button id="offline">Verbinding wisselen</button><button id="image">Afbeelding wisselen</button><button id="width">Smal / breed</button></div>
+ <div id="host"><eleven-car-card></eleven-car-card></div>
+ <div id="editor"></div><p id="last-event" role="status"></p>
+ </main>
+ <script src="../../dist/eleven-car-card.js"></script>
+ <script src="../../../heatmap-card/qa/ha-form-fixture.js"></script>
+ <script src="fixture.js"></script>
+</body></html>

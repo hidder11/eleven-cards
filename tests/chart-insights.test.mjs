@@ -18,7 +18,7 @@ function fixture(slug,config={}){
 const button=(html,action)=>html.match(new RegExp(`<button[^>]*data-zoom="${action}"[^>]*>`))?.[0];
 test('information headings use each chart’s series or state color',()=>{
  for(const slug of ['history-graph-card','bar-chart','timeline-card']){
-  const c=fixture(slug),section=c.shadowRoot.innerHTML.match(/<section class="insight-sensor" data-information-entity="sensor.a">[\s\S]*?<\/section>/)?.[0];
+  const c=fixture(slug),section=c.shadowRoot.innerHTML.match(/<section class="insight-sensor" data-information-entity="sensor.a" data-ui-detail-surface>[\s\S]*?<\/section>/)?.[0];
   assert.ok(section,slug);
   assert.match(section,/class="insight-color"/);
   assert.ok(section.includes(`--insight-color:${c._insightColor(0)}`),slug);

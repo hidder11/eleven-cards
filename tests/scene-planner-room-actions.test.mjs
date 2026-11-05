@@ -1,0 +1,57 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const noop={addEventListener(){}};
+globalThis.HTMLElement=class extends EventTarget {attachShadow(){return this.shadowRoot={innerHTML:'',getElementById:()=>noop,querySelector:()=>noop,querySelectorAll:()=>[]};}};
+globalThis.customElements={get(){return true},define(){}};
+globalThis.window={customCards:[]};
+const {RoomCard}=await import('../cards/room-card/src/room-card.js');
+test('Room commands render shared actions with 44px base, never light selection semantics',()=>{
+ const card=new RoomCard();
+ card._config={name:'Woonkamer',lights:['light.room'],scenes:['scene.movie'],show_scene_names:false};
+ card._hass={states:{'light.room':{state:'on',attributes:{}},'scene.movie':{state:'unknown',attributes:{friendly_name:'Film'}}},callService(){}};
+ card._render();const html=card.shadowRoot.innerHTML;
+ assert.match(html,/<button[^>]*data-ui-button="action-icon"[^>]*class|<button[^>]*class="control room-button on"[^>]*data-ui-button="action-icon"/);
+ assert.match(html,/<button[^>]*data-ui-button="action"[^>]*data-scene="scene.movie"/);
+ assert.match(html,/\[data-ui-button\^="action"\][^{]*\{[^}]*min-width:44px;min-height:44px/);
+ assert.doesNotMatch(html,/<button[^>]*aria-pressed/);
+ const src=readFileSync(new URL('../cards/room-card/src/room-card.js',import.meta.url),'utf8');
+ assert.doesNotMatch(src,/min-height:36px|\.room-button:disabled|controls:'.control|\.scene-button\{[^}]*min-width:0/);
+ assert.match(src,/control.onclick=\(\)=>this\._moreInfo/);
+});
+const {ElevenAppliancePlanner}=await import('../cards/appliance-planner/src/appliance-planner.js');
+test('Planner date choices and planning commands use shared buttons with explicit non-submit types',()=>{
+ const card=new ElevenAppliancePlanner(),appliances=[{id:'washer',name:'Wasmachine',programs:[{id:'eco',name:'Eco'}]}];
+ card.config={integration:{enabled:true,entity:'sensor.planner'}};
+ card._hass={states:{'sensor.planner':{state:'ready',attributes:{protocol_version:2,appliances,plans:[{id:'job',appliance_id:'washer',program_id:'eco',status:'planned',start:'2026-11-04T15:00Z',cost:0.5}]}}}};
+ card.form={};card.syncDay();
+ card.result={start:'2026-11-04T15:00Z',end:'2026-11-04T16:00Z',cost:0.5,average:0.2,savings:null};card.graph=()=>'';
+ card.render();const html=card.shadowRoot.innerHTML;
+ assert.equal([...html.matchAll(/<button[^>]*data-ui-button="action-choice"[^>]*data-day=/g)].length,2);
+ for(const id of ['save-plan','plan-job-start','plan-job-cancel'])assert.match(html,new RegExp(`<button type="button"[^>]*data-ui-button="action"[^>]*id="${id}"`));
+ assert.match(html,/\[data-ui-button\^="action"\]/);
+ const src=readFileSync(new URL('../cards/appliance-planner/src/styles.js',import.meta.url),'utf8');
+ assert.doesNotMatch(src,/button:disabled\{|button\{border:1px|controls:'.choices|\.quick button\{[^}]*font-size|\.quick \[aria-pressed=true\]\{/);
+ assert.doesNotMatch(html,/<input id="deadline-(?:date|time)"/);
+ assert.match(html,/id="day-0"/);assert.match(html,/id="day-1"/);
+ assert.match(html,/<select id="appliance"/);
+});
+const {ElevenAppliancePlannerEditor}=await import('../cards/appliance-planner/src/editor.js');
+test('Planner editor shares ordinary action paint while only intended form actions submit',()=>{
+ const card=new ElevenAppliancePlannerEditor();card.config={tariff:{source:'sensor'},appliances:[{id:'washer',name:'Wasmachine',programs:[]}],cheap_price:.25,expensive_price:.4};card._hass={user:{is_admin:true},states:{}};card.render();const html=card.shadowRoot.innerHTML;
+ assert.match(html,/<button type="submit" data-ui-button="action">Nieuw programma/);
+ assert.match(html,/<button type="submit" data-ui-button="action">Apparaat toevoegen/);
+ assert.match(html,/<button type="button" data-ui-button="action" id="link"/);
+ assert.equal([...html.matchAll(/<button/g)].length,[...html.matchAll(/<button[^>]*data-ui-button="action"/g)].length);
+});
+const {ElevenSceneEngineCard}=await import('../cards/scene-engine-card/frontend/eleven-scene-engine-card.js');
+test('Scene reset and dialog use the real shared action renderer without replacing native summary',()=>{
+ const card=new ElevenSceneEngineCard(),html=card.shadowRoot.innerHTML;
+ for(const [id,variant] of [['reset','action'],['cancel','action'],['confirm','action-danger']])assert.match(html,new RegExp(`<button[^>]*data-ui-button="${variant}"[^>]*id="${id}"`));
+ assert.match(html,/data-ui-button\^="action"/);
+ assert.match(html,/\[data-ui-button\^="action"\][^{]*\{[^}]*min-height:44px/);
+ assert.match(html,/id="cancel" autofocus/);
+ const src=readFileSync(new URL('../cards/scene-engine-card/frontend/eleven-scene-engine-card.js',import.meta.url),'utf8');
+ assert.doesNotMatch(src,/button\{font:inherit|button:disabled\{|#reset\{[^}]*font-size:inherit/);
+ assert.match(src,/summary/);
+});
