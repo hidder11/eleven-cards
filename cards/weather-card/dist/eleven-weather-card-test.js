@@ -483,7 +483,9 @@ class ElevenCardBackgroundEditor extends HTMLElement{
    if(event.target===this)return;
    event.stopPropagation();
    const background=this._config?.card_background;
-   this._config={...this._config,...event.detail.config};
+   // Native editors emit a complete replacement, including deleted fields.
+   // Retain only the setting owned by this wrapper, never old native keys.
+   this._config={...event.detail.config};
    if(background!==undefined)this._config.card_background=background;
    this._syncNativeBackgroundFields();this._emitBackgroundConfig();
   });
