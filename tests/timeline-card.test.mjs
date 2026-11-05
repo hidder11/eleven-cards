@@ -1,5 +1,18 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFileSync} from 'node:fs';
 function load(globals={}){const registry=new Map(),window=new EventTarget();const context=vm.createContext({HTMLElement:class {attachShadow(){this.shadowRoot={innerHTML:'',querySelector:()=>null,querySelectorAll:()=>[]};}},window,customElements:{get:n=>registry.get(n),define:(n,c)=>registry.set(n,c)},setTimeout,clearTimeout,URLSearchParams,Date,Intl,...globals});const code=readFileSync(new URL('../cards/timeline-card/dist/eleven-timeline-card.js',import.meta.url),'utf8');vm.runInContext(code,context);vm.runInContext(code,context);return {Card:registry.get('eleven-timeline-card'),window};}
+test('timeline name-to-bar spacing defaults, validates and round-trips through the localized editor',()=>{
+ const {Card}=load(),card=new Card(),base={entities:['switch.a'],row_gap:16};
+ card.setConfig(base);assert.equal(card._config.label_gap,2);
+ const form=Card.getConfigForm(),field=form.schema.find(s=>s.name==='bar_settings').schema.find(s=>s.name==='label_gap');
+ assert.equal(field.default,2);assert.equal(field.selector.number.min,0);assert.equal(field.selector.number.max,32);
+ assert.equal(form.computeLabel.call({hass:{language:'en'}},field),'Name-to-bar gap (px)');
+ assert.equal(form.computeLabel.call({hass:{language:'nl'}},field),'Ruimte tussen naam en balk (px)');
+ for(const gap of [0,2,32]){
+  const config=Card.cardConfig(Card.editorConfig({...base,label_gap:gap}));card.setConfig(config);
+  assert.equal(card._config.label_gap,gap);assert.equal(card._config.row_gap,16);
+ }
+ for(const gap of [-1,33,null,NaN,'2'])assert.throws(()=>card.setConfig({...base,label_gap:gap}),/label_gap/);
+});
 test('leaving the chart cancels a queued hover update',()=>{
  const pending=new Map(),shown=[];let nextId=0,queued;
  const {Card}=load({requestAnimationFrame:callback=>{queued=callback;pending.set(++nextId,callback);return nextId;},cancelAnimationFrame:id=>pending.delete(id)});
