@@ -29,6 +29,10 @@ test('Controls scroll group leaves room for rounded button shadows without chang
  assert.ok(group.includes('margin:-6px'),'Shadow clearance does not enlarge rows');
  assert.ok(group.includes('width:calc(100% + 12px)'),'Keep unchanged available control width');
 });
+test('Controls preserves the shared slider accent and inherited tone contract',()=>{
+ const css=source.split('const CONTROLS_STYLES=`')[1].split('`;')[0];
+ assert.ok(!/--ui-bar-tone\s*:/.test(css),'Controls must not override the shared accent with primary');
+});
 test('Built Controls target retains the temperature unit and native range semantics',()=>{
  const {create}=loadCards(),c=create('eleven-controls-card');
  c.setConfig({entities:['climate.room','light.room']});

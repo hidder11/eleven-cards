@@ -727,7 +727,7 @@ const CONTROLS_STYLES=`
 .device .identity:focus-visible,.level input:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:3px}
 .device-controls input:focus-visible{outline-offset:-2px}
 .level{box-sizing:border-box;flex:1 1 auto;min-width:86px;gap:8px;padding:0;margin:0}
-.level input{flex:0 1 276px;width:0;min-width:44px;--ui-bar-tone:var(--primary-color)}
+.level input{flex:0 1 276px;width:0;min-width:44px}
 .level input::-webkit-slider-runnable-track{height:8px;box-shadow:var(--eleven-material-well,none)}
 .level input::-webkit-slider-thumb{margin-top:-5px}
 .level input::-moz-range-track{height:8px;box-shadow:var(--eleven-material-well,none)}
