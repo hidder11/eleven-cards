@@ -2,7 +2,7 @@
 
 Find an inexpensive contiguous appliance run before a chosen deadline, without requiring a custom integration.
 
-Part of [Eleven Cards](../../README.md). This is a local beta, installed for local testing only; it has not been published.
+Included in the root `dist/eleven-cards.js` [Eleven Cards collection](../../README.md#installation), or available as the standalone module below. Choose one resource, not both. Building frontend code does not install the optional backend integration or publish a release.
 
 ## Standalone advice
 
@@ -88,7 +88,7 @@ npm test
 npm run check
 ```
 
-The generated independent module is `dist/eleven-appliance-planner.js` in this card directory. Load this standalone module; the twelve-card root collection bundle does not include the appliance planner. No external runtime dependency on Energy.
+The generated independent module is `dist/eleven-appliance-planner.js` in this card directory. Load the collection or this standalone module, not both. No external runtime dependency on Energy.
 
 Browser QA (requires Playwright Python and `AGENT_BROWSER_EXECUTABLE_PATH`):
 

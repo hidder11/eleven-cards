@@ -4,7 +4,7 @@ Home Assistant dashboard cards for energy, sensor history, calendars, weather, v
 
 ## Shared card background
 
-Every built card has a **Card background / Kaartachtergrond** section in its visual editor, including the separate local beta cards. Choose Aurora sky, Silk Flow, Atmospheric flow, Ink bloom or Holographic grid; theme accent, up to three custom colours or the card's status colour; transparency; animation; and coverage of the whole card or the top X pixels. A top section fades at its lower edge, and decoration stays within the theme's rounded card corners. New configurations default to Atmospheric flow over the top 240 px with 65% transparency. Existing background YAML stays usable.
+All eighteen production card types have a **Card background / Kaartachtergrond** section in their visual editor. The separately identified Material House pilot retains its own approved editor and appearance controls; the shared `card_background` contract does not apply to that pilot. Choose Aurora sky, Silk Flow, Atmospheric flow, Ink bloom or Holographic grid; theme accent, up to three custom colours or the card's status colour; transparency; animation; and coverage of the whole card or the top X pixels. A top section fades at its lower edge, and decoration stays within the theme's rounded card corners. New configurations default to Atmospheric flow over the top 240 px with 65% transparency. Existing background YAML stays usable.
 
 Add the same object to any card configuration:
 
@@ -38,20 +38,27 @@ Use `card_background: false` to turn it off. Dynamic colours use the calling car
 | **Calendar (beta)** | Calendar events in a day list, day columns or month view, with optional weather. | [Calendar documentation](cards/calendar-card/README.md) |
 | **House (beta)** | Configurable transparent house rendering, lighting, people and optional current-weather decoration. | [House documentation](cards/house-card/README.md) |
 | **Shopping** | Any to-do list, with non-blocking additions, integrated saving/retry rows and provider-driven editing. | [Shopping documentation](cards/shopping-card/README.md) |
+| **Control Pad** | Scene and script buttons, with optional confirmation. | [Control Pad documentation](cards/home-controls/README.md) |
+| **Controls** | Capability-aware thermostat, light, cover, fan and numeric controls. | [Controls documentation](cards/home-controls/README.md) |
+| **Waste** | Upcoming collections from existing sensors or calendars. | [Waste documentation](cards/home-controls/README.md) |
+| **Appliance Planner** | Tariff-based appliance run advice, optionally linked to a separate integration. | [Planner documentation](cards/appliance-planner/README.md) |
+| **Room** | Room scenes, lighting, temperature, humidity and navigation. | [Room documentation](cards/room-card/README.md) |
+| **Scene Engine** | Effective scene requests, request details and confirmed reset. | [Scene Engine documentation](cards/scene-engine-card/frontend/README.md) |
+| **Material House (approved pilot)** | The approved theme-following House pilot, kept separate from existing House. | [Pilot requirements](#material-house-pilot) |
 
 ![Eleven Dynamic Energy Price Card preview](cards/dynamic-energy-price-card/docs/images/revised-default-dark-desktop.png)
 
-All twelve cards include a visual editor and follow Home Assistant's light/dark theme. House currently retains its approved Dutch chrome; the other cards follow Dutch/English frontend language. Energy, History, Timeline and Bar Chart support synchronized hover across cards. History, Bar Chart and Timeline also share a compact period picker and a single group for previous/next, Now and zoom controls in the header, with rolling windows and local calendar days, weeks, months, quarters and years. These three cards also indicate zoom, support isolating one entity and provide an information icon beside History with compact per-sensor source and unit information. History and Bar Chart include per-sensor min/max/average for the viewed range; Delta Bar Chart adds sums in the same popup. Calendar list and column views reuse the shared period popup for day counts, calendar periods and custom ranges, while Month view offers only previous month, Now and next month. Calendar keeps its own date navigation and Home Assistant timezone; it does not join graph timeframe synchronization.
+All nineteen card types are included in the collection, with configuration editors and Home Assistant light/dark theme support. Packaging does not change their existing appearance or settings. House currently retains its approved Dutch chrome; the other cards follow Dutch/English frontend language. Energy, History, Timeline and Bar Chart support synchronized hover across cards. History, Bar Chart and Timeline also share a compact period picker and a single group for previous/next, Now and zoom controls in the header, with rolling windows and local calendar days, weeks, months, quarters and years. These three cards also indicate zoom, support isolating one entity and provide an information icon beside History with compact per-sensor source and unit information. History and Bar Chart include per-sensor min/max/average for the viewed range; Delta Bar Chart adds sums in the same popup. Calendar list and column views reuse the shared period popup for day counts, calendar periods and custom ranges, while Month view offers only previous month, Now and next month. Calendar keeps its own date navigation and Home Assistant timezone; it does not join graph timeframe synchronization.
 
 Car combines the vehicle and EVCC cards. Enable EVCC integration to show charging data and choose the Controls, Session and EVCC tabs; disable it to choose your own percentage and three entity readings. Compact changes density independently of visible tabs. The standalone EVCC card has been removed. Migrate existing `custom:eleven-evcc-card` dashboards to `custom:eleven-car-card` with `evcc_enabled: true`; retain the entity mappings and other settings. The Climate prototype has also been removed.
 
-The cards use existing Home Assistant data. They do not provide tariffs or create sensors. The EVCC card can change charging settings through Home Assistant. See each card's documentation for its sensor requirements and configuration options.
+The cards use existing Home Assistant data. They do not provide tariffs or create sensors. Car with EVCC enabled can change charging settings through Home Assistant. See each card's documentation for its sensor requirements and configuration options.
 
 Weather, Car and Energy Flow share one header fade that ends before tab content, including compact layouts.
 
-## Standalone cards
+## Standalone alternatives and integration requirements
 
-The collection module contains the twelve cards listed above. The following local betas are built separately and are **not included** in `dist/eleven-cards.js`. Load their standalone module to use them.
+The collection includes all nineteen card types listed above. These standalone modules remain available for existing installations; they are alternatives, not additional resources required by HACS. Building this source tree does not itself publish a release or update an installed dashboard.
 
 | Card | What it shows | Resource and documentation |
 | --- | --- | --- |
@@ -60,7 +67,16 @@ The collection module contains the twelve cards listed above. The following loca
 | **Waste** | Upcoming waste collection dates. | [Standalone controls](cards/home-controls/README.md) - same module as Control Pad |
 | **Room** | Room scenes, lighting, temperature, humidity and dashboard navigation. | [Room documentation](cards/room-card/README.md) - `cards/room-card/dist/eleven-room-card.js` |
 | **Appliance Planner** | Tariff-based advice for an appliance run before a deadline. | [Planner documentation](cards/appliance-planner/README.md) - `cards/appliance-planner/dist/eleven-appliance-planner.js` |
-| **Scene Engine** | Effective scene request, active requests and optional reset. | [Scene Engine documentation](cards/scene-engine-card/frontend/README.md) - `cards/scene-engine-card/dist/eleven-scene-engine-card.js` |
+| **Scene Engine** | Effective scene request, active requests and confirmed reset. | [Scene Engine documentation](cards/scene-engine-card/frontend/README.md) - `cards/scene-engine-card/dist/eleven-scene-engine-card.js` |
+| **Material House (pilot)** | Approved pilot, not a replacement for House. | `experiments/material-house/dist/material-house.js` (packaged by the root build) |
+
+Bundling frontend code does **not** install backend integrations, create entities, tariffs, house images or manifests. Control Pad and Controls use existing entities and can call their Home Assistant services. Waste needs configured sensor/calendar data, not a mandatory custom integration. Appliance Planner standalone advice needs valid tariffs and program duration/energy; linking existing persistent plans requires the separately installed Appliance Planner integration with protocol version 2. Scene Engine requires its separate integration, an engine entity and the explicitly selected reset button from the same engine; reset still requires confirmation. These integrations are not included in the HACS dashboard resource.
+
+### Material House pilot
+
+Use `custom:eleven-material-house` for the approved pilot and `custom:eleven-house-card` for existing House. Existing House and `eleven-house-styled-card` aliases are preserved; no saved configuration is automatically migrated or replaced. The pilot retains its own Dutch editor/chrome and requires a compatible transparent house image manifest (`manifest`), plus the existing entity bindings for interactive lighting. It does not render or generate house assets, install a house-render backend, or download household assets as part of this bundle. See the [House manifest requirements](cards/house-card/README.md).
+
+The pilot closure is rebuilt from provenance-checked upstream inputs by `experiments/material-house/build.py`. The root collection packager suppresses internal baseline registrations/picker entries and applies a repeat-load boundary to the generated standalone pilot as well as the collection. Its approved rendering, theme behavior and source dependency closure are otherwise unchanged.
 
 ## Card previews
 
@@ -213,7 +229,7 @@ For a separate Home Assistant test collection, run `npm run build` and `node scr
 4. Under dashboard resources, check that `/hacsfiles/eleven-cards/eleven-cards.js` is registered as a **JavaScript module**. Add it if it is missing.
 5. Refresh your browser.
 
-The published cards are included in one module. Local beta cards below are not yet published. Use the custom repository to install the released collection; Eleven Cards is not included in the default HACS list.
+This source build prepares all nineteen card types in one module for the next draft release. A draft is not a published update: existing HACS installations continue to receive the latest published release until a new release is explicitly published. Use the custom repository to install a published collection; Eleven Cards is not included in the default HACS list.
 
 ### Manual installation
 
@@ -222,7 +238,11 @@ The published cards are included in one module. Local beta cards below are not y
 3. Add `/local/eleven-cards/eleven-cards.js` to your dashboard resources as a **JavaScript module**.
 4. Refresh your browser.
 
-Do not load the collection module alongside standalone versions of the same twelve cards. Choose one installation method for those cards to avoid registering them twice. The additional standalone cards listed above may be loaded alongside the collection.
+Use one collection resource instead of loading standalone versions of its nineteen cards. Current packaged standalone resources may overlap temporarily during migration: registration and picker entries are duplicate-safe, but redundant resources should be removed only after checking all dashboard types and resource consumers. **Exception:** the old/unpackaged Material House standalone must be removed or replaced before loading the collection. Its unguarded registrations can throw if it loads after the collection and can restore an internal baseline picker entry. Do not rely on resource load order; snapshot the resource list and saved card configuration first, retain the original file for rollback, replace the old pilot resource with the collection resource, and verify `custom:eleven-material-house` still uses the original manifest/settings. This preparation does not make that dashboard/resource change for you. The legacy `custom:eleven-home-controls-card` mode card remains excluded; its old filename is retained only for the standalone module containing Control Pad, Controls and Waste.
+
+### Optional Eleven Material theme
+
+The collection follows the active Home Assistant theme; installing the cards does not activate a theme. For the optional supplied theme, copy `themes/eleven_material.yaml` (or the matching release asset) into your Home Assistant themes directory, load themes using your normal Home Assistant configuration, and select **Eleven Material** in your profile. Both light and dark modes are provided. This packaging change does not modify the theme or install it in Home Assistant.
 
 ## Add a card
 
@@ -244,8 +264,15 @@ For YAML configuration, use these types:
 | Energy Flow (beta) | `custom:eleven-energy-flow-card` |
 | House (beta) | `custom:eleven-house-card` |
 | Shopping | `custom:eleven-shopping-card` |
+| Control Pad | `custom:eleven-actions-card` |
+| Controls | `custom:eleven-controls-card` |
+| Waste | `custom:eleven-waste-card` |
+| Appliance Planner | `custom:eleven-appliance-planner` |
+| Room | `custom:eleven-room-card` |
+| Scene Engine | `custom:eleven-scene-engine-card` |
+| Material House (approved pilot) | `custom:eleven-material-house` |
 
-Overview, Heatmap, Calendar, Car, Weather and Energy Flow are local betas in this working tree; they have not been published as a HACS release.
+Beta/pilot labels describe card maturity, not separate resource requirements. All types above are included in this source collection build; inclusion does not claim that the next draft has been published, installed or validated against your household integrations.
 
 The card documentation linked above includes YAML examples and option details.
 
@@ -279,6 +306,6 @@ npm test
 npm run check
 ```
 
-Edit the source files, not the generated bundles. The build produces `dist/eleven-cards.js` for the collection and a standalone module in each card's `dist/` directory.
+Edit the source files, not the generated bundles. The root build produces `dist/eleven-cards.js` for all nineteen card types and standalone modules in their respective `dist/` directories, including the packaged pilot under `experiments/material-house/dist/`. Always use the root build for distributable pilot output: running its isolated Python builder alone emits the intermediate experimental baseline registrations, which the root packager intentionally removes. Collection registration tests exercise repeat loads, both standalone/collection load orders, unchanged House aliases and byte-identical source rebuilds.
 
 Reusable buttons, tabs and popups live in `shared/ui-*.js`. See [Shared UI components](shared/README.md) for their rendering, styling and lifecycle APIs.

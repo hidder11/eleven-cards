@@ -12,6 +12,9 @@ CARDS = [
     'eleven-heatmap-card', 'eleven-calendar-card',
     'eleven-car-card', 'eleven-weather-card', 'eleven-energy-flow-card',
     'eleven-shopping-card', 'eleven-house-card',
+    'eleven-actions-card', 'eleven-controls-card', 'eleven-waste-card',
+    'eleven-room-card', 'eleven-appliance-planner',
+    'eleven-scene-engine-card', 'eleven-material-house',
 ]
 
 

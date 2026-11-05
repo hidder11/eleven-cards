@@ -278,6 +278,8 @@ export class CalendarCard extends HTMLElement{
  _cleanupUI(){disconnectPeriodControls(this,true);globalThis.document?.removeEventListener?.('pointerdown',this._toolsOutside);for(const controller of this._popupControllers){controller.close();controller.disconnect();}this._popupControllers=[];}
  _render(){
   if(!this._config)return;
+  // setConfig can render before either hass or connectedCallback supplies today.
+  this._todayKey??=localCalendarDayKey(Date.now(),this._zone());
   const dutch=isDutch(this._hass),range=this._range(),renderKey=`${this._view}/${range.startKey}/${range.endKey}`,sameRange=this._renderKey===renderKey,scroll=sameRange?this.shadowRoot.querySelector('.horizontal')?.scrollLeft??0:0,scrollTop=sameRange?this.shadowRoot.querySelector('.calendar-body')?.scrollTop??0:0;
   const active=this.shadowRoot.activeElement,focusCalendar=active?.dataset?.calendar,focusEvent=active?.dataset?.calendarEvent,focusInfo=active?.hasAttribute?.('data-info'),focusRetry=active?.hasAttribute?.('data-retry');
   const toolsOpen=Boolean(this.shadowRoot.querySelector('.calendar-tools')?.open),focusTools=active?.matches?.('.calendar-tools summary');

@@ -1,4 +1,4 @@
-# Eleven Room Card — local beta
+# Eleven Room Card
 
 Mobile room summary and navigation for a Home Assistant dashboard. The room title uses the graph-card typography, without a decorative room icon. The optional note subtitle matches the Car card subtitle, including its short Home Assistant accent-colour line. Uses inherited Home Assistant theme variables; the HA automatic theme follows the device's system preference. Configured scene buttons call Home Assistant scene.turn_on; light controls only open more-info. The room name navigates; the separate light button opens the primary configured light/group's native more-info dialog. Room detail pages contain normal HA controls.
 
@@ -26,7 +26,7 @@ node cards/room-card/scripts/build.mjs
 node --check cards/room-card/dist/eleven-room-card.js
 ```
 
-Standalone output: `cards/room-card/dist/eleven-room-card.js`. Installed locally at `/local/eleven-cards/eleven-room-card.js` with a hash query string. Not included in the collection bundle or any published HACS release yet. Do not add a second resource for the same card.
+Included in the root `dist/eleven-cards.js` collection; follow the [collection installation instructions](../../README.md#installation). Alternatively use the standalone output `cards/room-card/dist/eleven-room-card.js` as a JavaScript module. Choose one installation method, not duplicate resources. A source build does not itself publish or install a release.
 
 Supported mobile viewport: 360px and wider. Default width is six of twelve section columns, auto height; navigation targets are at least 44px high; scene and light buttons share the compact 36px size, 16px icons and theme button radius. Buttons with optional scene names expand horizontally. Long labels wrap. Native HA light/dark themes tested at 360px, 390px and 1280px. This local beta currently uses Dutch labels; existing cards remain unchanged.
 

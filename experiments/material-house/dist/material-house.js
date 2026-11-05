@@ -1,3 +1,5 @@
+// Eleven packaged Material House pilot
+if (!customElements.get('eleven-material-house')) {
 (()=>{
 /* No gamma-space blending. Scene-linear float32 RGB -> one display transform. */
 const HousePixels={
@@ -647,9 +649,6 @@ class ElevenHouseCardEditor extends HTMLElement{
  changed(value){const view=this.resolveView(value),next={...this.config,...value};delete next.view_scope;delete next.view_floor;delete next.view_camera;if(view)next.view=view;this.config=next;this.render();this.loadViews();this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:next},bubbles:true,composed:true}));}
  render(){if(!this.config||!this.form)return;const base=ElevenHouseCard.getConfigForm(),active=(this.views||[]).find(v=>v.id===this.config.view);this.form.hass=this._hass;this.form.schema=[...this.viewSchema(),...base.schema.filter(s=>!['view','manifest','view_catalog'].includes(s.name)),{name:'sources',type:'expandable',title:'Geavanceerd · beeldbronnen',flatten:true,expanded:false,schema:base.schema.filter(s=>['manifest','view_catalog'].includes(s.name))}];this.form.data={...this.config,view_scope:active?.scope||'house',view_floor:active?.floor_id,view_camera:this.config.view};this.form.computeLabel=s=>({view_scope:'Aanzicht',view_floor:'Verdieping',view_camera:'Cameralocatie'}[s.name]||base.computeLabel(s));this.shadowRoot.querySelector('p').textContent=this.error||'';}
 }
-if(!customElements.get('eleven-house-baseline-editor'))customElements.define('eleven-house-baseline-editor',ElevenHouseCardEditor);
-if(!customElements.get('eleven-house-baseline'))customElements.define('eleven-house-baseline',ElevenHouseCard);
-window.customCards=window.customCards||[];if(!window.customCards.some(c=>c.type==='eleven-house-baseline'))window.customCards.push({type:'eleven-house-baseline',name:'Eleven House Card',description:'Transparant 3D-huis met vooraf berekende verlichting',preview:true});
 globalThis.ElevenHousePixels=HousePixels;
 
 /* Isolated experiment; actual Eleven Cards develop shared presentation,
@@ -716,8 +715,6 @@ class HouseStylePreview extends ElevenHouseCard{
 class HouseStylePreviewEditor extends ElevenHouseCardEditor{
  render(){super.render();if(!this.config||!this.form)return;const base=HouseStylePreview.getConfigForm();this.form.schema=[...this.form.schema.filter(s=>s.name!=='presentation'),base.schema.find(s=>s.name==='presentation')];const label=this.form.computeLabel;this.form.computeLabel=s=>base.computeLabel(s)===s.name?label(s):base.computeLabel(s);}
 }
-customElements.define('eleven-house-styled-baseline',HouseStylePreview);
-customElements.define('eleven-house-styled-baseline-editor',HouseStylePreviewEditor);
 
 // House-only native HA adapter. Material paint recipes belong to the theme.
 function houseThemeStyles(){
@@ -1002,7 +999,13 @@ class MaterialHouseEditor extends HouseStylePreviewEditor {
   const label=this.form.computeLabel;this.form.computeLabel=s=>s.name==='accent_color'?'Selectieaccent (hex, leeg = thema)':label(s);
  }
 }
-customElements.define('eleven-material-house',MaterialHouseCard);
-customElements.define('eleven-material-house-editor',MaterialHouseEditor);
+if(!customElements.get('eleven-material-house'))customElements.define('eleven-material-house',MaterialHouseCard);
+if(!customElements.get('eleven-material-house-editor'))customElements.define('eleven-material-house-editor',MaterialHouseEditor);
 
 })();
+
+}
+window.customCards=window.customCards||[];
+for(let i=window.customCards.length-1;i>=0;i--)if(window.customCards[i].type==='eleven-house-baseline')window.customCards.splice(i,1);
+window.customCards=window.customCards||[];
+if(!window.customCards.some(card=>card.type==='eleven-material-house'))window.customCards.push({type:'eleven-material-house',name:'Eleven Material House (pilot)',description:'Approved Material House pilot with a compatible house image manifest',preview:true});
