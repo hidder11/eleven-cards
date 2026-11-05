@@ -66,15 +66,7 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 @media(prefers-reduced-motion:reduce){.circle-scene .flow-dot{display:none}}
 .toolbar .period-menu-navigation{display:none}
 ${segmentedControlStyles('.toolbar .chart-controls','.toolbar [data-view-button],.toolbar .period-trigger,.toolbar .chart-controls>[data-period]',{first:'.toolbar .period-trigger,.toolbar .view-period>[data-view-button]',last:'.toolbar [data-view-button]',dividers:'.toolbar .chart-controls>[data-period],.toolbar .chart-controls>[data-view-button]'})}
-/* Keep these after the shared segmented recipe, which defaults to 36px. */
-.toolbar .chart-controls{flex-wrap:wrap}
-.toolbar .view-period{flex:1 1 120px;max-width:100%;min-width:max-content;flex-wrap:wrap}
-.toolbar .chart-controls>[data-period],.toolbar .chart-controls [data-view-button],.toolbar .view-period .period-trigger{min-width:44px;min-height:44px;height:auto;width:auto;max-width:100%;padding:6px;font-size:12px;line-height:1.35;white-space:nowrap;overflow-wrap:normal;word-break:normal}
-.toolbar .chart-controls>[data-period]{width:44px}
-.toolbar .chart-controls>[data-period=now]{width:auto;min-width:44px}
-.toolbar .view-period .period-controls{min-width:max-content}
-.toolbar .view-period .period-trigger{width:100%}
-.toolbar .view-period .period-trigger>span{overflow:visible;text-overflow:clip;white-space:nowrap;overflow-wrap:normal;text-align:start}
-@container(max-width:340px){.content[data-view=history] .toolbar .view-period{flex-basis:100%}}
+/* Keep navigation on one row; long period labels may wrap inside the picker. */
+.toolbar .view-period .period-trigger>span{overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere;text-align:start}
 
 `;
