@@ -2,7 +2,7 @@
 
 Horizontal status-history bars, one per entity. Uses Home Assistant Recorder history; missing history remains unknown and is never replaced by the current state. Read-only: no devices or automations are controlled.
 
-Use the graph directly or its arrow-key navigation to browse state changes; Home/End jump to the bounds and Escape dismisses the details. Sensor labels have a 44px minimum height. Short intervals retain their accurate width on the time scale.
+Use the graph directly or its arrow-key navigation to browse state changes; Home/End jump to the bounds and Escape dismisses the details. Sensor labels have a 24px minimum height, grow for wrapped names and retain keyboard focus and isolation actions. Short intervals retain their accurate width on the time scale.
 
 ## Installation
 
@@ -25,6 +25,7 @@ entities:
 hours_to_show: 24
 bar_height: 18
 border_radius: 5
+label_gap: 2
 row_gap: 16
 show_labels: true
 show_legend: true
@@ -43,7 +44,7 @@ state_colors:
 
 `entities`: 1–16 entity IDs, any domain. Each entity is limited to 20 distinct recorded state values in the fetched period (including `unknown` and `unavailable`). At the 21st distinct value, that entity shows a clear warning instead of segments, summary or legend entries; other entities remain visible. This fixed limit uses raw values, not display labels. Zoom cannot bypass it; loading a period with at most 20 values restores the timeline. Missing history does not count as a recorded state. `title`: optional heading. `hours_to_show`: 1–8760 hours, default 24 (available data depends on Recorder retention).
 
-`bar_height`: 4–80 pixels, default 18. `border_radius`: 0–40 pixels, default 5. `row_gap`: 0–64 pixels, default 16. `default_color`: fallback color for unmapped states, RGB array or hex. All three layout controls are exposed in the visual editor.
+`bar_height`: 4–80 pixels, default 18. `border_radius`: 0–40 pixels, default 5. `row_gap`: 0–64 pixels, default 16. `label_gap`: 0-32 pixels between the name and its bar, default 2; ignored when `show_labels` is false. This is independent of `row_gap`, which separates complete entity rows. `default_color`: fallback color for unmapped states, RGB array or hex. All four layout controls are exposed under **Bar appearance / Balkopmaak** in the visual editor.
 
 `show_labels`, `show_legend`, `show_axis`: default true. `show_state_labels`: default false; labels inside short segments are clipped instead of overlapping.
 

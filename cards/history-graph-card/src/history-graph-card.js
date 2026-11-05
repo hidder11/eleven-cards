@@ -415,10 +415,14 @@ export class HistoryGraphCard extends HTMLElement {
   if(!rows.length){this._hideTooltip(publish);return;}
   const colors=this._series.flatMap((s,i)=>this._isSeriesVisible(i)?[this._appearance(i,valueAt(s.points,timestamp)).color]:[]);
   tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)} <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
-  tooltip.style.maxHeight=`${Math.max(0,box.height-8)}px`;
+  // A short plot must not truncate the series list when the card has room.
+  const contentBox=this.shadowRoot.querySelector('.card-content')?.getBoundingClientRect()??box;
+  const minTop=Math.max(contentBox.top-box.top+4,8-box.top);
+  const maxBottom=Math.min((contentBox.bottom??contentBox.top+contentBox.height)-box.top-4,(globalThis.window?.innerHeight??Infinity)-box.top-8);
+  tooltip.style.maxHeight=`${Math.max(0,maxBottom-minTop)}px`;
   const measured=tooltip.getBoundingClientRect();let left=Math.max(4,Math.min(box.width-measured.width-4,px+14));
   if(px+14+measured.width>box.width-4)left=Math.max(4,px-measured.width-14);
-  const candidates=[4,Math.max(4,box.height-measured.height-4)];
+  const candidates=[minTop,Math.max(minTop,maxBottom-measured.height)];
   const overlaps=top=>positions.filter(m=>m.x>left-9&&m.x<left+measured.width+9&&m.y>top-9&&m.y<top+measured.height+9).length;
   const top=candidates.sort((a,b)=>overlaps(a)-overlaps(b))[0];tooltip.style.left=`${left}px`;tooltip.style.top=`${top}px`;
   chart.querySelector('.markers').innerHTML=positions.map(m=>`<i class="hover-dot" style="left:${m.x}px;top:${m.y}px;border-color:${m.color}"></i>`).join('');
@@ -491,11 +495,11 @@ export class HistoryGraphCard extends HTMLElement {
  .axis-x{bottom:10px}
  .axis-y{overflow:visible;text-overflow:clip}
  .axis-unit{line-height:1.3;overflow:visible;text-overflow:clip}
- .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0}
+ .legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:0}
  .legend-item{display:grid;grid-template-columns:15px minmax(0,1fr);gap:0 6px;align-content:center}
  .legend-item strong{grid-column:2;font-size:var(--font-size-label);white-space:normal;overflow-wrap:anywhere}
  .legend-item>span{overflow-wrap:anywhere}
- .legend .unit{grid-column:1/-1;font-size:11px}
+ .legend .unit{flex-basis:100%;text-align:end;font-size:11px}
  `;}
  _styles(){return `
  :host{display:block;height:100%;min-width:0;container-type:inline-size;--font-size-meta:11px;--font-size-label:12px;--font-size-title:18px;}

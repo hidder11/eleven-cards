@@ -65,7 +65,7 @@ Automatic EVCC discovery waits for the entity registry and keeps matches within 
 
 The standalone EVCC card has been removed. Migrate old `custom:eleven-evcc-card` YAML to `custom:eleven-car-card`, add `evcc_enabled: true` and keep its entity mappings and other options. EVCC integration is now provided only through Car. Remove any standalone EVCC resource from the dashboard resources and load the current collection or Car module. Its internal engine, synthetic QA fixtures and regression tests live in this card's src/evcc, qa/evcc and tests/evcc directories.
 
-Choose any Home Assistant entity for each field. Labels default to its friendly name, values retain units, numeric values use the frontend language, and clicking a value opens entity details. Missing or unavailable entities show a dash; zero remains visible.
+Without EVCC, field 1 spans the full width above fields 2 and 3. The lower fields share a row when their readings fit, and stack on narrow cards. Hidden fields leave no empty panels; a single lower field fills the width. Choose any Home Assistant entity for each field. Labels default to its friendly name, values retain units, numeric values use the frontend language, and clicking a value opens entity details. Missing or unavailable entities show a dash; zero remains visible.
 
 For custom fields, replace `2` with `1`, `2` or `3` in these options:
 
