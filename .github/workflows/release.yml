@@ -63,7 +63,7 @@ jobs:
         run: |
           npm test
           npm run check
-          git diff --exit-code -- dist cards/*/dist
+          git diff --exit-code -- dist cards/*/dist experiments/material-house/dist
           git diff --check
       - name: Install browser smoke test dependencies
         run: |

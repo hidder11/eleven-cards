@@ -210,5 +210,7 @@ class MaterialHouseEditor extends HouseStylePreviewEditor {
   const label=this.form.computeLabel;this.form.computeLabel=s=>s.name==='accent_color'?'Selectieaccent (hex, leeg = thema)':label(s);
  }
 }
-customElements.define('eleven-material-house',MaterialHouseCard);
-customElements.define('eleven-material-house-editor',MaterialHouseEditor);
+if(!customElements.get('eleven-material-house'))customElements.define('eleven-material-house',MaterialHouseCard);
+if(!customElements.get('eleven-material-house-editor'))customElements.define('eleven-material-house-editor',MaterialHouseEditor);
+window.customCards=window.customCards||[];
+if(!window.customCards.some(card=>card.type==='eleven-material-house'))window.customCards.push({type:'eleven-material-house',name:'Eleven Material House (pilot)',description:'Approved Material House pilot with a compatible house image manifest',preview:true});

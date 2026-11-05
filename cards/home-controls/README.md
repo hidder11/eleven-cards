@@ -2,7 +2,7 @@
 
 Three independent Lovelace cards with independent visual editors, shared in one standalone JavaScript resource. No mode selector and no mandatory combination of devices. The older `eleven-home-controls-card` element, mode-based implementation and configuration form have been removed; saved legacy card definitions must be migrated before updating.
 
-This is a locally installed beta. These cards are not yet included in the collection's main HACS release. Do not rebuild/deploy unrelated dirty collection modules to update them.
+All three card types are included in the root `dist/eleven-cards.js` collection. Follow the [collection installation instructions](../../README.md#installation), or use the standalone module described below. Use one method, not both. A source build does not itself publish a release or update Home Assistant.
 
 ## Card types
 
@@ -94,7 +94,7 @@ The standalone build includes shared request helpers, presentation helpers in `s
 
 ## Compatibility and installation
 
-Load one standalone artifact as a Lovelace `module` resource. Do not load both old and new versions simultaneously. Use an immutable content-hashed filename and update only its existing resource ID, preserving the original artifact for rollback. Snapshot/read back the exact dashboard and resources, guard concurrent edits, preserve unrelated configs and verify served bytes equal the build.
+Load the collection or one standalone artifact as a Lovelace `module` resource. Do not load both old and new versions simultaneously. For manual standalone updates, use an immutable content-hashed filename and update only its existing resource ID, preserving the original artifact for rollback. Snapshot/read back the exact dashboard and resources, guard concurrent edits, preserve unrelated configs and verify served bytes equal the build. Do not manually overwrite HACS-managed files.
 
 Legacy `custom:eleven-home-controls-card` configurations no longer work. Migrate `mode: actions` to `custom:eleven-actions-card` with the same `actions`; migrate `mode: comfort` to `custom:eleven-controls-card` with ordered `entities` for the previous `climate` and `covers`, converting `cover_name`/`cover_names` to per-item `name`; migrate `mode: collections` to `custom:eleven-waste-card` with the same sensor `entities`. Remove `mode` and preserve explicit confirmation choices, targets, labels and visibility. The former legacy default required confirmation, so set `confirmation: true` explicitly when migrating an Actions/Controls config that omitted it. Modern cards retain string/object entity entries and Waste's existing `daysTo` parsing.
 

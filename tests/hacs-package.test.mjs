@@ -22,8 +22,8 @@ test('HACS collection download registers all cards without imports or duplicate 
   }});
   vm.runInContext(bundle, context);
   vm.runInContext(bundle, context);
-  assert.deepEqual([...registry.keys()].sort(), ['eleven-bar-chart', 'eleven-calendar-card', 'eleven-car-card', 'eleven-dynamic-energy-price-card', 'eleven-energy-flow-card', 'eleven-heatmap-card', 'eleven-history-graph-card', 'eleven-house-card', 'eleven-house-card-editor', 'eleven-house-styled-card', 'eleven-house-styled-card-editor', 'eleven-overview-card', 'eleven-shopping-card', 'eleven-shopping-card-editor', 'eleven-timeline-card', 'eleven-weather-card']);
-  assert.equal(window.customCards.length, 12);
+  assert.deepEqual([...registry.keys()].sort(), ['eleven-actions-card', 'eleven-appliance-planner', 'eleven-appliance-planner-editor', 'eleven-bar-chart', 'eleven-calendar-card', 'eleven-car-card', 'eleven-controls-card', 'eleven-controls-editor', 'eleven-dynamic-energy-price-card', 'eleven-energy-flow-card', 'eleven-heatmap-card', 'eleven-history-graph-card', 'eleven-house-card', 'eleven-house-card-editor', 'eleven-house-styled-card', 'eleven-house-styled-card-editor', 'eleven-material-house', 'eleven-material-house-editor', 'eleven-overview-card', 'eleven-room-card', 'eleven-scene-engine-card', 'eleven-shopping-card', 'eleven-shopping-card-editor', 'eleven-timeline-card', 'eleven-waste-card', 'eleven-weather-card']);
+  assert.equal(window.customCards.length, 19);
   assert.ok(!registry.has('eleven-evcc-card')&&!registry.has('eleven-climate-card'),'removed card types are not registered');
   for (const type of ['eleven-car-card', 'eleven-heatmap-card', 'eleven-calendar-card', 'eleven-weather-card']) {
     const pickerEntry = window.customCards.find(card => card.type === type);
@@ -45,7 +45,7 @@ test('collection can overlap existing standalone modules safely during migration
     const capturedEntries=window.customCards=[];
     for (const path of paths) vm.runInContext(readFileSync(new URL(path, root), 'utf8'), context);
     assert.equal(window.customCards,capturedEntries,'picker registry identity is preserved');
-    assert.equal(registry.size, 16);
-    assert.equal(window.customCards.length, 12);
+    assert.equal(registry.size, 26);
+    assert.equal(window.customCards.length, 19);
   }
 });
