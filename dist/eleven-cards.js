@@ -5905,11 +5905,11 @@ class HistoryGraphCard extends HTMLElement {
  .axis-x{bottom:10px}
  .axis-y{overflow:visible;text-overflow:clip}
  .axis-unit{line-height:1.3;overflow:visible;text-overflow:clip}
- .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0}
+ .legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:0}
  .legend-item{display:grid;grid-template-columns:15px minmax(0,1fr);gap:0 6px;align-content:center}
  .legend-item strong{grid-column:2;font-size:var(--font-size-label);white-space:normal;overflow-wrap:anywhere}
  .legend-item>span{overflow-wrap:anywhere}
- .legend .unit{grid-column:1/-1;font-size:11px}
+ .legend .unit{flex-basis:100%;text-align:end;font-size:11px}
  `;}
  _styles(){return `
  :host{display:block;height:100%;min-width:0;container-type:inline-size;--font-size-meta:11px;--font-size-label:12px;--font-size-title:18px;}
@@ -7553,8 +7553,8 @@ ${chartInsightStyles()}
 .row-label{position:relative;background:transparent}
 .summary{margin-top:6px;font-size:11px;color:var(--secondary-text-color,#666);background:transparent;position:relative;overflow-wrap:anywhere}
 .row+.row{margin-top:${c.row_gap}px}
-.row-label{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin-bottom:4px;overflow-wrap:anywhere}
-.row-label[data-series]{display:block;width:100%;min-height:44px;box-sizing:border-box;padding:8px 0;border:0;text-align:start;font-family:inherit;cursor:pointer}
+.row-label{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin-bottom:${c.label_gap}px;overflow-wrap:anywhere}
+.row-label[data-series]{display:flex;align-items:flex-end;width:100%;min-height:24px;box-sizing:border-box;padding:0;border:0;text-align:start;font-family:inherit;cursor:pointer}
 .row-label[data-series]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}
 .track{position:relative;height:${c.bar_height}px;border-radius:${c.border_radius}px;overflow:hidden;background:var(--divider-color,#ddd)}
 .segment{position:absolute;top:0;height:100%;padding:0;border:0;border-right:1px solid #ffffff24;box-sizing:border-box;cursor:pointer;color:white;min-width:0;overflow:hidden;font-family:inherit;font-size:11px;line-height:14px}
@@ -7580,8 +7580,8 @@ ${SharedGraph.tooltipStyles()}
 };
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const labels={entities:'Entiteiten op de tijdlijn',title:'Titel (optioneel)',hours_to_show:'Afgelopen aantal uren',bar_height:'Balkdikte (px)',border_radius:'Afronding (px)',row_gap:'Ruimte tussen balken (px)',state_colors:'Statuskleur toevoegen',show_labels:'Naam boven elke balk tonen',show_legend:'Legenda met statuskleuren tonen',show_axis:'Tijden onder de balken tonen',show_state_labels:'Statusnaam in de balk tonen',default_color:'Terugvalkleur (optioneel)',series_options:'Aangepaste naam toevoegen'};
-const helpers={entities:'Elke entiteit krijgt één balk, in de gekozen volgorde. Kies 1–16 entiteiten met statusgeschiedenis.',hours_to_show:'Terugkijkperiode: 24 = één dag, 168 = één week. Alleen opgeslagen Home Assistant-geschiedenis is beschikbaar.',state_colors:'Gebruik de echte statuswaarde, bijvoorbeeld on, off, home of not_home. Zonder entiteit geldt de kleur voor alle balken; met entiteit alleen voor die balk. Een specifieke kleur gaat voor een algemene kleur. De weergavenaam is optioneel.',default_color:'Alleen voor statussen zonder eigen kleurregel. Leeg laten gebruikt de ingebouwde statuskleuren.',show_state_labels:'Op korte tijdvakken past niet altijd tekst. Details blijven beschikbaar door een tijdvak aan te tikken.',series_options:'Optioneel: wijzig de naam van een hierboven gekozen entiteit. Dit voegt geen extra balk toe. Zonder aanpassing wordt de Home Assistant-naam gebruikt.',bar_height:'Hoogte van elke statusbalk, van 4 tot 80 pixels.',border_radius:'Rondt de buitenhoeken van de volledige balk af.',row_gap:'Verticale ruimte tussen de rijen.'};
+const labels={entities:'Entiteiten op de tijdlijn',title:'Titel (optioneel)',hours_to_show:'Afgelopen aantal uren',bar_height:'Balkdikte (px)',border_radius:'Afronding (px)',label_gap:'Ruimte tussen naam en balk (px)',row_gap:'Ruimte tussen balken (px)',state_colors:'Statuskleur toevoegen',show_labels:'Naam boven elke balk tonen',show_legend:'Legenda met statuskleuren tonen',show_axis:'Tijden onder de balken tonen',show_state_labels:'Statusnaam in de balk tonen',default_color:'Terugvalkleur (optioneel)',series_options:'Aangepaste naam toevoegen'};
+const helpers={entities:'Elke entiteit krijgt één balk, in de gekozen volgorde. Kies 1–16 entiteiten met statusgeschiedenis.',hours_to_show:'Terugkijkperiode: 24 = één dag, 168 = één week. Alleen opgeslagen Home Assistant-geschiedenis is beschikbaar.',state_colors:'Gebruik de echte statuswaarde, bijvoorbeeld on, off, home of not_home. Zonder entiteit geldt de kleur voor alle balken; met entiteit alleen voor die balk. Een specifieke kleur gaat voor een algemene kleur. De weergavenaam is optioneel.',default_color:'Alleen voor statussen zonder eigen kleurregel. Leeg laten gebruikt de ingebouwde statuskleuren.',show_state_labels:'Op korte tijdvakken past niet altijd tekst. Details blijven beschikbaar door een tijdvak aan te tikken.',series_options:'Optioneel: wijzig de naam van een hierboven gekozen entiteit. Dit voegt geen extra balk toe. Zonder aanpassing wordt de Home Assistant-naam gebruikt.',bar_height:'Hoogte van elke statusbalk, van 4 tot 80 pixels.',border_radius:'Rondt de buitenhoeken van de volledige balk af.',label_gap:'Ruimte onder de naam, van 0 tot 32 pixels. Heeft geen effect als namen verborgen zijn.',row_gap:'Verticale ruimte tussen de rijen.'};
 function color(v,fallback='#607d94'){if(Array.isArray(v)&&v.length===3&&v.every(n=>Number.isFinite(n)&&n>=0&&n<=255))return `rgb(${v.join(',')})`;return typeof v==='string'&&/^(#[\da-f]{3,8}|[a-z]+|var\(--[\w-]+\))$/i.test(v)?v:fallback;}
 Object.assign(labels,{entity:'Entiteit',name:'Weergavenaam (optioneel)',state_colors:'Statusregels',timeline_settings:'Tijdlijn',status_settings:'Algemene statusregels',bar_settings:'Balkopmaak'});
 Object.assign(helpers,{state_colors:'Gebruik de echte statuswaarde, bijvoorbeeld on, off, home of not_home. Eigen regels gaan voor algemene regels. Dubbele statuswaarden zijn niet toegestaan.',status_settings:'Deze regels gelden voor alle entiteiten, tenzij de entiteit een eigen regel voor dezelfde status heeft.'});
@@ -7597,7 +7597,7 @@ const timelineEnglish={
  'Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.':'Cards with the same group share hover and timeframe when the corresponding synchronization is enabled. Empty uses the default group.',
  'Tijdlijn':'Timeline','Algemene statusregels':'Common state rules','Balkopmaak':'Bar appearance','Entiteiten':'Entities','Entiteit':'Entity',
  'Weergavenaam (optioneel)':'Display name (optional)','Statusregels':'State rules','Titel (optioneel)':'Title (optional)',
- 'Afgelopen aantal uren':'Hours to show','Balkdikte (px)':'Bar height (px)','Afronding (px)':'Corner radius (px)','Ruimte tussen balken (px)':'Row gap (px)',
+ 'Afgelopen aantal uren':'Hours to show','Balkdikte (px)':'Bar height (px)','Afronding (px)':'Corner radius (px)','Ruimte tussen naam en balk (px)':'Name-to-bar gap (px)','Ruimte tussen balken (px)':'Row gap (px)',
  'Naam boven elke balk tonen':'Show name above each bar','Legenda met statuskleuren tonen':'Show state legend','Tijden onder de balken tonen':'Show time axis','Statusnaam in de balk tonen':'Show state labels inside bars','Terugvalkleur (optioneel)':'Fallback color (optional)',
  'Statuswaarde (bijv. on of home)':'State value (e.g. on or home)','Kleur':'Color','Entiteit toevoegen':'Add entity','Nieuwe entiteit':'New entity','Omhoog':'Move up','Omlaag':'Move down','Verwijderen':'Remove',
  'Kies 1–16 unieke entiteiten.':'Choose 1–16 unique entities.','Dubbele statusregel':'Duplicate state rule',
@@ -7608,6 +7608,7 @@ const timelineEnglish={
  'Op korte tijdvakken past niet altijd tekst. Details blijven beschikbaar door een tijdvak aan te tikken.':'Short segments may not fit text. Tap a segment to view its details.',
  'Hoogte van elke statusbalk, van 4 tot 80 pixels.':'Height of every state bar, from 4 to 80 pixels.',
  'Rondt de buitenhoeken van de volledige balk af.':'Rounds the outer corners of the whole bar.',
+ 'Ruimte onder de naam, van 0 tot 32 pixels. Heeft geen effect als namen verborgen zijn.':'Space below the name, from 0 to 32 pixels. Has no effect when names are hidden.',
  'Verticale ruimte tussen de rijen.':'Vertical space between rows.'
 };
 Object.assign(labels,{show_grid:'Grid tonen',show_summary:'Statusduur per entiteit tonen',show_navigation:'Tijdvakselectie tonen'});
@@ -7658,7 +7659,7 @@ class TimelineCard extends HTMLElement{
  static getStubConfig(hass){return {entities:Object.keys(hass?.states??{}).filter(id=>/^(binary_sensor|person|input_boolean|switch)\./.test(id)).slice(0,1),hours_to_show:24};}
  static editorConfig(c={}){
   const clone=v=>Array.isArray(v)?v.map(clone):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,clone(x)])):v;
-  const data=clone({hours_to_show:24,bar_height:18,border_radius:5,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,state_colors:[],series_options:[],...c,...timeframeSyncConfig(c,{draft:true})});
+  const data=clone({hours_to_show:24,bar_height:18,border_radius:5,label_gap:2,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,state_colors:[],series_options:[],...c,...timeframeSyncConfig(c,{draft:true})});
   const ids=data.entities??[];
   data._orphan_colors=data.state_colors.filter(r=>r.entity&&!ids.includes(r.entity));
   data._orphan_options=data.series_options.filter(r=>!ids.includes(r.entity));
@@ -7692,7 +7693,7 @@ class TimelineCard extends HTMLElement{
     {name:'hover_sync_group',selector:{text:{}}},{name:'sync_timeframe',default:false,selector:{boolean:{}}}
    ]),
    group('status_settings','Algemene statusregels',[{name:'state_colors',selector:this._rules()},{name:'default_color',selector:{color_rgb:{}}}]),
-   group('bar_settings','Balkopmaak',[num('bar_height',4,80,18),num('border_radius',0,40,5),num('row_gap',0,64,16)])
+   group('bar_settings','Balkopmaak',[num('bar_height',4,80,18),num('border_radius',0,40,5),num('label_gap',0,32,2),num('row_gap',0,64,16)])
   ]);
  }
  static async getConfigElement(){
@@ -7700,7 +7701,7 @@ class TimelineCard extends HTMLElement{
   if(!customElements.get('eleven-timeline-editor'))customElements.define('eleven-timeline-editor',TimelineSettingsEditor);
   return document.createElement('eleven-timeline-editor');
  }
- setConfig(c){timeframeSyncConfig(c);validateTimeline(c,this._hass);if(!Array.isArray(c.entities)||!c.entities.length||c.entities.length>16||c.entities.some(id=>typeof id!=='string'||!/^\w+\.\w+$/.test(id)))throw Error('Kies 1–16 entiteiten.');const config={hours_to_show:24,bar_height:18,border_radius:5,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',state_colors:[],series_options:[],...c};for(const [k,min,max] of [['hours_to_show',1,8760],['bar_height',4,80],['border_radius',0,40],['row_gap',0,64]])if(!Number.isFinite(config[k])||config[k]<min||config[k]>max)throw Error(`Ongeldige ${k}`);for(const k of ['state_colors','series_options'])if(!Array.isArray(config[k])||config[k].some(x=>!x||typeof x!=='object'))throw Error(`Ongeldige ${k}`);SharedGraph.clearHover(this);this._touchPointer=null;this._touchRenderPending=false;this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._visibility=new Map();this._config={...config,...timeframeSyncConfig(c)};this._viewport=null;resetGraphPeriod(this);this._hideTooltip();this._generation++;this._inFlight=false;this._series=[];this._stateLimits=[];this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
+ setConfig(c){timeframeSyncConfig(c);validateTimeline(c,this._hass);if(!Array.isArray(c.entities)||!c.entities.length||c.entities.length>16||c.entities.some(id=>typeof id!=='string'||!/^\w+\.\w+$/.test(id)))throw Error('Kies 1–16 entiteiten.');const config={hours_to_show:24,bar_height:18,border_radius:5,label_gap:2,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',state_colors:[],series_options:[],...c};for(const [k,min,max] of [['hours_to_show',1,8760],['bar_height',4,80],['border_radius',0,40],['label_gap',0,32],['row_gap',0,64]])if(!Number.isFinite(config[k])||config[k]<min||config[k]>max)throw Error(`Ongeldige ${k}`);for(const k of ['state_colors','series_options'])if(!Array.isArray(config[k])||config[k].some(x=>!x||typeof x!=='object'))throw Error(`Ongeldige ${k}`);SharedGraph.clearHover(this);this._touchPointer=null;this._touchRenderPending=false;this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._visibility=new Map();this._config={...config,...timeframeSyncConfig(c)};this._viewport=null;resetGraphPeriod(this);this._hideTooltip();this._generation++;this._inFlight=false;this._series=[];this._stateLimits=[];this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
  set hass(h){
   this._hass=h;
   const signature=JSON.stringify([h?.locale?.language??h?.language,h?.config?.time_zone,this._config?.entities.map(id=>{const state=h?.states?.[id];return [state?.state,state?.attributes?.friendly_name,state?.attributes?.device_class];})]);
@@ -7710,7 +7711,7 @@ class TimelineCard extends HTMLElement{
  get hass(){return this._hass;}
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._outside??=e=>{if(!e.composedPath().includes(this)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip();};globalThis.document?.addEventListener('pointerdown',this._outside);if(typeof ResizeObserver!=='undefined'){this._resizeObserver??=new ResizeObserver(entries=>{const narrow=(entries[0]?.contentRect?.width??this.clientWidth)<400;if(this._axisNarrow!==undefined&&this._axisNarrow!==narrow&&this._config)this._render();this._axisNarrow=narrow;});this._resizeObserver.observe(this);}if(this._config&&this._hass)this._refresh();}
  disconnectedCallback(){this._timelineResize?.disconnect();globalThis.document?.removeEventListener?.('pointerdown',this._chartToolsOutside);this._touchPointer=null;this._touchRenderPending=false;disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);globalThis.document?.removeEventListener('pointerdown',this._outside);this._resizeObserver?.disconnect();if(this._hoverFrame!=null)cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;this._hideTooltip();this._connected=false;this._started=false;this._inFlight=false;this._generation++;clearTimeout(this._timer);}
- getCardSize(){return Math.ceil((90+(this._config?.entities.length??1)*((this._config?.bar_height??18)+(this._config?.row_gap??16)+24))/50);}
+ getCardSize(){return Math.ceil((90+(this._config?.entities.length??1)*((this._config?.bar_height??18)+(this._config?.row_gap??16)+(this._config?.show_labels===false?0:24+(this._config?.label_gap??2))))/50);}
  getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(3,Math.ceil(this.getCardSize()*50/64)),min_rows:3};}
  _isSeriesVisible(index){return chartSeriesVisible(this,index);}
  _nl(){return (this._hass?.locale?.language??this._hass?.language??'nl').startsWith('nl');}
@@ -11211,11 +11212,11 @@ class HistoryGraphCard extends HTMLElement {
  .axis-x{bottom:10px}
  .axis-y{overflow:visible;text-overflow:clip}
  .axis-unit{line-height:1.3;overflow:visible;text-overflow:clip}
- .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0}
+ .legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:0}
  .legend-item{display:grid;grid-template-columns:15px minmax(0,1fr);gap:0 6px;align-content:center}
  .legend-item strong{grid-column:2;font-size:var(--font-size-label);white-space:normal;overflow-wrap:anywhere}
  .legend-item>span{overflow-wrap:anywhere}
- .legend .unit{grid-column:1/-1;font-size:11px}
+ .legend .unit{flex-basis:100%;text-align:end;font-size:11px}
  `;}
  _styles(){return `
  :host{display:block;height:100%;min-width:0;container-type:inline-size;--font-size-meta:11px;--font-size-label:12px;--font-size-title:18px;}
@@ -15099,7 +15100,7 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 .popup-field-label{font-size:12px}.popup-location,.popup-description{font-size:13px;line-height:1.5}
 ${cardThemeStyles({periodUI:true,wells:'.calendar-info [data-ui-detail-surface]',controls:'.info-button,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'[data-ui-popup],.tooltip,[data-ui-detail-surface]'})}
 /* Match chart legends: functional swatches and plain labels. */
-.legend,.compact .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0 0 12px;font-size:12px}
+.legend,.compact .legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:0 0 12px;font-size:12px}
 .legend-item{padding:4px 0;gap:6px;min-width:0;justify-content:flex-start;border:0;border-radius:4px;background:transparent;box-shadow:none;color:var(--secondary-text-color);font-weight:400;line-height:1.3}
 .legend-item[aria-pressed=true],.legend-item[aria-pressed=true]:hover,.legend-item[aria-pressed=false],.legend-item[aria-pressed=false]:hover{background:transparent;box-shadow:none;color:var(--secondary-text-color)}
 .legend-item .dot{width:9px;height:9px;border-radius:3px}
@@ -15150,6 +15151,13 @@ ${segmentedControlStyles('.navigation','.navigation>.period-controls>.period-tri
 .month-chip,.list-event .event-button,.column .event-button{background:color-mix(in srgb,var(--event-color) 10%,transparent);border-inline-start:2px solid var(--event-color)!important;border-radius:0 6px 6px 0!important;box-shadow:0 2px 4px color-mix(in srgb,var(--eleven-material-shadow,rgba(0,0,0,.18)) 85%,transparent)}
 .month-chip[data-past-event],.list-event .event-button[data-past-event],.column .event-button[data-past-event]{box-shadow:0 1px 3px color-mix(in srgb,var(--eleven-material-shadow,rgba(0,0,0,.18)) 45%,transparent)}
 .compact .event-meta{display:none}
+/* Compact day lists keep readable rows without expanded-mode whitespace. */
+.compact .day-list .list-day{padding:8px!important}
+.compact .day-list .list-day+.list-day{margin-top:8px;padding-top:8px!important}
+.compact .day-list .day-heading{margin-bottom:4px;padding-bottom:4px}
+.compact .day-list .list-event{padding:2px 0}
+.compact .day-list .list-event>.event-time{padding-top:4px}
+.compact .day-list .event-button{min-height:32px!important;padding:4px 4px 4px 9px!important}
 `;}
 
 
@@ -19327,7 +19335,7 @@ class CarCard extends EvccCard {
     const available=stacked?stage.clientWidth:slot,size=Math.floor(base*Math.min(1,Math.max(44,available-reserve)/Math.max(1,natural))*100)/100+'px';
     if(number.style.fontSize!==size)number.style.fontSize=size;
    }
-   if(grid){const fields=[...grid.children],available=grid.clientWidth;
+   if(grid){const fields=[...grid.children].filter(field=>field.dataset.carField!=='1'),available=grid.clientWidth;
     const needed=Math.max(0,...fields.map(field=>{const number=field.querySelector('.car-number'),value=field.querySelector('.ui-metric-value'),label=field.querySelector('.ui-metric-title');let n=0;
      if(number){const s=getComputedStyle(value);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;n=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0);}
      const s=getComputedStyle(label);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;const word=Math.max(0,...label.textContent.split(/\s+/).map(w=>ctx.measureText(w).width));return Math.max(n,word+34)+24;}));
@@ -19367,6 +19375,7 @@ class CarCard extends EvccCard {
    .picture small{font-size:12px;line-height:1.4;overflow-wrap:break-word}.picture:has(img[hidden]) small{padding:12px}
    .car-status,.content[data-density=compact] .car-status{margin-top:0}
    .car-readings{margin-top:12px;row-gap:12px;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr))}
+   .car-readings>[data-car-field="1"],.car-readings:has(>[data-car-field="1"])>[data-ui-metric]:last-child:nth-child(2){grid-column:1/-1}
    [data-ui-metric]{background:var(--secondary-background-color);padding:12px;min-height:44px;row-gap:4px}
    [data-ui-metric] .ui-metric-title{font-size:12px;overflow-wrap:break-word;line-height:1.4}
    [data-ui-metric] .ui-metric-value{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;white-space:normal;overflow-wrap:break-word;word-break:normal;line-height:1.3}
@@ -19387,7 +19396,7 @@ class CarCard extends EvccCard {
      <div class="picture">${image?`<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:`<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>${this._hasVehicleImage()?`<small>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:''}`}</div>
    </div>${uiBar({value:percent,label:percent==null?(nl?'Percentage niet beschikbaar':'Percentage unavailable'):(nl?'Accuniveau':'Battery level'),attrs:{class:'battery-progress'}})}</div>
    </div></div>
-   ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:${fields.length}">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;
+   ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:2">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;
   const content=this.shadowRoot.querySelector('.content');content.style.setProperty('--evcc-image-scale',String(config.image_scale/100));content.style.setProperty('--evcc-image-offset-y',config.image_offset_y+'px');content.scrollTop=scroll;
   for(const button of this.shadowRoot.querySelectorAll('[data-entity]'))button.addEventListener('click',()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:button.dataset.entity},bubbles:true,composed:true})));
   if(focused)Array.from(this.shadowRoot.querySelectorAll('[data-entity]')).find(button=>button.dataset.entity===focused)?.focus({preventScroll:true});
@@ -21504,16 +21513,8 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 @media(prefers-reduced-motion:reduce){.circle-scene .flow-dot{display:none}}
 .toolbar .period-menu-navigation{display:none}
 ${segmentedControlStyles('.toolbar .chart-controls','.toolbar [data-view-button],.toolbar .period-trigger,.toolbar .chart-controls>[data-period]',{first:'.toolbar .period-trigger,.toolbar .view-period>[data-view-button]',last:'.toolbar [data-view-button]',dividers:'.toolbar .chart-controls>[data-period],.toolbar .chart-controls>[data-view-button]'})}
-/* Keep these after the shared segmented recipe, which defaults to 36px. */
-.toolbar .chart-controls{flex-wrap:wrap}
-.toolbar .view-period{flex:1 1 120px;max-width:100%;min-width:max-content;flex-wrap:wrap}
-.toolbar .chart-controls>[data-period],.toolbar .chart-controls [data-view-button],.toolbar .view-period .period-trigger{min-width:44px;min-height:44px;height:auto;width:auto;max-width:100%;padding:6px;font-size:12px;line-height:1.35;white-space:nowrap;overflow-wrap:normal;word-break:normal}
-.toolbar .chart-controls>[data-period]{width:44px}
-.toolbar .chart-controls>[data-period=now]{width:auto;min-width:44px}
-.toolbar .view-period .period-controls{min-width:max-content}
-.toolbar .view-period .period-trigger{width:100%}
-.toolbar .view-period .period-trigger>span{overflow:visible;text-overflow:clip;white-space:nowrap;overflow-wrap:normal;text-align:start}
-@container(max-width:340px){.content[data-view=history] .toolbar .view-period{flex-basis:100%}}
+/* Keep navigation on one row; long period labels may wrap inside the picker. */
+.toolbar .view-period .period-trigger>span{overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere;text-align:start}
 
 `;
 

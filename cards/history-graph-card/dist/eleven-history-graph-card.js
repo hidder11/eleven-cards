@@ -2522,11 +2522,11 @@ class HistoryGraphCard extends HTMLElement {
  .axis-x{bottom:10px}
  .axis-y{overflow:visible;text-overflow:clip}
  .axis-unit{line-height:1.3;overflow:visible;text-overflow:clip}
- .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0}
+ .legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:0}
  .legend-item{display:grid;grid-template-columns:15px minmax(0,1fr);gap:0 6px;align-content:center}
  .legend-item strong{grid-column:2;font-size:var(--font-size-label);white-space:normal;overflow-wrap:anywhere}
  .legend-item>span{overflow-wrap:anywhere}
- .legend .unit{grid-column:1/-1;font-size:11px}
+ .legend .unit{flex-basis:100%;text-align:end;font-size:11px}
  `;}
  _styles(){return `
  :host{display:block;height:100%;min-width:0;container-type:inline-size;--font-size-meta:11px;--font-size-label:12px;--font-size-title:18px;}
