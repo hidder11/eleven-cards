@@ -5825,10 +5825,14 @@ class HistoryGraphCard extends HTMLElement {
   if(!rows.length){this._hideTooltip(publish);return;}
   const colors=this._series.flatMap((s,i)=>this._isSeriesVisible(i)?[this._appearance(i,valueAt(s.points,timestamp)).color]:[]);
   tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)} <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
-  tooltip.style.maxHeight=`${Math.max(0,box.height-8)}px`;
+  // A short plot must not truncate the series list when the card has room.
+  const contentBox=this.shadowRoot.querySelector('.card-content')?.getBoundingClientRect()??box;
+  const minTop=Math.max(contentBox.top-box.top+4,8-box.top);
+  const maxBottom=Math.min((contentBox.bottom??contentBox.top+contentBox.height)-box.top-4,(globalThis.window?.innerHeight??Infinity)-box.top-8);
+  tooltip.style.maxHeight=`${Math.max(0,maxBottom-minTop)}px`;
   const measured=tooltip.getBoundingClientRect();let left=Math.max(4,Math.min(box.width-measured.width-4,px+14));
   if(px+14+measured.width>box.width-4)left=Math.max(4,px-measured.width-14);
-  const candidates=[4,Math.max(4,box.height-measured.height-4)];
+  const candidates=[minTop,Math.max(minTop,maxBottom-measured.height)];
   const overlaps=top=>positions.filter(m=>m.x>left-9&&m.x<left+measured.width+9&&m.y>top-9&&m.y<top+measured.height+9).length;
   const top=candidates.sort((a,b)=>overlaps(a)-overlaps(b))[0];tooltip.style.left=`${left}px`;tooltip.style.top=`${top}px`;
   chart.querySelector('.markers').innerHTML=positions.map(m=>`<i class="hover-dot" style="left:${m.x}px;top:${m.y}px;border-color:${m.color}"></i>`).join('');
@@ -11127,10 +11131,14 @@ class HistoryGraphCard extends HTMLElement {
   if(!rows.length){this._hideTooltip(publish);return;}
   const colors=this._series.flatMap((s,i)=>this._isSeriesVisible(i)?[this._appearance(i,valueAt(s.points,timestamp)).color]:[]);
   tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)} <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
-  tooltip.style.maxHeight=`${Math.max(0,box.height-8)}px`;
+  // A short plot must not truncate the series list when the card has room.
+  const contentBox=this.shadowRoot.querySelector('.card-content')?.getBoundingClientRect()??box;
+  const minTop=Math.max(contentBox.top-box.top+4,8-box.top);
+  const maxBottom=Math.min((contentBox.bottom??contentBox.top+contentBox.height)-box.top-4,(globalThis.window?.innerHeight??Infinity)-box.top-8);
+  tooltip.style.maxHeight=`${Math.max(0,maxBottom-minTop)}px`;
   const measured=tooltip.getBoundingClientRect();let left=Math.max(4,Math.min(box.width-measured.width-4,px+14));
   if(px+14+measured.width>box.width-4)left=Math.max(4,px-measured.width-14);
-  const candidates=[4,Math.max(4,box.height-measured.height-4)];
+  const candidates=[minTop,Math.max(minTop,maxBottom-measured.height)];
   const overlaps=top=>positions.filter(m=>m.x>left-9&&m.x<left+measured.width+9&&m.y>top-9&&m.y<top+measured.height+9).length;
   const top=candidates.sort((a,b)=>overlaps(a)-overlaps(b))[0];tooltip.style.left=`${left}px`;tooltip.style.top=`${top}px`;
   chart.querySelector('.markers').innerHTML=positions.map(m=>`<i class="hover-dot" style="left:${m.x}px;top:${m.y}px;border-color:${m.color}"></i>`).join('');
