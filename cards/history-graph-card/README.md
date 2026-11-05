@@ -334,3 +334,5 @@ The manual Eleven installation uses `/local/eleven-cards/eleven-history-graph-ca
 ## Shared card background
 
 The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.
+
+Legend entries use their own width and wrap when the row is full, rather than occupying two fixed columns. Long sensor names and values wrap inside the card; sensor visibility and keyboard isolation remain available.
