@@ -15,6 +15,11 @@ test('separate Scene Engine frontend follows the same scoped paint contract',()=
  const p=new URL('../cards/scene-engine-card/frontend/eleven-scene-engine-card.js',import.meta.url);
  assert.match(readFileSync(p,'utf8'),/cardThemeStyles\(\{/);
 });
+test('plot surfaces reuse the existing material inset when the newer plot role is absent',async()=>{
+ const {cardThemeStyles}=await import('../shared/card-theme.js');
+ const css=cardThemeStyles({plots:'.chart'});
+ assert.match(css,/\.chart\{[^}]*background:var\(--eleven-material-plot-background,var\(--eleven-material-inset,transparent\)\)/);
+});
 test('explicit card-local wells follow optional theme, native defaults contain no material paint',async()=>{
  assert.ok(existsSync(new URL('../shared/card-theme.js',import.meta.url)),'missing scoped theme helper');
  const {cardThemeStyles}=await import('../shared/card-theme.js');
