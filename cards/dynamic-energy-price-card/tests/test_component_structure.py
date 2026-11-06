@@ -245,13 +245,10 @@ class CardSourceTests(unittest.TestCase):
 
     def test_tooltip_is_offset_away_from_the_selected_price_point(self):
         card = CARD.read_text(encoding="utf-8")
-        self.assertIn('const tooltipWidth = tooltip.offsetWidth;', card)
-        self.assertIn('const canPlaceRight = anchorX + gap + tooltipWidth <= chartWidth - edge;', card)
-        self.assertIn("tooltip.dataset.horizontal = canPlaceRight ? 'right' : canPlaceLeft ? 'left' : 'center';", card)
-        self.assertIn("tooltip.dataset.vertical = canPlaceBelow ? 'below' : 'above';", card)
-        self.assertIn('.tooltip[data-horizontal="right"][data-vertical="below"]', card)
-        self.assertIn('.tooltip[data-horizontal="left"][data-vertical="above"]', card)
-        self.assertIn('.tooltip[data-horizontal="center"][data-vertical="above"]', card)
+        self.assertIn('SharedGraph.rememberTooltipPointer(this,event)', card)
+        self.assertIn('SharedGraph.positionTooltip(this,{chart,tooltip,', card)
+        self.assertIn('markers,local:publish', card)
+        self.assertIn('.tooltip[data-horizontal="positioned"] { transform: none; }', card)
         self.assertIn('${SharedGraph.tooltipStyles()}', card)
         shared = (CARD.parents[3] / 'shared' / 'graph.js').read_text(encoding='utf-8')
         self.assertIn('.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;', shared)
