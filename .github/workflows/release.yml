@@ -78,6 +78,8 @@ jobs:
           python tests/browser-background-default.py
           python tests/browser-background-graph-exclusion.py
           BACKGROUND_GRAPH_ARTIFACT=standalones python tests/browser-background-graph-exclusion.py
+          python tests/browser-plot-inset-theme.py
+          PLOT_THEME_ARTIFACT=standalones python tests/browser-plot-inset-theme.py
       - name: Record release provenance
         run: |
           if ! test -s themes/eleven_material.yaml; then
