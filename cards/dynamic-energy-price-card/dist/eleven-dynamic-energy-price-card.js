@@ -130,6 +130,43 @@ class SharedGraph {
   static tooltipStyles() {
     return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
+  }
   static yGrid(axes, height = 300, width = 1000) {
     const positions = new Map();
     for (const axis of axes) for (const value of axis.ticks) {
@@ -2999,6 +3036,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       if (event.pointerType === 'mouse') this._hideTooltip();
     });
     chart.addEventListener('focus', () => {
+      this._tooltipPointer=null;
       const nearest = this._chart.timeline.reduce((best, point, index) => (
         Math.abs(point.timestamp - Date.now()) < Math.abs(this._chart.timeline[best].timestamp - Date.now()) ? index : best
       ), 0);
@@ -3006,6 +3044,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     });
     chart.addEventListener('keydown', (event) => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape'].includes(event.key)) return;
+      this._tooltipPointer=null;
       event.preventDefault();
       if (event.key === 'Escape') return this._hideTooltip();
       if (event.key === 'Home') this._activeIndex = 0;
@@ -3019,6 +3058,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _pointFromPointer(event) {
+    SharedGraph.rememberTooltipPointer(this,event);
     const chart = this.shadowRoot.querySelector('.chart');
     const bounds = chart.getBoundingClientRect();
     const svgX = ((event.clientX - bounds.left) / bounds.width) * this._chart.svgWidth;
@@ -3122,40 +3162,17 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const anchorY = anchorYs.length
       ? anchorYs.reduce((total, value) => total + value, 0) / anchorYs.length
       : this._chart.svgHeight / 2;
-    const chart = this.shadowRoot.querySelector('.chart');
-    const chartWidth = chart.clientWidth;
-    const chartHeight = chart.clientHeight;
-    const anchorX = (x / this._chart.svgWidth) * chartWidth;
-    const anchorTop = (anchorY / this._chart.svgHeight) * chartHeight;
-    const tooltipWidth = tooltip.offsetWidth;
-    const tooltipHeight = tooltip.offsetHeight;
-    const gap = 12;
-    const edge = 4;
-    const canPlaceRight = anchorX + gap + tooltipWidth <= chartWidth - edge;
-    const canPlaceLeft = anchorX - gap - tooltipWidth >= edge;
-    const canPlaceBelow = anchorTop + gap + tooltipHeight <= chartHeight - edge;
-    tooltip.dataset.horizontal = canPlaceRight ? 'right' : canPlaceLeft ? 'left' : 'center';
-    tooltip.dataset.vertical = canPlaceBelow ? 'below' : 'above';
-    const centeredX = Math.max(tooltipWidth / 2 + edge, Math.min(chartWidth - tooltipWidth / 2 - edge, anchorX));
-    tooltip.style.left = `${tooltip.dataset.horizontal === 'center' ? centeredX : anchorX}px`;
-    tooltip.style.top = `${anchorTop}px`;
-    if (this._chart.graphShowsConsumption) {
-      const bounds = chart.getBoundingClientRect();
-      const markers = [...this.shadowRoot.querySelectorAll('.hover-dot:not([hidden])')].map(dot => {
-        const rect = dot.getBoundingClientRect();
-        return { left: rect.left - bounds.left, right: rect.right - bounds.left, top: rect.top - bounds.top, bottom: rect.bottom - bounds.top };
-      });
-      const placement = placeEnergyTooltip(chartWidth, chartHeight, tooltipWidth, tooltipHeight, anchorX, anchorTop, markers);
-      tooltip.dataset.horizontal = 'positioned';
-      tooltip.style.left = `${placement.left}px`;
-      tooltip.style.top = `${placement.top}px`;
-    }
+    const chart = this.shadowRoot.querySelector('.chart'),bounds=chart.getBoundingClientRect();
+    tooltip.dataset.horizontal='positioned';
+    const markers=[...this.shadowRoot.querySelectorAll('.hover-dot:not([hidden])')].map(dot=>{const r=dot.getBoundingClientRect();return {left:r.left-bounds.left,right:r.right-bounds.left,top:r.top-bounds.top,bottom:r.bottom-bounds.top};});
+    SharedGraph.positionTooltip(this,{chart,tooltip,x:guideX/this._chart.svgWidth*bounds.width,y:anchorY/this._chart.svgHeight*bounds.height,markers,local:publish});
     const live = this.shadowRoot.querySelector('.sr-only');
     live.textContent = `${this._formatTime(point.timestamp, this._chart.timeZone)} ${this._t("tot")} ${this._formatTime(nextTime, this._chart.timeZone)}, ${liveEntries.join(', ')}.`;
     if (publish) SharedGraph.publishHover(this, timestamp);
   }
 
   _hideTooltip(publish = true) {
+    this._tooltipPointer=null;
     if (publish) SharedGraph.clearHover(this);
     this._hoverTimestamp = null;
     this.shadowRoot.querySelector('.tooltip')?.setAttribute('hidden', '');
@@ -3300,12 +3317,6 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .export-dot { width: 14px; height: 14px; }
       .consumption-dot { width: 10px; height: 10px; border-width: 2px; }
       ${SharedGraph.tooltipStyles()}
-      .tooltip[data-horizontal="right"][data-vertical="below"] { transform: translate(12px, 12px); }
-      .tooltip[data-horizontal="right"][data-vertical="above"] { transform: translate(12px, calc(-100% - 12px)); }
-      .tooltip[data-horizontal="left"][data-vertical="below"] { transform: translate(calc(-100% - 12px), 12px); }
-      .tooltip[data-horizontal="left"][data-vertical="above"] { transform: translate(calc(-100% - 12px), calc(-100% - 12px)); }
-      .tooltip[data-horizontal="center"][data-vertical="below"] { transform: translate(-50%, 12px); }
-      .tooltip[data-horizontal="center"][data-vertical="above"] { transform: translate(-50%, calc(-100% - 12px)); }
 
       .tooltip[data-horizontal="positioned"] { transform: none; }
 

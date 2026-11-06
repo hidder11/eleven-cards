@@ -223,12 +223,13 @@ export class HeatmapCard extends HTMLElement {
     const clock=new Intl.DateTimeFormat(locale,{...options,...(showOffset?{timeZoneName:'shortOffset'}:{})});
     return intervals.map(row=>`${clock.format(row.start)}–${clock.format(row.end)}`).join(', ') || `${String(cell.hour).padStart(2,'0')}:00–${String(cell.hour+1).padStart(2,'0')}:00`;
   }
-  _hideTooltip(){
+  _hideTooltip(){this._tooltipPointer=null;
     this._tooltipKey=null;
     const tooltip=this.shadowRoot.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;
     this._tooltipButton?.removeAttribute('aria-describedby');this._tooltipButton=null;
   }
-  _showTooltip(key){
+  _showTooltip(key,event){
+    if(event)SharedGraph.rememberTooltipPointer(this,event);
     if(this._periodMenuOpen || this._insightOpen){this._hideTooltip();return;}
     const root=this.shadowRoot,cell=this._cells?.get(key),button=this._cellElements?.get(key)??[...root.querySelectorAll('[data-cell]')].find(button=>button.dataset.cell===key);
     const tooltip=root.querySelector('.tooltip'),chart=root.querySelector('.chart'),scroll=root.querySelector('.matrix-scroll');
@@ -243,11 +244,7 @@ export class HeatmapCard extends HTMLElement {
     tooltip.innerHTML=`<strong>${esc(date)}${bounds?` · ${esc(bounds)}`:''}</strong><span><i style="background:${color}"></i><b class="tooltip-label">${esc(name)} <em class="tooltip-value">${esc(value)}</em></b>${cell.partial?`<small>${dutch?'Onvolledig':'Incomplete'}</small>`:''}</span>`;
     tooltip.style.width='max-content';tooltip.style.maxWidth=`${Math.max(0,Math.min(360,right-left-8))}px`;tooltip.style.maxHeight=`${Math.max(0,bottom-top-8)}px`;
     tooltip.hidden=false;
-    const measured=tooltip.getBoundingClientRect();
-    let x=target.right+10;if(x+measured.width>right-4)x=target.left-measured.width-10;
-    const y=target.bottom+measured.height+8<=bottom?target.bottom+8:target.top-measured.height-8;
-    tooltip.style.left=`${Math.max(left+4,Math.min(x,right-measured.width-4))-box.left}px`;
-    tooltip.style.top=`${Math.max(top+4,Math.min(y,bottom-measured.height-4))-box.top}px`;
+    SharedGraph.positionTooltip(this,{chart,tooltip,x:target.left-box.left+target.width/2,y:target.top-box.top+target.height/2});
     if(this._tooltipButton!==button)this._tooltipButton?.removeAttribute('aria-describedby');this._tooltipButton=button;
     button.setAttribute('aria-describedby','heatmap-tooltip');
   }
@@ -398,7 +395,7 @@ export class HeatmapCard extends HTMLElement {
     if(grid){
       this._cellElements=new Map([...grid.querySelectorAll('[data-cell]')].map(element=>[element.dataset.cell,element]));
       const target=e=>e.target.closest('[data-cell]');
-      grid.onpointerover=e=>{const cell=target(e);if(cell && e.pointerType!=='touch')this._showTooltip(cell.dataset.cell);};
+      grid.onpointerover=grid.onpointermove=e=>{const cell=target(e);if(cell && e.pointerType!=='touch')this._showTooltip(cell.dataset.cell,e);};
       const cell=this._cellElements.get(tooltipKey);
       if(cell?.matches(':hover'))this._showTooltip(tooltipKey);else this._hideTooltip();
     }

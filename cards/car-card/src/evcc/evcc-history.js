@@ -120,7 +120,8 @@ export const evccHistoryMethods = {
   if (!plot) return;
   const {points, x, y} = this._historyGeometry, tooltip = plot.querySelector('.tooltip');
   const hide = () => { tooltip.hidden = true; plot.querySelector('.cursor').setAttribute('hidden', ''); plot.querySelector('.point').setAttribute('hidden', ''); };
-  const select = index => {
+  const select = (index,event) => {
+   SharedGraph.rememberTooltipPointer(this,event);
    this._historyIndex = Math.max(0, Math.min(points.length - 1, index));
    const point = points[this._historyIndex];
    if (point.value == null) { hide(); return; }
@@ -129,12 +130,13 @@ export const evccHistoryMethods = {
    const language = this._hass.locale?.language ?? this._hass.language ?? 'en';
    tooltip.hidden = false; tooltip.querySelector('strong').textContent = new Intl.DateTimeFormat(language, {...(this._historyRange.end-this._historyRange.start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(point.time);
    tooltip.querySelector('.tooltip-value').textContent = new Intl.NumberFormat(language, {maximumFractionDigits: 2}).format(point.value) + ' kW';
-   tooltip.style.left = x(point.time) < 150 ? 'auto' : '6px'; tooltip.style.right = x(point.time) < 150 ? '6px' : 'auto';
+   const box=plot.getBoundingClientRect();tooltip.style.right='auto';
+   SharedGraph.positionTooltip(this,{chart:plot,tooltip,x:x(point.time)/300*box.width,y:y(point.value)/120*box.height});
    this.shadowRoot.querySelector('.chart-readout').textContent = tooltip.textContent;
   };
   plot.addEventListener('pointermove', event => {
    const rect = plot.getBoundingClientRect(), position = (event.clientX - rect.left) / rect.width * 300;
-   select(points.reduce((best, point, index) => Math.abs(x(point.time) - position) < Math.abs(x(points[best].time) - position) ? index : best, 0));
+   select(points.reduce((best, point, index) => Math.abs(x(point.time) - position) < Math.abs(x(points[best].time) - position) ? index : best, 0),event);
   });
   plot.addEventListener('pointerleave', hide); plot.addEventListener('blur', hide);
   plot.addEventListener('focus', () => select(this._historyIndex ?? points.length - 1));

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Timeline · alle groepen bij hover</title>
+<link rel="stylesheet" href="issue-29-reference.css">
+<style>ha-card{border-radius:12px}eleven-timeline-card{display:block;width:100%;max-width:100%}eleven-timeline-card.narrow{width:360px}.status{margin-top:14px;font-size:12px}</style>
+</head><body><main>
+<header class="intro"><span>ELEVEN TIMELINE · DEVELOP a735593</span><h1>Alle groepen bij één hover</h1><p>Vergelijk één gezamenlijke popup met losse popups per groep. Alle negen entiteiten tonen hetzelfde gekozen tijdstip.</p></header>
+<nav aria-label="Popupvariant"><button id="combined" type="button" aria-pressed="true">A · Eén popup</button><button id="separate" type="button" aria-pressed="false">B · Per groep</button></nav><p id="variant-note" aria-live="polite">A · Eén tijdstip, alle groepen onder elkaar. Mijn voorkeur voor overzicht en vergelijken.</p><nav aria-label="Voorbeeldinstellingen"><button id="theme" type="button">Licht thema</button><button id="width" type="button" aria-pressed="false">Smalle kaart</button><button id="popup" type="button">Toon alle entiteiten</button><button id="restore" type="button">Toon alle statussen</button></nav>
+<eleven-timeline-card></eleven-timeline-card>
+<p class="hint">Beweeg over een willekeurige groep: alle groepen volgen hetzelfde tijdstip. Klik om vast te zetten; Escape sluit. In dit voorbeeld staan alle statussen aan.</p>
+<p class="footnote">Synthetische gegevens · geen verbinding met Home Assistant. De popup toont start- en eindtijd tot op de seconde, zonder duur of extra labels.</p>
+<a class="back" href="issue-29-disabled.html">Vergelijk uitgeschakelde statussen</a>
+</main><script type="module" src="issue-29-hover-options.js"></script></body></html>

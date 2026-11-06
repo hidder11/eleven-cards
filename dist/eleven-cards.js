@@ -131,6 +131,43 @@ class SharedGraph {
   static tooltipStyles() {
     return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
+  }
   static yGrid(axes, height = 300, width = 1000) {
     const positions = new Map();
     for (const axis of axes) for (const value of axis.ticks) {
@@ -3000,6 +3037,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       if (event.pointerType === 'mouse') this._hideTooltip();
     });
     chart.addEventListener('focus', () => {
+      this._tooltipPointer=null;
       const nearest = this._chart.timeline.reduce((best, point, index) => (
         Math.abs(point.timestamp - Date.now()) < Math.abs(this._chart.timeline[best].timestamp - Date.now()) ? index : best
       ), 0);
@@ -3007,6 +3045,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     });
     chart.addEventListener('keydown', (event) => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape'].includes(event.key)) return;
+      this._tooltipPointer=null;
       event.preventDefault();
       if (event.key === 'Escape') return this._hideTooltip();
       if (event.key === 'Home') this._activeIndex = 0;
@@ -3020,6 +3059,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _pointFromPointer(event) {
+    SharedGraph.rememberTooltipPointer(this,event);
     const chart = this.shadowRoot.querySelector('.chart');
     const bounds = chart.getBoundingClientRect();
     const svgX = ((event.clientX - bounds.left) / bounds.width) * this._chart.svgWidth;
@@ -3123,40 +3163,17 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const anchorY = anchorYs.length
       ? anchorYs.reduce((total, value) => total + value, 0) / anchorYs.length
       : this._chart.svgHeight / 2;
-    const chart = this.shadowRoot.querySelector('.chart');
-    const chartWidth = chart.clientWidth;
-    const chartHeight = chart.clientHeight;
-    const anchorX = (x / this._chart.svgWidth) * chartWidth;
-    const anchorTop = (anchorY / this._chart.svgHeight) * chartHeight;
-    const tooltipWidth = tooltip.offsetWidth;
-    const tooltipHeight = tooltip.offsetHeight;
-    const gap = 12;
-    const edge = 4;
-    const canPlaceRight = anchorX + gap + tooltipWidth <= chartWidth - edge;
-    const canPlaceLeft = anchorX - gap - tooltipWidth >= edge;
-    const canPlaceBelow = anchorTop + gap + tooltipHeight <= chartHeight - edge;
-    tooltip.dataset.horizontal = canPlaceRight ? 'right' : canPlaceLeft ? 'left' : 'center';
-    tooltip.dataset.vertical = canPlaceBelow ? 'below' : 'above';
-    const centeredX = Math.max(tooltipWidth / 2 + edge, Math.min(chartWidth - tooltipWidth / 2 - edge, anchorX));
-    tooltip.style.left = `${tooltip.dataset.horizontal === 'center' ? centeredX : anchorX}px`;
-    tooltip.style.top = `${anchorTop}px`;
-    if (this._chart.graphShowsConsumption) {
-      const bounds = chart.getBoundingClientRect();
-      const markers = [...this.shadowRoot.querySelectorAll('.hover-dot:not([hidden])')].map(dot => {
-        const rect = dot.getBoundingClientRect();
-        return { left: rect.left - bounds.left, right: rect.right - bounds.left, top: rect.top - bounds.top, bottom: rect.bottom - bounds.top };
-      });
-      const placement = placeEnergyTooltip(chartWidth, chartHeight, tooltipWidth, tooltipHeight, anchorX, anchorTop, markers);
-      tooltip.dataset.horizontal = 'positioned';
-      tooltip.style.left = `${placement.left}px`;
-      tooltip.style.top = `${placement.top}px`;
-    }
+    const chart = this.shadowRoot.querySelector('.chart'),bounds=chart.getBoundingClientRect();
+    tooltip.dataset.horizontal='positioned';
+    const markers=[...this.shadowRoot.querySelectorAll('.hover-dot:not([hidden])')].map(dot=>{const r=dot.getBoundingClientRect();return {left:r.left-bounds.left,right:r.right-bounds.left,top:r.top-bounds.top,bottom:r.bottom-bounds.top};});
+    SharedGraph.positionTooltip(this,{chart,tooltip,x:guideX/this._chart.svgWidth*bounds.width,y:anchorY/this._chart.svgHeight*bounds.height,markers,local:publish});
     const live = this.shadowRoot.querySelector('.sr-only');
     live.textContent = `${this._formatTime(point.timestamp, this._chart.timeZone)} ${this._t("tot")} ${this._formatTime(nextTime, this._chart.timeZone)}, ${liveEntries.join(', ')}.`;
     if (publish) SharedGraph.publishHover(this, timestamp);
   }
 
   _hideTooltip(publish = true) {
+    this._tooltipPointer=null;
     if (publish) SharedGraph.clearHover(this);
     this._hoverTimestamp = null;
     this.shadowRoot.querySelector('.tooltip')?.setAttribute('hidden', '');
@@ -3301,12 +3318,6 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .export-dot { width: 14px; height: 14px; }
       .consumption-dot { width: 10px; height: 10px; border-width: 2px; }
       ${SharedGraph.tooltipStyles()}
-      .tooltip[data-horizontal="right"][data-vertical="below"] { transform: translate(12px, 12px); }
-      .tooltip[data-horizontal="right"][data-vertical="above"] { transform: translate(12px, calc(-100% - 12px)); }
-      .tooltip[data-horizontal="left"][data-vertical="below"] { transform: translate(calc(-100% - 12px), 12px); }
-      .tooltip[data-horizontal="left"][data-vertical="above"] { transform: translate(calc(-100% - 12px), calc(-100% - 12px)); }
-      .tooltip[data-horizontal="center"][data-vertical="below"] { transform: translate(-50%, 12px); }
-      .tooltip[data-horizontal="center"][data-vertical="above"] { transform: translate(-50%, calc(-100% - 12px)); }
 
       .tooltip[data-horizontal="positioned"] { transform: none; }
 
@@ -3506,6 +3517,43 @@ class SharedGraph {
   }
   static tooltipStyles() {
     return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
   }
   static yGrid(axes, height = 300, width = 1000) {
     const positions = new Map();
@@ -5792,7 +5840,7 @@ class HistoryGraphCard extends HTMLElement {
  }
  _bindInteractions(){
   const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;
-  const fromPointer=e=>{const box=chart.querySelector('.plot').getBoundingClientRect();return this._timeAtPlotPosition(Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)));};
+  const fromPointer=e=>{SharedGraph.rememberTooltipPointer(this,e);const box=chart.querySelector('.plot').getBoundingClientRect();return this._timeAtPlotPosition(Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)));};
   let drag=null;const selection=chart.querySelector('.zoom-selection');
   chart.onpointermove=e=>{if(this._touchPointer!=null&&e.pointerId===this._touchPointer){this._showTooltip(this._pointerTime(fromPointer(e)));return;}if(drag&&Math.abs(e.clientX-drag.x)>=6){const plot=chart.querySelector('.plot').getBoundingClientRect();if(selection){selection.hidden=false;selection.style.left=`${Math.max(0,Math.min(drag.x,e.clientX)-plot.left)/plot.width*100}%`;selection.style.width=`${Math.min(plot.width,Math.abs(e.clientX-drag.x))/plot.width*100}%`;}}else if(!this._pinned&&e.pointerType!=='touch'&&!e.target?.closest?.('.tooltip'))this._showTooltip(this._pointerTime(fromPointer(e)));};
   chart.onpointerdown=e=>{if(e.target?.closest?.('.tooltip'))return;if(e.pointerType==='touch')this._touchPointer=e.pointerId;this._pinned=true;this._showTooltip(this._pointerTime(fromPointer(e)));if(e.pointerType==='mouse'&&(e.button??0)===0){drag={x:e.clientX,t:fromPointer(e)};chart.setPointerCapture?.(e.pointerId);}};
@@ -5802,7 +5850,7 @@ class HistoryGraphCard extends HTMLElement {
   chart.onpointerleave=()=>{if(!this._pinned)this._hideTooltip();};chart.onblur=()=>this._hideTooltip();
   chart.onkeydown=e=>{
    if(e.key==='Escape'){this._hideTooltip();return;}
-   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();
+   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;this._tooltipPointer=null;e.preventDefault();
    const a=this._viewStart??this._start,b=this._viewEnd??this._end;
    const timeline=[...new Set([a,...this._series.flatMap((s,i)=>this._isSeriesVisible(i)?s.points.map(p=>p.t):[]).filter(t=>t>a&&t<b),b])].sort((a,b)=>a-b);
    let index=timeline.findIndex(t=>t>=(this._cursor??this._start));if(index<0)index=timeline.length-1;
@@ -5813,7 +5861,7 @@ class HistoryGraphCard extends HTMLElement {
  _timeAtPlotPosition(ratio){const start=this._viewStart??this._start;return start+ratio*((this._viewEnd??this._end)-start);}
  _pointerTime(timestamp){return timestamp;}
  _receiveHover(timestamp){if(timestamp===null||timestamp<(this._viewStart??this._start)||timestamp>(this._viewEnd??this._end)){this._hideTooltip(false);return;}this._showTooltip(timestamp,false);}
- _hideTooltip(publish=true){if(publish)SharedGraph.clearHover(this);this._cursor=null;this._pinned=false;const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;const tooltip=chart.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;const markers=chart.querySelector('.markers');if(markers)markers.innerHTML='';const guide=chart.querySelector('.guide');if(guide)guide.hidden=true;}
+ _hideTooltip(publish=true){this._tooltipPointer=null;if(publish)SharedGraph.clearHover(this);this._cursor=null;this._pinned=false;const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;const tooltip=chart.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;const markers=chart.querySelector('.markers');if(markers)markers.innerHTML='';const guide=chart.querySelector('.guide');if(guide)guide.hidden=true;}
  _showTooltip(timestamp,publish=true){
   this._updateGraphTheme();
   if(!SharedGraph.tooltipInView(this)){this._hideTooltip(publish);return;}
@@ -5825,16 +5873,8 @@ class HistoryGraphCard extends HTMLElement {
   if(!rows.length){this._hideTooltip(publish);return;}
   const colors=this._series.flatMap((s,i)=>this._isSeriesVisible(i)?[this._appearance(i,valueAt(s.points,timestamp)).color]:[]);
   tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)} <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
-  // A short plot must not truncate the series list when the card has room.
-  const contentBox=this.shadowRoot.querySelector('.card-content')?.getBoundingClientRect()??box;
-  const minTop=Math.max(contentBox.top-box.top+4,8-box.top);
-  const maxBottom=Math.min((contentBox.bottom??contentBox.top+contentBox.height)-box.top-4,(globalThis.window?.innerHeight??Infinity)-box.top-8);
-  tooltip.style.maxHeight=`${Math.max(0,maxBottom-minTop)}px`;
-  const measured=tooltip.getBoundingClientRect();let left=Math.max(4,Math.min(box.width-measured.width-4,px+14));
-  if(px+14+measured.width>box.width-4)left=Math.max(4,px-measured.width-14);
-  const candidates=[minTop,Math.max(minTop,maxBottom-measured.height)];
-  const overlaps=top=>positions.filter(m=>m.x>left-9&&m.x<left+measured.width+9&&m.y>top-9&&m.y<top+measured.height+9).length;
-  const top=candidates.sort((a,b)=>overlaps(a)-overlaps(b))[0];tooltip.style.left=`${left}px`;tooltip.style.top=`${top}px`;
+  const anchorY=positions.length?positions.reduce((sum,m)=>sum+m.y,0)/positions.length:p.top-box.top+p.height/2;
+  SharedGraph.positionTooltip(this,{chart,tooltip,x:px,y:anchorY,markers:positions,local:publish});
   chart.querySelector('.markers').innerHTML=positions.map(m=>`<i class="hover-dot" style="left:${m.x}px;top:${m.y}px;border-color:${m.color}"></i>`).join('');
   const guide=chart.querySelector('.guide');if(guide){guide.hidden=false;guide.style.left=`${px}px`;}
   chart.querySelector('.sr-only').textContent=`${time(timestamp,this._lang,this._zone,true)}. ${rows.map(row=>`${row.name}: ${row.value}`).join('. ')}`;
@@ -6764,6 +6804,43 @@ class SharedGraph {
   static tooltipStyles() {
     return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
+  }
   static yGrid(axes, height = 300, width = 1000) {
     const positions = new Map();
     for (const axis of axes) for (const value of axis.ticks) {
@@ -7423,8 +7500,70 @@ function segments(rows,start,end){
  if(cursor<end)result.push({start:cursor,end,state});return result;
 }
 
+
+const escapeTimelinePresentation=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TimelinePresentation={
+ _timelineGroup(id){return this._config.series_options.find(row=>row.entity===id)?.group?.trim()??'';},
+ _timelineGroups(){
+  const groups=new Map();
+  this._config.entities.forEach((id,index)=>{const name=this._timelineGroup(id);if(!groups.has(name))groups.set(name,{name,indices:[]});groups.get(name).indices.push(index);});
+  return [...groups.values()];
+ },
+ _stateLegendKey(id,segment){const v=this._segmentAppearance(segment,id);return JSON.stringify([this._timelineGroup(id),segment.missing?'missing':'state',segment.missing?'':String(segment.state),v.label,v.color]);},
+ _stateVisible(id,segment){return !this._hiddenStates?.has(this._stateLegendKey(id,segment));},
+ _timelineStateEntries(indices){
+  const entries=new Map();
+  for(const i of indices){if(!this._isSeriesVisible(i)||this._stateLimits?.[i])continue;const id=this._config.entities[i];for(const segment of this._series[i]??[]){if(segment.end<=this._viewStart||segment.start>=this._viewEnd)continue;const key=this._stateLegendKey(id,segment);entries.set(key,{key,...this._segmentAppearance(segment,id)});}}
+  return [...entries.values()];
+ },
+ _timelineLegend(indices){
+  return uiLegend({items:this._timelineStateEntries(indices).map(v=>({id:v.key,visible:!this._hiddenStates?.has(v.key),title:`${this._nl()?(!this._hiddenStates?.has(v.key)?'Verberg':'Toon'):(!this._hiddenStates?.has(v.key)?'Hide':'Show')} ${v.label}`,content:`<i style="background:${v.color}"></i><span>${escapeTimelinePresentation(v.label)}</span>`}))});
+ },
+ _toggleTimelineState(key,isolate=false){
+  const group=JSON.parse(key)[0],indices=this._timelineGroups().find(g=>g.name===group)?.indices??[];
+  const entries=this._timelineStateEntries(indices);if(!entries.some(v=>v.key===key))return;
+  this._hiddenStates??=new Set();
+  if(isolate){const isolated=entries.every(v=>(!this._hiddenStates.has(v.key))===(v.key===key));for(const v of entries){if(isolated||v.key===key)this._hiddenStates.delete(v.key);else this._hiddenStates.add(v.key);}}
+  else if(this._hiddenStates.has(key))this._hiddenStates.delete(key);else this._hiddenStates.add(key);
+  this._hideTooltip();this._render();focusUILegend(this,key);
+ },
+ _bindTimelineLegend(){bindUILegend(this,{hint:this._nl()?'Dubbelklik of Shift+Enter om alleen deze status te tonen.':'Double-click or Shift+Enter to show only this state.',toggle:key=>this._toggleTimelineState(key),isolate:key=>this._toggleTimelineState(key,true)});},
+ _timelineRow(i){
+  if(!this._isSeriesVisible(i))return '';
+  const c=this._config,id=c.entities[i],name=this._name(id),label=`<button type="button" class="row-label" data-series="${escapeTimelinePresentation(id)}">${escapeTimelinePresentation(name)}</button>`;
+  if(this._stateLimits?.[i])return `<div class="row">${label}<div class="state-limit" role="status">${escapeTimelinePresentation(this._stateLimitMessage())}</div></div>`;
+  const a=this._viewStart,b=this._viewEnd;
+  const bars=(this._series[i]??[]).filter(s=>s.end>a&&s.start<b).map(s=>{
+   const v=this._segmentAppearance(s,id),start=Math.max(a,s.start),end=Math.min(b,s.end),visible=this._stateVisible(id,s);
+   const description=`${name}: ${v.label}, ${this._time(s.start)} – ${this._time(s.end)} · ${this._duration(s.end-s.start)}`;
+   return `<button class="segment ${['unknown','unavailable'].includes(s.state)?'gap':''}${visible?'':' filtered'}" style="left:${(start-a)/(b-a)*100}%;width:${(end-start)/(b-a)*100}%;background-color:${v.color};color:${v.textColor??'inherit'}" aria-label="${escapeTimelinePresentation(description)}" data-entity="${escapeTimelinePresentation(id)}" data-time="${start}"${visible?'':' tabindex="-1" aria-hidden="true"'}>${c.show_state_labels?`<span>${escapeTimelinePresentation(v.label)}</span>`:''}</button>`;
+  }).join('');
+  return `<div class="row">${c.show_labels?label:''}<div class="track">${bars}</div>${c.show_summary?`<div class="summary">${escapeTimelinePresentation(this._summary(i))}</div>`:''}</div>`;
+ },
+ _exactTimelineTime(t,label){
+  const options={day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:this._hass?.config?.time_zone};
+  let text;try{text=new Intl.DateTimeFormat(this._nl()?'nl-NL':'en-GB',options).format(t);}catch{text=new Date(t).toISOString();}
+  return `<time datetime="${new Date(t).toISOString()}" aria-label="${escapeTimelinePresentation(label+': '+text)}">${escapeTimelinePresentation(text)}</time>`;
+ },
+ _timelineTooltipRows(t){
+  return this._timelineGroups().map(group=>{
+   const rows=this._timelineTooltipGroupRows(group.indices,t);if(!rows)return '';
+   return `<div class="tooltip-group">${group.name?`<h4 class="tooltip-group-title">${escapeTimelinePresentation(group.name)}</h4>`:''}${rows}</div>`;
+  }).join('');
+ },
+ _timelineTooltipGroupRows(indices,t){
+  const nl=this._nl();return indices.map(i=>{const id=this._config.entities[i];
+   if(!this._isSeriesVisible(i)||this._stateLimits?.[i])return '';
+   const s=this._segmentAt(this._series[i]??[],t,this._viewEnd),v=s?this._segmentAppearance(s,id):{label:nl?'Geen geschiedenis':'No history',color:'transparent'};
+   if(s&&!this._stateVisible(id,s))return '';
+   return `<span class="tooltip-entry"><i style="background:${v.color}"></i><b class="tooltip-label">${escapeTimelinePresentation(this._name(id))} <em class="tooltip-value">${escapeTimelinePresentation(v.label)}</em></b>${s?`<small class="tooltip-interval">${this._exactTimelineTime(s.start,'Start')} <em aria-hidden="true">–</em> ${this._exactTimelineTime(s.end,nl?'Einde':'End')}</small>`:''}</span>`;
+  }).join('');
+ }
+};
+
 const escapeTimeline=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TimelineView={
+ ...TimelinePresentation,
  _historyUrl(){const range=graphPeriodRange(this),ready=this._status==='ready';const end=this._viewport?.[1]??(ready?this._end:range.end)??range.end,start=this._viewport?.[0]??(ready?this._start:range.start)??range.start;return `/history?entity_id=${encodeURIComponent(this._config.entities.join(','))}&start_date=${encodeURIComponent(new Date(start).toISOString())}&end_date=${encodeURIComponent(new Date(end).toISOString())}`;},
  _setPeriod(hours){return chooseGraphPeriod(this,String(hours));},
  _navigate(direction){return moveGraphPeriod(this,direction);},
@@ -7453,18 +7592,19 @@ const TimelineView={
   else{const a=this._viewport?.[0]??this._start,b=this._viewport?.[1]??this._end,width=Math.min(this._end-this._start,Math.max(60000,(b-a)*factor)),center=(a+b)/2,start=Math.max(this._start,Math.min(this._end-width,center-width/2));this._viewport=[start,start+width];}
   this._render();
  },
- _receiveHover(t){if(t===null||!Number.isFinite(t)||t<this._viewStart||t>this._viewEnd){this._hideTooltip(false);return;}this._showTooltip(t,false);},
+ _receiveHover(t){if(SharedGraph.hoverState().get(SharedGraph.hoverGroup(this))?.source!==this)this._tooltipGroup=null;if(t===null||!Number.isFinite(t)||t<this._viewStart||t>this._viewEnd){this._hideTooltip(false);return;}this._showTooltip(t,false);},
  _segmentAt(segments,t,end){let low=0,high=segments.length;while(low<high){const mid=(low+high)>>1;if(segments[mid].start<=t)low=mid+1;else high=mid;}const segment=segments[low-1];return segment&&(t<segment.end||(t===end&&segment.end===end))?segment:null;},
- _hideTooltip(publish=true){if(this._hoverFrame!=null)globalThis.cancelAnimationFrame?.(this._hoverFrame);this._hoverFrame=null;this._hoverTime=null;if(publish)SharedGraph.clearHover(this);this._pointerFocusPending=null;this._cursor=null;this._pinned=false;for(const cls of ['tooltip','guide']){const el=this.shadowRoot.querySelector('.'+cls);if(el)el.hidden=true;}},
+ _hideTooltip(publish=true){this._tooltipPointer=null;if(this._hoverFrame!=null)globalThis.cancelAnimationFrame?.(this._hoverFrame);this._hoverFrame=null;this._hoverTime=null;if(publish)SharedGraph.clearHover(this);this._pointerFocusPending=null;this._cursor=null;this._pinned=false;for(const cls of ['tooltip','guide']){const el=this.shadowRoot.querySelector('.'+cls);if(el)el.hidden=true;}},
  _showTooltip(t,publish=true){
   if(!SharedGraph.tooltipInView(this)){this._hideTooltip(publish);return;}
   const chart=this.shadowRoot.querySelector('.chart'),tooltip=chart?.querySelector('.tooltip'),guide=chart?.querySelector('.guide');if(!tooltip)return;
   this._cursor=t;const nl=this._nl(),a=this._viewStart,b=this._viewEnd,esc=escapeTimeline;
-  tooltip.innerHTML=`<strong>${esc(this._time(t))}</strong>`+this._config.entities.map((id,i)=>{if(!this._isSeriesVisible(i)||this._stateLimits?.[i])return '';const s=this._segmentAt(this._series[i]??[],t,b),v=s?this._segmentAppearance(s,id):{label:nl?'Geen geschiedenis':'No history',color:'transparent'};return `<span><i style="background:${v.color}"></i><b class="tooltip-label">${esc(this._name(id))} <em class="tooltip-value">${esc(v.label)}</em></b>${s?`<small>${esc(this._time(s.start))} – ${esc(this._time(s.end))} · ${esc(this._duration(s.end-s.start))}</small>`:''}</span>`;}).join('');
-  tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';const box=chart.getBoundingClientRect(),px=(t-a)/(b-a)*box.width;
+  const rows=this._timelineTooltipRows(t);tooltip.innerHTML=`<strong>${esc(this._time(t))}</strong>`+rows+(rows?'':`<small>${nl?'Geen zichtbare statussen op dit tijdstip.':'No visible states at this time.'}</small>`);
+  tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';const box=chart.getBoundingClientRect(),track=this.shadowRoot.querySelector('.track')?.getBoundingClientRect(),px=(track?track.left-box.left:0)+(t-a)/(b-a)*(track?.width??box.width);
   if(guide){guide.hidden=false;guide.style.left=`${px}px`;}
-  tooltip.style.maxHeight=`${Math.min(360,(window.innerHeight??480)-16)}px`;
-  const measured=tooltip.getBoundingClientRect();let left=px+14;if(left+measured.width>box.width-4)left=px-measured.width-14;tooltip.style.left=`${Math.max(4,Math.min(box.width-measured.width-4,left))}px`;tooltip.style.top=`${Math.max(8-box.top,Math.min(0,(window.innerHeight??480)-box.top-measured.height-8))}px`;
+  const group=this._tooltipGroup==null?chart:[...chart.querySelectorAll('[data-timeline-group]')].find(g=>g.dataset.timelineGroup===this._tooltipGroup)??chart;
+  const anchor=(this.shadowRoot.activeElement?.matches?.('.segment')?this.shadowRoot.activeElement:group.querySelector('.track'))?.getBoundingClientRect()??box;
+  SharedGraph.positionTooltip(this,{chart,tooltip,x:px,y:anchor.top-box.top+anchor.height/2,local:publish});
   if(publish)SharedGraph.publishHover(this,t);
  },
  _endTouch(pointerId){
@@ -7474,14 +7614,14 @@ const TimelineView={
  },
  _bindInteractions(){
   const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;
-  const timestamp=e=>{const r=chart.getBoundingClientRect();return this._viewStart+Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*(this._viewEnd-this._viewStart);};
+  const timestamp=e=>{SharedGraph.rememberTooltipPointer(this,e);const r=this.shadowRoot.querySelector('.track')?.getBoundingClientRect()??chart.getBoundingClientRect();return this._viewStart+Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*(this._viewEnd-this._viewStart);};
   let drag=null;const selection=chart.querySelector('.zoom-selection');
-  chart.onpointermove=e=>{if(this._touchPointer!=null&&e.pointerId===this._touchPointer){this._showTooltip(timestamp(e));return;}if(drag&&Math.abs(e.clientX-drag.x)>=6){this._hideTooltip();const r=chart.getBoundingClientRect(),x=Math.max(r.left,Math.min(r.right,e.clientX));selection.hidden=false;selection.style.left=`${(Math.min(drag.x,x)-r.left)/r.width*100}%`;selection.style.width=`${Math.abs(x-drag.x)/r.width*100}%`;}else if(!this._pinned&&e.pointerType!=='touch'){this._hoverTime=timestamp(e);if(this._hoverFrame==null){if(typeof requestAnimationFrame==='function')this._hoverFrame=requestAnimationFrame(()=>{this._hoverFrame=null;if(this.shadowRoot.querySelector('.chart')===chart&&!this._pinned&&this._hoverTime!=null)this._showTooltip(this._hoverTime);});else this._showTooltip(this._hoverTime);}}};
-  chart.onpointerdown=e=>{if(e.target?.closest?.('[data-series],.tooltip')||(e.button??0)!==0)return;if(e.pointerType==='touch')this._touchPointer=e.pointerId;this._pointerFocusPending=e.target?.closest?.('.segment')??null;this._pinned=true;this._showTooltip(timestamp(e));if(e.pointerType==='mouse'){drag={x:e.clientX,t:timestamp(e)};chart.setPointerCapture?.(e.pointerId);}};
+  chart.onpointermove=e=>{if(e.target?.closest?.('[data-ui-legend]'))return;if(this._touchPointer!=null&&e.pointerId===this._touchPointer){this._showTooltip(timestamp(e));return;}if(drag&&Math.abs(e.clientX-drag.x)>=6){this._hideTooltip();const r=chart.getBoundingClientRect(),x=Math.max(r.left,Math.min(r.right,e.clientX));selection.hidden=false;selection.style.left=`${(Math.min(drag.x,x)-r.left)/r.width*100}%`;selection.style.width=`${Math.abs(x-drag.x)/r.width*100}%`;}else if(!this._pinned&&e.pointerType!=='touch'){this._tooltipGroup=e.target?.closest?.('[data-timeline-group]')?.dataset.timelineGroup??null;this._hoverTime=timestamp(e);if(this._hoverFrame==null){if(typeof requestAnimationFrame==='function')this._hoverFrame=requestAnimationFrame(()=>{this._hoverFrame=null;if(this.shadowRoot.querySelector('.chart')===chart&&!this._pinned&&this._hoverTime!=null)this._showTooltip(this._hoverTime);});else this._showTooltip(this._hoverTime);}}};
+  chart.onpointerdown=e=>{if(e.target?.closest?.('[data-series],.tooltip,[data-ui-legend]')||(e.button??0)!==0)return;this._tooltipGroup=e.target?.closest?.('[data-timeline-group]')?.dataset.timelineGroup??null;if(e.pointerType==='touch')this._touchPointer=e.pointerId;this._pointerFocusPending=e.target?.closest?.('.segment')??null;this._pinned=true;this._showTooltip(timestamp(e));if(e.pointerType==='mouse'){drag={x:e.clientX,t:timestamp(e)};chart.setPointerCapture?.(e.pointerId);}};
   chart.onpointerup=e=>{selection.hidden=true;if(drag){const d=drag;drag=null;if(Math.abs(e.clientX-d.x)>=6){const t=timestamp(e),a=Math.min(d.t,t),b=Math.max(d.t,t);if(b-a>=60000){this._hideTooltip();this._viewport=[a,b];this._render();}}}this._endTouch(e.pointerId);};
   chart.onpointercancel=e=>{drag=null;selection.hidden=true;this._hideTooltip();this._endTouch(e.pointerId);};chart.onlostpointercapture=e=>{drag=null;selection.hidden=true;this._endTouch(e.pointerId);};chart.onpointerleave=()=>{if(!this._pinned&&!drag)this._hideTooltip();};
-  chart.onkeydown=e=>{this._pointerFocusPending=null;if(e.key==='Escape'){drag=null;selection.hidden=true;this._hideTooltip();return;}if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const times=[...new Set([this._viewStart,...this._series.flatMap((s,i)=>this._isSeriesVisible(i)?s.map(v=>v.start):[]).filter(t=>t>this._viewStart&&t<this._viewEnd),this._viewEnd])].sort((a,b)=>a-b);let i=times.findIndex(t=>t>=(this._cursor??this._viewStart));if(i<0)i=times.length-1;i=e.key==='Home'?0:e.key==='End'?times.length-1:Math.max(0,Math.min(times.length-1,i+(e.key==='ArrowRight'?1:-1)));this._pinned=true;this._showTooltip(times[i]);};
-  chart.onfocusout=e=>{if(!chart.contains(e.relatedTarget))this._hideTooltip();};this.shadowRoot.querySelectorAll('.segment').forEach(button=>{button.onfocus=()=>{const fromPointer=this._pointerFocusPending===button;this._pointerFocusPending=null;if(fromPointer&&this._cursor!=null)return;this._pinned=true;this._showTooltip(Number(button.dataset.time));};});
+  chart.onkeydown=e=>{if(e.target?.closest?.('[data-ui-legend]'))return;this._pointerFocusPending=null;if(e.key==='Escape'){drag=null;selection.hidden=true;this._hideTooltip();return;}if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;this._tooltipPointer=null;e.preventDefault();const times=[...new Set([this._viewStart,...this._series.flatMap((s,i)=>this._isSeriesVisible(i)?s.map(v=>v.start):[]).filter(t=>t>this._viewStart&&t<this._viewEnd),this._viewEnd])].sort((a,b)=>a-b);let i=times.findIndex(t=>t>=(this._cursor??this._viewStart));if(i<0)i=times.length-1;i=e.key==='Home'?0:e.key==='End'?times.length-1:Math.max(0,Math.min(times.length-1,i+(e.key==='ArrowRight'?1:-1)));this._pinned=true;this._showTooltip(times[i]);};
+  chart.onfocusout=e=>{if(!chart.contains(e.relatedTarget))this._hideTooltip();};this.shadowRoot.querySelectorAll('.segment').forEach(button=>{button.onfocus=()=>{this._tooltipGroup=button.closest?.('[data-timeline-group]')?.dataset.timelineGroup??null;const fromPointer=this._pointerFocusPending===button;this._pointerFocusPending=null;if(fromPointer&&this._cursor!=null)return;this._tooltipPointer=null;this._pinned=true;this._showTooltip(Number(button.dataset.time));};});
  },
  _timelineHeader(options){
   const label=options.language==='nl'?'Grafiekopties':'Graph tools',open=this.shadowRoot.querySelector('.chart-tools')?.open;
@@ -7497,11 +7637,12 @@ const TimelineView={
    const track=segment.parentElement,scale=track.getBoundingClientRect().width/track.clientWidth||1;
    text.hidden=range.getBoundingClientRect().width/scale+12>segment.clientWidth||parseFloat(style.lineHeight)>segment.clientHeight;
   }
-  const axis=this.shadowRoot.querySelector('.axis');if(!axis?.getBoundingClientRect)return;
+  for(const axis of this.shadowRoot.querySelectorAll('.axis')){if(!axis?.getBoundingClientRect)continue;
   const ticks=[...axis.children],width=axis.clientWidth,scale=axis.getBoundingClientRect().width/width||1;
   for(const [i,node]of ticks.entries()){const ratio=i/(ticks.length-1);node.hidden=false;node.style.left=ratio*100+'%';node.style.transform=ratio===0?'none':ratio===1?'translateX(-100%)':'translateX(-50%)';node.style.maxWidth=Math.max(40,(width-8)/2)+'px';node.style.textAlign=ratio===0?'left':ratio===1?'right':'center';}
   let previous=null;for(const node of ticks){const box=node.getBoundingClientRect(),last=ticks.at(-1).getBoundingClientRect();if(node!==ticks[0]&&node!==ticks.at(-1)&&((previous&&box.left<previous.right+8*scale)||box.right+8*scale>last.left)){node.hidden=true;continue;}previous=box;}
   axis.style.height=Math.max(0,...ticks.filter(n=>!n.hidden).map(n=>n.getBoundingClientRect().height/scale))+'px';
+  }
  },
  _bindTimelineTools(hadFocus){
   const tools=this.shadowRoot.querySelector('.chart-tools');if(!tools)return;
@@ -7514,15 +7655,15 @@ const TimelineView={
   if(this._status!=='ready')body=`<div class="message" role="status">${this._status==='error'?(nl?'Geschiedenis kon niet worden geladen.':'Unable to load history.'):(nl?'Geschiedenis laden…':'Loading history…')}${this._status==='error'?uiButton({variant:'action',className:'retry',text:nl?'Opnieuw proberen':'Retry'}):''}</div>`;
   else{
 
-   const legend=new Map(),rows=c.entities.map((id,i)=>{if(!this._isSeriesVisible(i))return '';const name=this._name(id),label=`<button type="button" class="row-label" data-series="${esc(id)}">${esc(name)}</button>`;if(this._stateLimits?.[i])return `<div class="row">${label}<div class="state-limit" role="status">${esc(this._stateLimitMessage())}</div></div>`;const bars=(this._series[i]??[]).filter(s=>s.end>a&&s.start<b).map(s=>{const v=this._segmentAppearance(s,id);legend.set(v.label+'|'+v.color,v);const start=Math.max(a,s.start),end=Math.min(b,s.end),description=`${name}: ${v.label}, ${this._time(s.start)} – ${this._time(s.end)} · ${this._duration(s.end-s.start)}`;return `<button class="segment ${['unknown','unavailable'].includes(s.state)?'gap':''}" style="left:${(start-a)/(b-a)*100}%;width:${(end-start)/(b-a)*100}%;background-color:${v.color};color:${v.textColor??'inherit'}" aria-label="${esc(description)}" data-time="${start}">${c.show_state_labels?`<span>${esc(v.label)}</span>`:''}</button>`;}).join('');return `<div class="row">${c.show_labels?`${label}`:''}<div class="track">${bars}</div>${c.show_summary?`<div class="summary">${esc(this._summary(i))}</div>`:''}</div>`;}).join('');
-   body=`<div class="chart" tabindex="0" role="group" aria-label="${nl?'Statustijdlijn':'Status timeline'}">${c.show_grid!==false?this._ticks().map(r=>`<div class="grid-line" style="left:${r*100}%"></div>`).join(''):''}${rows}<div class="guide" hidden></div><div class="zoom-selection" hidden></div><div class="tooltip" role="status" hidden></div></div>`;
-   if(c.show_axis){
-    const dates=new Intl.DateTimeFormat('en-CA',{timeZone:this._hass?.config?.time_zone,year:'numeric',month:'2-digit',day:'2-digit'});
-    const spansDates=dates.format(a)!==dates.format(b),ticks=this._ticks();
-    body+=`<div class="axis">${ticks.map((r,i)=>`<span>${esc(this._time(a+(b-a)*r,spansDates&&(i===0||i===ticks.length-1)))}</span>`).join('')}</div>`;
-   }
-   body='<div class="timeline-well">'+body+'</div>';
-   if(c.show_legend)body=`<div class="legend">${[...legend.values()].map(v=>`<span><i style="background:${v.color}"></i>${esc(v.label)}</span>`).join('')}</div>`+body;
+   const groups=this._timelineGroups(),grouped=groups.some(g=>g.name);
+   const dates=new Intl.DateTimeFormat('en-CA',{timeZone:this._hass?.config?.time_zone,year:'numeric',month:'2-digit',day:'2-digit'}),spansDates=dates.format(a)!==dates.format(b);
+   const axis=()=>c.show_axis?`<div class="axis">${this._ticks().map((r,i,ticks)=>`<span style="--tick:${r*100}%">${esc(this._time(a+(b-a)*r,spansDates&&(i===0||i===ticks.length-1)))}</span>`).join('')}</div>`:'';
+   const grid=()=>c.show_grid!==false?`<div class="timeline-grid">${this._ticks().map(r=>`<div class="grid-line" style="left:${r*100}%"></div>`).join('')}</div>`:'';
+   let rows;
+   if(grouped)rows=groups.filter(g=>g.indices.some(i=>this._isSeriesVisible(i))).map(g=>`<section class="timeline-group" data-timeline-group="${esc(g.name)}" aria-label="${esc(g.name|| (nl?'Overige entiteiten':'Other entities'))}">${g.name&&c.show_group_titles!==false?`<h3>${esc(g.name)}</h3>`:''}${c.show_legend?this._timelineLegend(g.indices):''}<div class="timeline-panel">${grid()}${g.indices.map(i=>this._timelineRow(i)).join('')}${axis()}</div></section>`).join('');
+   else rows=grid()+c.entities.map((_,i)=>this._timelineRow(i)).join('');
+   body=`<div class="chart${grouped?' grouped':''}" tabindex="0" role="group" aria-label="${nl?'Statustijdlijn':'Status timeline'}">${rows}<div class="guide" hidden></div><div class="zoom-selection" hidden></div><div class="tooltip" role="status" hidden></div></div>`;
+   if(!grouped){body='<div class="timeline-well">'+body+axis()+'</div>';if(c.show_legend)body=this._timelineLegend(c.entities.map((_,i)=>i))+body;}
   }
   this.shadowRoot.innerHTML=`<style>:host{display:block;container-type:inline-size;height:100%;min-width:0;min-height:0}ha-card{display:block;min-height:0;background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font-family:inherit;height:100%}
 .content{height:100%;min-height:0;overflow:auto;padding:var(--eleven-card-padding,16px);box-sizing:border-box;position:relative;scrollbar-width:thin}
@@ -7549,6 +7690,13 @@ ${chartInsightStyles()}
 @container(max-width:480px){.content{padding:var(--eleven-card-padding,16px)}}
 .chart{position:relative;touch-action:pan-y;min-width:0}
 .grid-line{position:absolute;top:0;bottom:0;border-left:1px solid var(--divider-color,#ddd);opacity:.45;pointer-events:none}
+.timeline-grid{position:absolute;inset:0;pointer-events:none}
+.timeline-group{position:relative}.timeline-group+.timeline-group{margin-top:24px}
+.timeline-group h3{font-size:12px;font-weight:500;margin:0 10px 4px;overflow-wrap:anywhere}
+.timeline-group .legend{margin:0 10px 6px;padding-inline:0;gap:4px 16px}.timeline-group .legend [data-ui-legend]{min-height:28px;min-width:24px}@media(pointer:coarse){.timeline-group .legend [data-ui-legend]{min-height:44px}}.timeline-group>.timeline-panel{position:relative;background:var(--eleven-material-plot-background,var(--secondary-background-color,#f2f4f5));border-radius:var(--eleven-material-radius-well,8px);padding:10px}
+.timeline-panel .timeline-grid{inset:10px}.timeline-panel .row-label,.timeline-panel .summary{background:transparent}
+.axis span{position:absolute;left:var(--tick);transform:translateX(-50%);white-space:nowrap}.axis span:first-child{transform:none}.axis span:last-child{transform:translateX(-100%)}
+.segment.filtered{opacity:.06}
 .row{position:relative}
 .row-label{position:relative;background:transparent}
 .summary{margin-top:6px;font-size:11px;color:var(--secondary-text-color,#666);background:transparent;position:relative;overflow-wrap:anywhere}
@@ -7564,17 +7712,20 @@ ${chartInsightStyles()}
 .gap{background-image:repeating-linear-gradient(135deg,transparent,transparent 4px,#ffffff40 4px,#ffffff40 8px)}
 .axis{position:relative;display:block;margin-top:10px;font-size:11px;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums}
 .legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:0 0 12px;padding-inline:10px;font-size:12px;color:var(--secondary-text-color,#666)}
-.legend span{display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
+.legend .legend-item{display:flex;align-items:center;gap:6px;min-height:24px;background:transparent;border:0;border-radius:3px;padding:0;color:inherit;font:inherit;text-align:start;cursor:pointer}.legend .legend-item[aria-pressed=false]{opacity:.3;text-decoration:line-through}.legend .legend-item:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+
 .legend i,.tooltip i{width:9px;height:9px;border-radius:3px;flex-shrink:0}
 .guide{position:absolute;top:0;bottom:0;border-left:1px solid var(--primary-text-color,#20252b);opacity:.6;pointer-events:none;z-index:2}
 .zoom-selection{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--primary-color,#2196f3) 18%,transparent);border-inline:1px solid var(--primary-color,#2196f3);pointer-events:none;z-index:3}
 ${SharedGraph.tooltipStyles()}
+.tooltip .tooltip-group-title{font-size:11px;font-weight:600;line-height:1.5;margin:10px 0 2px;color:var(--secondary-text-color,#666)}.tooltip .tooltip-group:first-of-type .tooltip-group-title{margin-top:0}.tooltip .tooltip-entry{padding:4px 0}
 .tooltip .tooltip-label{color:var(--secondary-text-color,#666)}
-.tooltip .tooltip-value{color:var(--primary-text-color,#20252b);font-style:normal}
+.tooltip .tooltip-value{color:var(--primary-text-color,#20252b);font-style:normal}.tooltip small.tooltip-interval{display:flex;align-items:baseline;gap:6px;margin-top:4px;flex-wrap:wrap;font-size:10px}.tooltip-interval time{white-space:nowrap}.tooltip-interval em{font-style:normal}.tooltip{width:310px}
+
 .state-limit{font-size:12px;color:var(--error-color,#db4437);overflow-wrap:anywhere;position:relative}
 .message{font-size:14px;color:var(--secondary-text-color,#666);min-height:60px}
-.retry{display:block;margin-top:12px}[hidden]{display:none}${cardThemeStyles({chartUI:true,plots:'.timeline-well',wells:'.insight-sensor[data-ui-detail-surface]',controls:'.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period],.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}${uiBalancedTabsStyles()}</style><ha-card><div class="content">${controls}${body}</div></ha-card>`;
-  bindPeriodControls(this);bindChartInsights(this);this._bindTimelineTools(toolsHadFocus);this._layoutTimeline();this._timelineResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._timelineResize=new ResizeObserver(()=>this._layoutTimeline());const well=this.shadowRoot.querySelector('.timeline-well');if(well)this._timelineResize.observe(well);}
+.retry{display:block;margin-top:12px}[hidden]{display:none}${cardThemeStyles({chartUI:true,plots:'.timeline-well,.timeline-panel',wells:'.insight-sensor[data-ui-detail-surface]',controls:'.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period],.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}${uiBalancedTabsStyles()}</style><ha-card><div class="content">${controls}${body}</div></ha-card>`;
+  bindPeriodControls(this);bindChartInsights(this);this._bindTimelineLegend();this._bindTimelineTools(toolsHadFocus);this._layoutTimeline();this._timelineResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._timelineResize=new ResizeObserver(()=>this._layoutTimeline());for(const well of this.shadowRoot.querySelectorAll('.timeline-well,.timeline-panel'))this._timelineResize.observe(well);}
   const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();this.shadowRoot.querySelectorAll('[data-zoom]').forEach(button=>button.onclick=()=>this._zoom({in:.5,out:2,reset:0}[button.dataset.zoom]));this._bindInteractions();const renderedChart=this.shadowRoot.querySelector('.chart'),restoreTooltip=()=>{if(this.shadowRoot.querySelector('.chart')===renderedChart){SharedGraph.restoreHover(this);if(this._cursor!=null)this._showTooltip(this._cursor,false);}};const ready=this.shadowRoot.querySelector('ha-card')?.updateComplete;if(ready?.then)ready.then(restoreTooltip);else restoreTooltip();
  }
 };
@@ -7583,7 +7734,8 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const labels={entities:'Entiteiten op de tijdlijn',title:'Titel (optioneel)',hours_to_show:'Afgelopen aantal uren',bar_height:'Balkdikte (px)',border_radius:'Afronding (px)',label_gap:'Ruimte tussen naam en balk (px)',row_gap:'Ruimte tussen balken (px)',state_colors:'Statuskleur toevoegen',show_labels:'Naam boven elke balk tonen',show_legend:'Legenda met statuskleuren tonen',show_axis:'Tijden onder de balken tonen',show_state_labels:'Statusnaam in de balk tonen',default_color:'Terugvalkleur (optioneel)',series_options:'Aangepaste naam toevoegen'};
 const helpers={entities:'Elke entiteit krijgt één balk, in de gekozen volgorde. Kies 1–16 entiteiten met statusgeschiedenis.',hours_to_show:'Terugkijkperiode: 24 = één dag, 168 = één week. Alleen opgeslagen Home Assistant-geschiedenis is beschikbaar.',state_colors:'Gebruik de echte statuswaarde, bijvoorbeeld on, off, home of not_home. Zonder entiteit geldt de kleur voor alle balken; met entiteit alleen voor die balk. Een specifieke kleur gaat voor een algemene kleur. De weergavenaam is optioneel.',default_color:'Alleen voor statussen zonder eigen kleurregel. Leeg laten gebruikt de ingebouwde statuskleuren.',show_state_labels:'Op korte tijdvakken past niet altijd tekst. Details blijven beschikbaar door een tijdvak aan te tikken.',series_options:'Optioneel: wijzig de naam van een hierboven gekozen entiteit. Dit voegt geen extra balk toe. Zonder aanpassing wordt de Home Assistant-naam gebruikt.',bar_height:'Hoogte van elke statusbalk, van 4 tot 80 pixels.',border_radius:'Rondt de buitenhoeken van de volledige balk af.',label_gap:'Ruimte onder de naam, van 0 tot 32 pixels. Heeft geen effect als namen verborgen zijn.',row_gap:'Verticale ruimte tussen de rijen.'};
 function color(v,fallback='#607d94'){if(Array.isArray(v)&&v.length===3&&v.every(n=>Number.isFinite(n)&&n>=0&&n<=255))return `rgb(${v.join(',')})`;return typeof v==='string'&&/^(#[\da-f]{3,8}|[a-z]+|var\(--[\w-]+\))$/i.test(v)?v:fallback;}
-Object.assign(labels,{entity:'Entiteit',name:'Weergavenaam (optioneel)',state_colors:'Statusregels',timeline_settings:'Tijdlijn',status_settings:'Algemene statusregels',bar_settings:'Balkopmaak'});
+Object.assign(labels,{show_group_titles:'Groepsnamen tonen',group:'Groepsnaam (optioneel)',entity:'Entiteit',name:'Weergavenaam (optioneel)',state_colors:'Statusregels',timeline_settings:'Tijdlijn',status_settings:'Algemene statusregels',bar_settings:'Balkopmaak'});
+helpers.group='Gebruik dezelfde groepsnaam om entiteiten met een eigen legenda bij elkaar te zetten. Leeg laat de entiteit zonder groepsnaam.';
 Object.assign(helpers,{state_colors:'Gebruik de echte statuswaarde, bijvoorbeeld on, off, home of not_home. Eigen regels gaan voor algemene regels. Dubbele statuswaarden zijn niet toegestaan.',status_settings:'Deze regels gelden voor alle entiteiten, tenzij de entiteit een eigen regel voor dezelfde status heeft.'});
 Object.assign(labels,{sync_timeframe:'Tijdvak synchroniseren',show_title:'Titel tonen',sync_hover:'Hover synchroniseren',hover_sync_group:'Synchronisatiegroep'});
 Object.assign(helpers,{sync_timeframe:'Deelt tijdvakkeuze en vorige/volgende/Nu met ingeschakelde kaarten in dezelfde groep.',sync_hover:'Deelt het gekozen tijdstip met andere Eleven-grafieken op deze pagina.',hover_sync_group:'Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.'});
@@ -7596,6 +7748,8 @@ const timelineEnglish={
  'Deelt het gekozen tijdstip met andere Eleven-grafieken op deze pagina.':'Shares the selected time with other Eleven graphs on this page.',
  'Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.':'Cards with the same group share hover and timeframe when the corresponding synchronization is enabled. Empty uses the default group.',
  'Tijdlijn':'Timeline','Algemene statusregels':'Common state rules','Balkopmaak':'Bar appearance','Entiteiten':'Entities','Entiteit':'Entity',
+ 'Groepsnaam (optioneel)':'Group name (optional)','Groepsnamen tonen':'Show group names',
+ 'Gebruik dezelfde groepsnaam om entiteiten met een eigen legenda bij elkaar te zetten. Leeg laat de entiteit zonder groepsnaam.':'Use the same group name to combine entities with their own legend. Leave empty to keep the entity without a group name.',
  'Weergavenaam (optioneel)':'Display name (optional)','Statusregels':'State rules','Titel (optioneel)':'Title (optional)',
  'Afgelopen aantal uren':'Hours to show','Balkdikte (px)':'Bar height (px)','Afronding (px)':'Corner radius (px)','Ruimte tussen naam en balk (px)':'Name-to-bar gap (px)','Ruimte tussen balken (px)':'Row gap (px)',
  'Naam boven elke balk tonen':'Show name above each bar','Legenda met statuskleuren tonen':'Show state legend','Tijden onder de balken tonen':'Show time axis','Statusnaam in de balk tonen':'Show state labels inside bars','Terugvalkleur (optioneel)':'Fallback color (optional)',
@@ -7617,10 +7771,11 @@ function timelineText(s,hass){const h=hass??(typeof document==='undefined'?undef
 Object.assign(helpers,{show_grid:'Toon verticale tijdlijnen achter de statusbalken. Aslabels en statusbalken blijven zichtbaar.',show_navigation:'Toon het tijdvakmenu, vorige/volgende, Nu en het gekozen datumbereik.'});
 Object.assign(timelineEnglish,{'Toon verticale tijdlijnen achter de statusbalken. Aslabels en statusbalken blijven zichtbaar.':'Show vertical time grid lines behind the state bars. Axis labels and state bars remain visible.','Toon het tijdvakmenu, vorige/volgende, Nu en het gekozen datumbereik.':'Show the timeframe menu, previous/next, Now and the selected date range.'});
 function validateTimeline(c,hass){
- for(const key of ['show_grid','show_navigation'])if(c[key]!==undefined&&typeof c[key]!=='boolean')throw Error(key);
+ for(const key of ['show_grid','show_navigation','show_group_titles'])if(c[key]!==undefined&&typeof c[key]!=='boolean')throw Error(key);
  if(c.sync_hover!=null&&typeof c.sync_hover!=='boolean')throw Error('sync_hover');
  if(c.hover_sync_group!=null&&typeof c.hover_sync_group!=='string')throw Error('hover_sync_group');
  if(!Array.isArray(c.entities)||!c.entities.length||c.entities.length>16||new Set(c.entities).size!==c.entities.length||c.entities.some(id=>typeof id!=='string'||!/^\w+\.\w+$/.test(id)))throw Error(timelineText('Kies 1–16 unieke entiteiten.',hass));
+ for(const row of c.series_options??[])if(row.group!=null&&typeof row.group!=='string')throw Error('group');
  const keys=new Set();for(const r of c.state_colors??[]){const key=JSON.stringify([r.entity??'',String(r.state)]);if(keys.has(key))throw Error(timelineText('Dubbele statusregel',hass)+': '+(r.entity??'')+' / '+r.state);keys.add(key);}
 }
 class TimelineSettingsEditor extends HTMLElement{
@@ -7659,7 +7814,7 @@ class TimelineCard extends HTMLElement{
  static getStubConfig(hass){return {entities:Object.keys(hass?.states??{}).filter(id=>/^(binary_sensor|person|input_boolean|switch)\./.test(id)).slice(0,1),hours_to_show:24};}
  static editorConfig(c={}){
   const clone=v=>Array.isArray(v)?v.map(clone):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,clone(x)])):v;
-  const data=clone({hours_to_show:24,bar_height:18,border_radius:5,label_gap:2,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,state_colors:[],series_options:[],...c,...timeframeSyncConfig(c,{draft:true})});
+  const data=clone({hours_to_show:24,bar_height:18,border_radius:5,label_gap:2,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_group_titles:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',sync_timeframe:false,state_colors:[],series_options:[],...c,...timeframeSyncConfig(c,{draft:true})});
   const ids=data.entities??[];
   data._orphan_colors=data.state_colors.filter(r=>r.entity&&!ids.includes(r.entity));
   data._orphan_options=data.series_options.filter(r=>!ids.includes(r.entity));
@@ -7680,7 +7835,7 @@ class TimelineCard extends HTMLElement{
   label:{get label(){return timelineText('Weergavenaam (optioneel)');},selector:{text:{}}}
  }}};}
  static getEntityConfigForm(row,hass){return this._form([
-  {name:'entity',required:true,selector:{entity:{}}},{name:'name',selector:{text:{}}},
+  {name:'entity',required:true,selector:{entity:{}}},{name:'name',selector:{text:{}}},{name:'group',selector:{text:{}}},
   {name:'state_colors',selector:this._rules(row,hass)}
  ]);}
  static getConfigForm(){
@@ -7689,7 +7844,7 @@ class TimelineCard extends HTMLElement{
   return this._form([
    group('timeline_settings','Tijdlijn',[
     {name:'title',selector:{text:{}}},num('hours_to_show',1,8760,24),
-    ...['show_title','show_labels','show_axis','show_legend','show_state_labels','show_grid','show_summary','show_navigation','sync_hover'].map(name=>({name,default:!['show_state_labels','show_summary'].includes(name),selector:{boolean:{}}})),
+    ...['show_title','show_group_titles','show_labels','show_axis','show_legend','show_state_labels','show_grid','show_summary','show_navigation','sync_hover'].map(name=>({name,default:!['show_state_labels','show_summary'].includes(name),selector:{boolean:{}}})),
     {name:'hover_sync_group',selector:{text:{}}},{name:'sync_timeframe',default:false,selector:{boolean:{}}}
    ]),
    group('status_settings','Algemene statusregels',[{name:'state_colors',selector:this._rules()},{name:'default_color',selector:{color_rgb:{}}}]),
@@ -7701,7 +7856,7 @@ class TimelineCard extends HTMLElement{
   if(!customElements.get('eleven-timeline-editor'))customElements.define('eleven-timeline-editor',TimelineSettingsEditor);
   return document.createElement('eleven-timeline-editor');
  }
- setConfig(c){timeframeSyncConfig(c);validateTimeline(c,this._hass);if(!Array.isArray(c.entities)||!c.entities.length||c.entities.length>16||c.entities.some(id=>typeof id!=='string'||!/^\w+\.\w+$/.test(id)))throw Error('Kies 1–16 entiteiten.');const config={hours_to_show:24,bar_height:18,border_radius:5,label_gap:2,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',state_colors:[],series_options:[],...c};for(const [k,min,max] of [['hours_to_show',1,8760],['bar_height',4,80],['border_radius',0,40],['label_gap',0,32],['row_gap',0,64]])if(!Number.isFinite(config[k])||config[k]<min||config[k]>max)throw Error(`Ongeldige ${k}`);for(const k of ['state_colors','series_options'])if(!Array.isArray(config[k])||config[k].some(x=>!x||typeof x!=='object'))throw Error(`Ongeldige ${k}`);SharedGraph.clearHover(this);this._touchPointer=null;this._touchRenderPending=false;this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._visibility=new Map();this._config={...config,...timeframeSyncConfig(c)};this._viewport=null;resetGraphPeriod(this);this._hideTooltip();this._generation++;this._inFlight=false;this._series=[];this._stateLimits=[];this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
+ setConfig(c){timeframeSyncConfig(c);validateTimeline(c,this._hass);if(!Array.isArray(c.entities)||!c.entities.length||c.entities.length>16||c.entities.some(id=>typeof id!=='string'||!/^\w+\.\w+$/.test(id)))throw Error('Kies 1–16 entiteiten.');const config={hours_to_show:24,bar_height:18,border_radius:5,label_gap:2,row_gap:16,show_labels:true,show_legend:true,show_title:true,show_group_titles:true,show_axis:true,show_state_labels:false,show_grid:true,show_summary:false,show_navigation:true,sync_hover:true,hover_sync_group:'',state_colors:[],series_options:[],...c};for(const [k,min,max] of [['hours_to_show',1,8760],['bar_height',4,80],['border_radius',0,40],['label_gap',0,32],['row_gap',0,64]])if(!Number.isFinite(config[k])||config[k]<min||config[k]>max)throw Error(`Ongeldige ${k}`);for(const k of ['state_colors','series_options'])if(!Array.isArray(config[k])||config[k].some(x=>!x||typeof x!=='object'))throw Error(`Ongeldige ${k}`);cancelUILegendClicks(this);this._hiddenStates=new Set();this._tooltipGroup=null;SharedGraph.clearHover(this);this._touchPointer=null;this._touchRenderPending=false;this._lastLoad=null;this._loadFailed=false;this._insightOpen=null;this._visibility=new Map();this._config={...config,...timeframeSyncConfig(c)};this._viewport=null;resetGraphPeriod(this);this._hideTooltip();this._generation++;this._inFlight=false;this._series=[];this._stateLimits=[];this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);connectTimeframeSync(this);this._render();if(this._connected&&this._hass)this._refresh();}
  set hass(h){
   this._hass=h;
   const signature=JSON.stringify([h?.locale?.language??h?.language,h?.config?.time_zone,this._config?.entities.map(id=>{const state=h?.states?.[id];return [state?.state,state?.attributes?.friendly_name,state?.attributes?.device_class];})]);
@@ -7710,7 +7865,7 @@ class TimelineCard extends HTMLElement{
  }
  get hass(){return this._hass;}
  connectedCallback(){this._connected=true;connectTimeframeSync(this);SharedGraph.connectHover(this,t=>this._receiveHover(t));this._outside??=e=>{if(!e.composedPath().includes(this)&&!SharedGraph.hoverSourceInEvent(this,e))this._hideTooltip();};globalThis.document?.addEventListener('pointerdown',this._outside);if(typeof ResizeObserver!=='undefined'){this._resizeObserver??=new ResizeObserver(entries=>{const narrow=(entries[0]?.contentRect?.width??this.clientWidth)<400;if(this._axisNarrow!==undefined&&this._axisNarrow!==narrow&&this._config)this._render();this._axisNarrow=narrow;});this._resizeObserver.observe(this);}if(this._config&&this._hass)this._refresh();}
- disconnectedCallback(){this._timelineResize?.disconnect();globalThis.document?.removeEventListener?.('pointerdown',this._chartToolsOutside);this._touchPointer=null;this._touchRenderPending=false;disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);globalThis.document?.removeEventListener('pointerdown',this._outside);this._resizeObserver?.disconnect();if(this._hoverFrame!=null)cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;this._hideTooltip();this._connected=false;this._started=false;this._inFlight=false;this._generation++;clearTimeout(this._timer);}
+ disconnectedCallback(){cancelUILegendClicks(this);this._timelineResize?.disconnect();globalThis.document?.removeEventListener?.('pointerdown',this._chartToolsOutside);this._touchPointer=null;this._touchRenderPending=false;disconnectTimeframeSync(this);disconnectChartInsights(this);disconnectPeriodControls(this);SharedGraph.disconnectHover(this);globalThis.document?.removeEventListener('pointerdown',this._outside);this._resizeObserver?.disconnect();if(this._hoverFrame!=null)cancelAnimationFrame(this._hoverFrame);this._hoverFrame=null;this._hideTooltip();this._connected=false;this._started=false;this._inFlight=false;this._generation++;clearTimeout(this._timer);}
  getCardSize(){return Math.ceil((90+(this._config?.entities.length??1)*((this._config?.bar_height??18)+(this._config?.row_gap??16)+(this._config?.show_labels===false?0:24+(this._config?.label_gap??2))))/50);}
  getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(3,Math.ceil(this.getCardSize()*50/64)),min_rows:3};}
  _isSeriesVisible(index){return chartSeriesVisible(this,index);}
@@ -8813,6 +8968,43 @@ class SharedGraph {
   }
   static tooltipStyles() {
     return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
   }
   static yGrid(axes, height = 300, width = 1000) {
     const positions = new Map();
@@ -11099,7 +11291,7 @@ class HistoryGraphCard extends HTMLElement {
  }
  _bindInteractions(){
   const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;
-  const fromPointer=e=>{const box=chart.querySelector('.plot').getBoundingClientRect();return this._timeAtPlotPosition(Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)));};
+  const fromPointer=e=>{SharedGraph.rememberTooltipPointer(this,e);const box=chart.querySelector('.plot').getBoundingClientRect();return this._timeAtPlotPosition(Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)));};
   let drag=null;const selection=chart.querySelector('.zoom-selection');
   chart.onpointermove=e=>{if(this._touchPointer!=null&&e.pointerId===this._touchPointer){this._showTooltip(this._pointerTime(fromPointer(e)));return;}if(drag&&Math.abs(e.clientX-drag.x)>=6){const plot=chart.querySelector('.plot').getBoundingClientRect();if(selection){selection.hidden=false;selection.style.left=`${Math.max(0,Math.min(drag.x,e.clientX)-plot.left)/plot.width*100}%`;selection.style.width=`${Math.min(plot.width,Math.abs(e.clientX-drag.x))/plot.width*100}%`;}}else if(!this._pinned&&e.pointerType!=='touch'&&!e.target?.closest?.('.tooltip'))this._showTooltip(this._pointerTime(fromPointer(e)));};
   chart.onpointerdown=e=>{if(e.target?.closest?.('.tooltip'))return;if(e.pointerType==='touch')this._touchPointer=e.pointerId;this._pinned=true;this._showTooltip(this._pointerTime(fromPointer(e)));if(e.pointerType==='mouse'&&(e.button??0)===0){drag={x:e.clientX,t:fromPointer(e)};chart.setPointerCapture?.(e.pointerId);}};
@@ -11109,7 +11301,7 @@ class HistoryGraphCard extends HTMLElement {
   chart.onpointerleave=()=>{if(!this._pinned)this._hideTooltip();};chart.onblur=()=>this._hideTooltip();
   chart.onkeydown=e=>{
    if(e.key==='Escape'){this._hideTooltip();return;}
-   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();
+   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;this._tooltipPointer=null;e.preventDefault();
    const a=this._viewStart??this._start,b=this._viewEnd??this._end;
    const timeline=[...new Set([a,...this._series.flatMap((s,i)=>this._isSeriesVisible(i)?s.points.map(p=>p.t):[]).filter(t=>t>a&&t<b),b])].sort((a,b)=>a-b);
    let index=timeline.findIndex(t=>t>=(this._cursor??this._start));if(index<0)index=timeline.length-1;
@@ -11120,7 +11312,7 @@ class HistoryGraphCard extends HTMLElement {
  _timeAtPlotPosition(ratio){const start=this._viewStart??this._start;return start+ratio*((this._viewEnd??this._end)-start);}
  _pointerTime(timestamp){return timestamp;}
  _receiveHover(timestamp){if(timestamp===null||timestamp<(this._viewStart??this._start)||timestamp>(this._viewEnd??this._end)){this._hideTooltip(false);return;}this._showTooltip(timestamp,false);}
- _hideTooltip(publish=true){if(publish)SharedGraph.clearHover(this);this._cursor=null;this._pinned=false;const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;const tooltip=chart.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;const markers=chart.querySelector('.markers');if(markers)markers.innerHTML='';const guide=chart.querySelector('.guide');if(guide)guide.hidden=true;}
+ _hideTooltip(publish=true){this._tooltipPointer=null;if(publish)SharedGraph.clearHover(this);this._cursor=null;this._pinned=false;const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;const tooltip=chart.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;const markers=chart.querySelector('.markers');if(markers)markers.innerHTML='';const guide=chart.querySelector('.guide');if(guide)guide.hidden=true;}
  _showTooltip(timestamp,publish=true){
   this._updateGraphTheme();
   if(!SharedGraph.tooltipInView(this)){this._hideTooltip(publish);return;}
@@ -11132,16 +11324,8 @@ class HistoryGraphCard extends HTMLElement {
   if(!rows.length){this._hideTooltip(publish);return;}
   const colors=this._series.flatMap((s,i)=>this._isSeriesVisible(i)?[this._appearance(i,valueAt(s.points,timestamp)).color]:[]);
   tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)} <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
-  // A short plot must not truncate the series list when the card has room.
-  const contentBox=this.shadowRoot.querySelector('.card-content')?.getBoundingClientRect()??box;
-  const minTop=Math.max(contentBox.top-box.top+4,8-box.top);
-  const maxBottom=Math.min((contentBox.bottom??contentBox.top+contentBox.height)-box.top-4,(globalThis.window?.innerHeight??Infinity)-box.top-8);
-  tooltip.style.maxHeight=`${Math.max(0,maxBottom-minTop)}px`;
-  const measured=tooltip.getBoundingClientRect();let left=Math.max(4,Math.min(box.width-measured.width-4,px+14));
-  if(px+14+measured.width>box.width-4)left=Math.max(4,px-measured.width-14);
-  const candidates=[minTop,Math.max(minTop,maxBottom-measured.height)];
-  const overlaps=top=>positions.filter(m=>m.x>left-9&&m.x<left+measured.width+9&&m.y>top-9&&m.y<top+measured.height+9).length;
-  const top=candidates.sort((a,b)=>overlaps(a)-overlaps(b))[0];tooltip.style.left=`${left}px`;tooltip.style.top=`${top}px`;
+  const anchorY=positions.length?positions.reduce((sum,m)=>sum+m.y,0)/positions.length:p.top-box.top+p.height/2;
+  SharedGraph.positionTooltip(this,{chart,tooltip,x:px,y:anchorY,markers:positions,local:publish});
   chart.querySelector('.markers').innerHTML=positions.map(m=>`<i class="hover-dot" style="left:${m.x}px;top:${m.y}px;border-color:${m.color}"></i>`).join('');
   const guide=chart.querySelector('.guide');if(guide){guide.hidden=false;guide.style.left=`${px}px`;}
   chart.querySelector('.sr-only').textContent=`${time(timestamp,this._lang,this._zone,true)}. ${rows.map(row=>`${row.name}: ${row.value}`).join('. ')}`;
@@ -11459,8 +11643,8 @@ class BarChartCard extends HistoryGraphCard {
    const height=valueAt((this._plotSeries??this._series)[i].points,interval.start),axis=this._axes?.[this._seriesAxes[i]]??{min:this._range[0],max:this._range[1]};
    if(height!==null&&height>=axis.min&&height<=axis.max){const b=bounds[visible.indexOf(i)];markers[dot++].style.left=`${(b.left+b.right)/2}px`;}
   }
-  const measured=tooltip.getBoundingClientRect();
-  tooltip.style.left=`${Math.max(4,Math.min(box.width-measured.width-4,px+14+measured.width>box.width-4?px-measured.width-14:px+14))}px`;
+  const points=[...chart.querySelectorAll('.hover-dot')].map(dot=>{const r=dot.getBoundingClientRect();return {x:r.left-box.left+r.width/2,y:r.top-box.top+r.height/2};});
+  SharedGraph.positionTooltip(this,{chart,tooltip,x:px,y:points.length?points.reduce((sum,m)=>sum+m.y,0)/points.length:plot.top-box.top+plot.height/2,markers:points,local:publish});
   if(publish)SharedGraph.publishHover(this,(interval.start+interval.end)/2);
  }
  _defaultTitle(lang){return lang==='nl'?'Staafdiagram':'Bar chart';}
@@ -12854,6 +13038,43 @@ class SharedGraph {
   static tooltipStyles() {
     return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
+  }
   static yGrid(axes, height = 300, width = 1000) {
     const positions = new Map();
     for (const axis of axes) for (const value of axis.ticks) {
@@ -13457,12 +13678,13 @@ class HeatmapCard extends HTMLElement {
     const clock=new Intl.DateTimeFormat(locale,{...options,...(showOffset?{timeZoneName:'shortOffset'}:{})});
     return intervals.map(row=>`${clock.format(row.start)}–${clock.format(row.end)}`).join(', ') || `${String(cell.hour).padStart(2,'0')}:00–${String(cell.hour+1).padStart(2,'0')}:00`;
   }
-  _hideTooltip(){
+  _hideTooltip(){this._tooltipPointer=null;
     this._tooltipKey=null;
     const tooltip=this.shadowRoot.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;
     this._tooltipButton?.removeAttribute('aria-describedby');this._tooltipButton=null;
   }
-  _showTooltip(key){
+  _showTooltip(key,event){
+    if(event)SharedGraph.rememberTooltipPointer(this,event);
     if(this._periodMenuOpen || this._insightOpen){this._hideTooltip();return;}
     const root=this.shadowRoot,cell=this._cells?.get(key),button=this._cellElements?.get(key)??[...root.querySelectorAll('[data-cell]')].find(button=>button.dataset.cell===key);
     const tooltip=root.querySelector('.tooltip'),chart=root.querySelector('.chart'),scroll=root.querySelector('.matrix-scroll');
@@ -13477,11 +13699,7 @@ class HeatmapCard extends HTMLElement {
     tooltip.innerHTML=`<strong>${esc(date)}${bounds?` · ${esc(bounds)}`:''}</strong><span><i style="background:${color}"></i><b class="tooltip-label">${esc(name)} <em class="tooltip-value">${esc(value)}</em></b>${cell.partial?`<small>${dutch?'Onvolledig':'Incomplete'}</small>`:''}</span>`;
     tooltip.style.width='max-content';tooltip.style.maxWidth=`${Math.max(0,Math.min(360,right-left-8))}px`;tooltip.style.maxHeight=`${Math.max(0,bottom-top-8)}px`;
     tooltip.hidden=false;
-    const measured=tooltip.getBoundingClientRect();
-    let x=target.right+10;if(x+measured.width>right-4)x=target.left-measured.width-10;
-    const y=target.bottom+measured.height+8<=bottom?target.bottom+8:target.top-measured.height-8;
-    tooltip.style.left=`${Math.max(left+4,Math.min(x,right-measured.width-4))-box.left}px`;
-    tooltip.style.top=`${Math.max(top+4,Math.min(y,bottom-measured.height-4))-box.top}px`;
+    SharedGraph.positionTooltip(this,{chart,tooltip,x:target.left-box.left+target.width/2,y:target.top-box.top+target.height/2});
     if(this._tooltipButton!==button)this._tooltipButton?.removeAttribute('aria-describedby');this._tooltipButton=button;
     button.setAttribute('aria-describedby','heatmap-tooltip');
   }
@@ -13632,7 +13850,7 @@ class HeatmapCard extends HTMLElement {
     if(grid){
       this._cellElements=new Map([...grid.querySelectorAll('[data-cell]')].map(element=>[element.dataset.cell,element]));
       const target=e=>e.target.closest('[data-cell]');
-      grid.onpointerover=e=>{const cell=target(e);if(cell && e.pointerType!=='touch')this._showTooltip(cell.dataset.cell);};
+      grid.onpointerover=grid.onpointermove=e=>{const cell=target(e);if(cell && e.pointerType!=='touch')this._showTooltip(cell.dataset.cell,e);};
       const cell=this._cellElements.get(tooltipKey);
       if(cell?.matches(':hover'))this._showTooltip(tooltipKey);else this._hideTooltip();
     }
@@ -17966,6 +18184,43 @@ class SharedGraph {
   static tooltipStyles() {
     return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
+  }
   static yGrid(axes, height = 300, width = 1000) {
     const positions = new Map();
     for (const axis of axes) for (const value of axis.ticks) {
@@ -18482,7 +18737,8 @@ const evccHistoryMethods = {
   if (!plot) return;
   const {points, x, y} = this._historyGeometry, tooltip = plot.querySelector('.tooltip');
   const hide = () => { tooltip.hidden = true; plot.querySelector('.cursor').setAttribute('hidden', ''); plot.querySelector('.point').setAttribute('hidden', ''); };
-  const select = index => {
+  const select = (index,event) => {
+   SharedGraph.rememberTooltipPointer(this,event);
    this._historyIndex = Math.max(0, Math.min(points.length - 1, index));
    const point = points[this._historyIndex];
    if (point.value == null) { hide(); return; }
@@ -18491,12 +18747,13 @@ const evccHistoryMethods = {
    const language = this._hass.locale?.language ?? this._hass.language ?? 'en';
    tooltip.hidden = false; tooltip.querySelector('strong').textContent = new Intl.DateTimeFormat(language, {...(this._historyRange.end-this._historyRange.start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(point.time);
    tooltip.querySelector('.tooltip-value').textContent = new Intl.NumberFormat(language, {maximumFractionDigits: 2}).format(point.value) + ' kW';
-   tooltip.style.left = x(point.time) < 150 ? 'auto' : '6px'; tooltip.style.right = x(point.time) < 150 ? '6px' : 'auto';
+   const box=plot.getBoundingClientRect();tooltip.style.right='auto';
+   SharedGraph.positionTooltip(this,{chart:plot,tooltip,x:x(point.time)/300*box.width,y:y(point.value)/120*box.height});
    this.shadowRoot.querySelector('.chart-readout').textContent = tooltip.textContent;
   };
   plot.addEventListener('pointermove', event => {
    const rect = plot.getBoundingClientRect(), position = (event.clientX - rect.left) / rect.width * 300;
-   select(points.reduce((best, point, index) => Math.abs(x(point.time) - position) < Math.abs(x(points[best].time) - position) ? index : best, 0));
+   select(points.reduce((best, point, index) => Math.abs(x(point.time) - position) < Math.abs(x(points[best].time) - position) ? index : best, 0),event);
   });
   plot.addEventListener('pointerleave', hide); plot.addEventListener('blur', hide);
   plot.addEventListener('focus', () => select(this._historyIndex ?? points.length - 1));
