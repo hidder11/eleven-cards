@@ -20,7 +20,6 @@ import {
   normalizeLineWidth,
   normalizeSelectionMode,
   offsetPriceData,
-  placeEnergyTooltip,
   rgbColorToCss,
   selectCheapestDuration,
   selectHighestDuration,
@@ -1532,6 +1531,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       if (event.pointerType === 'mouse') this._hideTooltip();
     });
     chart.addEventListener('focus', () => {
+      this._tooltipPointer=null;
       const nearest = this._chart.timeline.reduce((best, point, index) => (
         Math.abs(point.timestamp - Date.now()) < Math.abs(this._chart.timeline[best].timestamp - Date.now()) ? index : best
       ), 0);
@@ -1539,6 +1539,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     });
     chart.addEventListener('keydown', (event) => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape'].includes(event.key)) return;
+      this._tooltipPointer=null;
       event.preventDefault();
       if (event.key === 'Escape') return this._hideTooltip();
       if (event.key === 'Home') this._activeIndex = 0;
@@ -1552,6 +1553,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _pointFromPointer(event) {
+    SharedGraph.rememberTooltipPointer(this,event);
     const chart = this.shadowRoot.querySelector('.chart');
     const bounds = chart.getBoundingClientRect();
     const svgX = ((event.clientX - bounds.left) / bounds.width) * this._chart.svgWidth;
@@ -1655,40 +1657,17 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const anchorY = anchorYs.length
       ? anchorYs.reduce((total, value) => total + value, 0) / anchorYs.length
       : this._chart.svgHeight / 2;
-    const chart = this.shadowRoot.querySelector('.chart');
-    const chartWidth = chart.clientWidth;
-    const chartHeight = chart.clientHeight;
-    const anchorX = (x / this._chart.svgWidth) * chartWidth;
-    const anchorTop = (anchorY / this._chart.svgHeight) * chartHeight;
-    const tooltipWidth = tooltip.offsetWidth;
-    const tooltipHeight = tooltip.offsetHeight;
-    const gap = 12;
-    const edge = 4;
-    const canPlaceRight = anchorX + gap + tooltipWidth <= chartWidth - edge;
-    const canPlaceLeft = anchorX - gap - tooltipWidth >= edge;
-    const canPlaceBelow = anchorTop + gap + tooltipHeight <= chartHeight - edge;
-    tooltip.dataset.horizontal = canPlaceRight ? 'right' : canPlaceLeft ? 'left' : 'center';
-    tooltip.dataset.vertical = canPlaceBelow ? 'below' : 'above';
-    const centeredX = Math.max(tooltipWidth / 2 + edge, Math.min(chartWidth - tooltipWidth / 2 - edge, anchorX));
-    tooltip.style.left = `${tooltip.dataset.horizontal === 'center' ? centeredX : anchorX}px`;
-    tooltip.style.top = `${anchorTop}px`;
-    if (this._chart.graphShowsConsumption) {
-      const bounds = chart.getBoundingClientRect();
-      const markers = [...this.shadowRoot.querySelectorAll('.hover-dot:not([hidden])')].map(dot => {
-        const rect = dot.getBoundingClientRect();
-        return { left: rect.left - bounds.left, right: rect.right - bounds.left, top: rect.top - bounds.top, bottom: rect.bottom - bounds.top };
-      });
-      const placement = placeEnergyTooltip(chartWidth, chartHeight, tooltipWidth, tooltipHeight, anchorX, anchorTop, markers);
-      tooltip.dataset.horizontal = 'positioned';
-      tooltip.style.left = `${placement.left}px`;
-      tooltip.style.top = `${placement.top}px`;
-    }
+    const chart = this.shadowRoot.querySelector('.chart'),bounds=chart.getBoundingClientRect();
+    tooltip.dataset.horizontal='positioned';
+    const markers=[...this.shadowRoot.querySelectorAll('.hover-dot:not([hidden])')].map(dot=>{const r=dot.getBoundingClientRect();return {left:r.left-bounds.left,right:r.right-bounds.left,top:r.top-bounds.top,bottom:r.bottom-bounds.top};});
+    SharedGraph.positionTooltip(this,{chart,tooltip,x:guideX/this._chart.svgWidth*bounds.width,y:anchorY/this._chart.svgHeight*bounds.height,markers,local:publish});
     const live = this.shadowRoot.querySelector('.sr-only');
     live.textContent = `${this._formatTime(point.timestamp, this._chart.timeZone)} ${this._t("tot")} ${this._formatTime(nextTime, this._chart.timeZone)}, ${liveEntries.join(', ')}.`;
     if (publish) SharedGraph.publishHover(this, timestamp);
   }
 
   _hideTooltip(publish = true) {
+    this._tooltipPointer=null;
     if (publish) SharedGraph.clearHover(this);
     this._hoverTimestamp = null;
     this.shadowRoot.querySelector('.tooltip')?.setAttribute('hidden', '');
@@ -1833,12 +1812,6 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .export-dot { width: 14px; height: 14px; }
       .consumption-dot { width: 10px; height: 10px; border-width: 2px; }
       ${SharedGraph.tooltipStyles()}
-      .tooltip[data-horizontal="right"][data-vertical="below"] { transform: translate(12px, 12px); }
-      .tooltip[data-horizontal="right"][data-vertical="above"] { transform: translate(12px, calc(-100% - 12px)); }
-      .tooltip[data-horizontal="left"][data-vertical="below"] { transform: translate(calc(-100% - 12px), 12px); }
-      .tooltip[data-horizontal="left"][data-vertical="above"] { transform: translate(calc(-100% - 12px), calc(-100% - 12px)); }
-      .tooltip[data-horizontal="center"][data-vertical="below"] { transform: translate(-50%, 12px); }
-      .tooltip[data-horizontal="center"][data-vertical="above"] { transform: translate(-50%, calc(-100% - 12px)); }
 
       .tooltip[data-horizontal="positioned"] { transform: none; }
 

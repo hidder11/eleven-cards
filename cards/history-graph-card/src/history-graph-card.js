@@ -382,7 +382,7 @@ export class HistoryGraphCard extends HTMLElement {
  }
  _bindInteractions(){
   const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;
-  const fromPointer=e=>{const box=chart.querySelector('.plot').getBoundingClientRect();return this._timeAtPlotPosition(Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)));};
+  const fromPointer=e=>{SharedGraph.rememberTooltipPointer(this,e);const box=chart.querySelector('.plot').getBoundingClientRect();return this._timeAtPlotPosition(Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)));};
   let drag=null;const selection=chart.querySelector('.zoom-selection');
   chart.onpointermove=e=>{if(this._touchPointer!=null&&e.pointerId===this._touchPointer){this._showTooltip(this._pointerTime(fromPointer(e)));return;}if(drag&&Math.abs(e.clientX-drag.x)>=6){const plot=chart.querySelector('.plot').getBoundingClientRect();if(selection){selection.hidden=false;selection.style.left=`${Math.max(0,Math.min(drag.x,e.clientX)-plot.left)/plot.width*100}%`;selection.style.width=`${Math.min(plot.width,Math.abs(e.clientX-drag.x))/plot.width*100}%`;}}else if(!this._pinned&&e.pointerType!=='touch'&&!e.target?.closest?.('.tooltip'))this._showTooltip(this._pointerTime(fromPointer(e)));};
   chart.onpointerdown=e=>{if(e.target?.closest?.('.tooltip'))return;if(e.pointerType==='touch')this._touchPointer=e.pointerId;this._pinned=true;this._showTooltip(this._pointerTime(fromPointer(e)));if(e.pointerType==='mouse'&&(e.button??0)===0){drag={x:e.clientX,t:fromPointer(e)};chart.setPointerCapture?.(e.pointerId);}};
@@ -392,7 +392,7 @@ export class HistoryGraphCard extends HTMLElement {
   chart.onpointerleave=()=>{if(!this._pinned)this._hideTooltip();};chart.onblur=()=>this._hideTooltip();
   chart.onkeydown=e=>{
    if(e.key==='Escape'){this._hideTooltip();return;}
-   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();
+   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;this._tooltipPointer=null;e.preventDefault();
    const a=this._viewStart??this._start,b=this._viewEnd??this._end;
    const timeline=[...new Set([a,...this._series.flatMap((s,i)=>this._isSeriesVisible(i)?s.points.map(p=>p.t):[]).filter(t=>t>a&&t<b),b])].sort((a,b)=>a-b);
    let index=timeline.findIndex(t=>t>=(this._cursor??this._start));if(index<0)index=timeline.length-1;
@@ -403,7 +403,7 @@ export class HistoryGraphCard extends HTMLElement {
  _timeAtPlotPosition(ratio){const start=this._viewStart??this._start;return start+ratio*((this._viewEnd??this._end)-start);}
  _pointerTime(timestamp){return timestamp;}
  _receiveHover(timestamp){if(timestamp===null||timestamp<(this._viewStart??this._start)||timestamp>(this._viewEnd??this._end)){this._hideTooltip(false);return;}this._showTooltip(timestamp,false);}
- _hideTooltip(publish=true){if(publish)SharedGraph.clearHover(this);this._cursor=null;this._pinned=false;const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;const tooltip=chart.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;const markers=chart.querySelector('.markers');if(markers)markers.innerHTML='';const guide=chart.querySelector('.guide');if(guide)guide.hidden=true;}
+ _hideTooltip(publish=true){this._tooltipPointer=null;if(publish)SharedGraph.clearHover(this);this._cursor=null;this._pinned=false;const chart=this.shadowRoot.querySelector('.chart');if(!chart)return;const tooltip=chart.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;const markers=chart.querySelector('.markers');if(markers)markers.innerHTML='';const guide=chart.querySelector('.guide');if(guide)guide.hidden=true;}
  _showTooltip(timestamp,publish=true){
   this._updateGraphTheme();
   if(!SharedGraph.tooltipInView(this)){this._hideTooltip(publish);return;}
@@ -415,16 +415,8 @@ export class HistoryGraphCard extends HTMLElement {
   if(!rows.length){this._hideTooltip(publish);return;}
   const colors=this._series.flatMap((s,i)=>this._isSeriesVisible(i)?[this._appearance(i,valueAt(s.points,timestamp)).color]:[]);
   tooltip.innerHTML=`<strong>${escapeHtml(time(timestamp,this._lang,this._zone,true))}</strong>${rows.map((row,i)=>`<span><i style="background:${escapeHtml(colors[i])}"></i><b class="tooltip-label">${escapeHtml(row.name)} <em class="tooltip-value">${escapeHtml(row.value)}</em></b></span>`).join('')}`;tooltip.hidden=false;tooltip.style.pointerEvents=this._pinned?'auto':'none';
-  // A short plot must not truncate the series list when the card has room.
-  const contentBox=this.shadowRoot.querySelector('.card-content')?.getBoundingClientRect()??box;
-  const minTop=Math.max(contentBox.top-box.top+4,8-box.top);
-  const maxBottom=Math.min((contentBox.bottom??contentBox.top+contentBox.height)-box.top-4,(globalThis.window?.innerHeight??Infinity)-box.top-8);
-  tooltip.style.maxHeight=`${Math.max(0,maxBottom-minTop)}px`;
-  const measured=tooltip.getBoundingClientRect();let left=Math.max(4,Math.min(box.width-measured.width-4,px+14));
-  if(px+14+measured.width>box.width-4)left=Math.max(4,px-measured.width-14);
-  const candidates=[minTop,Math.max(minTop,maxBottom-measured.height)];
-  const overlaps=top=>positions.filter(m=>m.x>left-9&&m.x<left+measured.width+9&&m.y>top-9&&m.y<top+measured.height+9).length;
-  const top=candidates.sort((a,b)=>overlaps(a)-overlaps(b))[0];tooltip.style.left=`${left}px`;tooltip.style.top=`${top}px`;
+  const anchorY=positions.length?positions.reduce((sum,m)=>sum+m.y,0)/positions.length:p.top-box.top+p.height/2;
+  SharedGraph.positionTooltip(this,{chart,tooltip,x:px,y:anchorY,markers:positions,local:publish});
   chart.querySelector('.markers').innerHTML=positions.map(m=>`<i class="hover-dot" style="left:${m.x}px;top:${m.y}px;border-color:${m.color}"></i>`).join('');
   const guide=chart.querySelector('.guide');if(guide){guide.hidden=false;guide.style.left=`${px}px`;}
   chart.querySelector('.sr-only').textContent=`${time(timestamp,this._lang,this._zone,true)}. ${rows.map(row=>`${row.name}: ${row.value}`).join('. ')}`;

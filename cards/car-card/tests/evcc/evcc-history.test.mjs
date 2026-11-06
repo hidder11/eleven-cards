@@ -11,10 +11,11 @@ test('history labels, readings and cursor use the same plot bounds',()=>{
  assert.deepEqual([y(2),y(1),y(0)],[8,60,112]);
  assert.match(markup,/class="chart-scale"/);assert.match(markup,/class="grid-line grid-zero" d="M0 112H300"/);
  const listeners={},cursor={setAttribute(name,value){this[name]=value;},removeAttribute(){}},dot={style:{},removeAttribute(){},setAttribute(){}},value={},heading={};
- const tooltip={style:{},textContent:'Reading',querySelector:selector=>selector==='strong'?heading:value};
- const plot={querySelector:selector=>({'.tooltip':tooltip,'.cursor':cursor,'.point':dot}[selector]),addEventListener:(event,handler)=>listeners[event]=handler,getBoundingClientRect:()=>({left:100,width:480})};
+ const tooltip={style:{},textContent:'Reading',getBoundingClientRect:()=>({width:180,height:50}),querySelector:selector=>selector==='strong'?heading:value};
+ const plot={querySelector:selector=>({'.tooltip':tooltip,'.cursor':cursor,'.point':dot}[selector]),addEventListener:(event,handler)=>listeners[event]=handler,getBoundingClientRect:()=>({left:100,right:580,top:50,bottom:242,width:480,height:192})};
  card.shadowRoot={querySelector:selector=>selector==='.plot'?plot:{}};card._bindHistory();
- listeners.pointermove({clientX:340});assert.equal(card._historyIndex,1);assert.equal(cursor.d,'M150 8V112');assert.equal(dot.style.left,'50%');assert.equal(dot.style.top,'50%');
+ listeners.pointermove({clientX:340,clientY:146});assert.equal(card._historyIndex,1);assert.equal(cursor.d,'M150 8V112');assert.equal(dot.style.left,'50%');assert.equal(dot.style.top,'50%');
+ assert.equal(tooltip.style.left,'246px');assert.equal(tooltip.style.top,'102px');
  listeners.keydown({key:'End',preventDefault(){}});assert.equal(card._historyIndex,2);assert.equal(dot.style.left,'100%');assert.equal(value.textContent,'2 kW');
 });
 

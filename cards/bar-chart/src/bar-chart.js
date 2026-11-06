@@ -213,8 +213,8 @@ export class BarChartCard extends HistoryGraphCard {
    const height=valueAt((this._plotSeries??this._series)[i].points,interval.start),axis=this._axes?.[this._seriesAxes[i]]??{min:this._range[0],max:this._range[1]};
    if(height!==null&&height>=axis.min&&height<=axis.max){const b=bounds[visible.indexOf(i)];markers[dot++].style.left=`${(b.left+b.right)/2}px`;}
   }
-  const measured=tooltip.getBoundingClientRect();
-  tooltip.style.left=`${Math.max(4,Math.min(box.width-measured.width-4,px+14+measured.width>box.width-4?px-measured.width-14:px+14))}px`;
+  const points=[...chart.querySelectorAll('.hover-dot')].map(dot=>{const r=dot.getBoundingClientRect();return {x:r.left-box.left+r.width/2,y:r.top-box.top+r.height/2};});
+  SharedGraph.positionTooltip(this,{chart,tooltip,x:px,y:points.length?points.reduce((sum,m)=>sum+m.y,0)/points.length:plot.top-box.top+plot.height/2,markers:points,local:publish});
   if(publish)SharedGraph.publishHover(this,(interval.start+interval.end)/2);
  }
  _defaultTitle(lang){return lang==='nl'?'Staafdiagram':'Bar chart';}

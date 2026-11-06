@@ -65,11 +65,13 @@ The information popup also lists the total time spent in each recorded state per
 
 `show_summary`: default false. Optional state-duration totals below each entity, calculated over only the visible (zoomed) interval; missing/unknown/unavailable durations remain separate.
 
-`state_colors`: list of `state`, `color`, optional `label`, optional `entity`. Entity-specific mappings take priority over global mappings. Colors accept RGB arrays, hex, named CSS colors or CSS variables. `series_options`: list of `entity` and optional `name`.
+`state_colors`: list of `state`, `color`, optional `label`, optional `entity`. Entity-specific mappings take priority over global mappings. Colors accept RGB arrays, hex, named CSS colors or CSS variables. `series_options`: list of `entity`, optional `name` and optional `group`. The visual editor exposes Group name / Groepsnaam per entity. Entities with the same non-empty group name share a heading, state legend, dark timeline panel and time axis. Groups follow their first appearance in `entities`; entities keep their order within each group. Empty group names keep entities together without a heading. Without any group names the existing ungrouped layout is retained.
+
+Click a state in the legend to toggle it. Disabled states are dimmed in the timeline and omitted from hover details; their intervals retain their original positions. Double-click or Shift+Enter isolates a state; repeat to restore the group. Filtering is local to the group and never changes configuration or recorded history. Missing history, explicit Unknown, distinct raw states and differing entity-specific labels/colors remain independent. Filters survive refresh and zoom, and reset on configuration changes.
 
 Defaults use blue for active/on and grey for inactive/off; home is teal-green and away is amber. Alarm/problem binary-sensor classes use vermilion for a detected problem and teal-green for safe; opening sensors use amber for open. Connectivity, locks and covers have matching semantic colors. Unknown is striped grey, while unavailable is striped mauve. Other recorded values receive a deterministic, collision-resolved categorical palette (up to the 20-state limit), not a single shared purple. Assignments use the full fetched history, so zoom and transition order do not recolor states; a different set of states in another period can resolve palette collisions differently. Labels inside default hex and configured hex/RGB bars automatically choose black or white for contrast. Explicit entity rules, common rules and `default_color` retain priority, in that order.
 
-Hover shows a vertical guide across all bars and an absolutely positioned tooltip with the state, interval start/end and duration for each entity. This overlay does not change the card height. A mouse click or touch tap pins it; Escape, focus leaving the chart or an outside tap dismisses it. Tab reaches segments; arrow keys and Home/End navigate state boundaries. Long pinned tooltips can be scrolled. Missing Recorder history is explicitly labeled No history, distinct from recorded Unknown and Unavailable, and is never replaced by the current entity state.
+Hover shows a vertical guide across all bars and an absolutely positioned tooltip with the name on the left and state on the right. A second line shows exact interval start and end (date and seconds) separated by a dash, without labels, duration or dividers. Hovering any group shows all visible entities in the same popup, with a heading per named group. This overlay does not change the card height. A mouse click or touch tap pins it; Escape, focus leaving the chart or an outside tap dismisses it. Tab reaches segments; arrow keys and Home/End navigate state boundaries. Long pinned tooltips can be scrolled. Missing Recorder history is explicitly labeled No history, distinct from recorded Unknown and Unavailable, and is never replaced by the current entity state.
 
 `sync_hover`: default true, shares the selected epoch timestamp bidirectionally with Eleven History and Energy graphs on the same page. `hover_sync_group`: default empty (the shared default group). Cards follow only the same named group; disabling sync keeps local hover working. Both settings are available under Timeline in the visual editor. Receivers hide for times outside their visible window, rather than clamping to its edges. Mouse, touch and keyboard share the same protocol; updates preserve the shared selection and detaching the source clears its group.
 
@@ -88,3 +90,14 @@ For scroll restoration, use a short viewport (for example a 360 px high iframe) 
 ## Shared card background
 
 The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.
+
+### Optional headings
+
+`show_title` controls the card heading; `show_group_titles` controls the names above the entity groups. Both default to `true` and have separate switches in the visual editor. Hiding group names preserves each group, its legend and its shared entity panel.
+
+```yaml
+show_title: false
+show_group_titles: false
+```
+
+Hovering any entity group shows one shared tooltip with all visible entities, organized under escaped group headings. Every row uses the same hovered timestamp and retains its exact original start/end. Entity visibility and group-local status filters still apply; empty tooltip groups are omitted. Synchronized History/Bar cards retain their own data anchors and never reuse pointer coordinates from another card.

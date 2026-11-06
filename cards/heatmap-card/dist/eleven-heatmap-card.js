@@ -1375,6 +1375,43 @@ class SharedGraph {
   static tooltipStyles() {
     return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
   }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
+  }
   static yGrid(axes, height = 300, width = 1000) {
     const positions = new Map();
     for (const axis of axes) for (const value of axis.ticks) {
@@ -1978,12 +2015,13 @@ class HeatmapCard extends HTMLElement {
     const clock=new Intl.DateTimeFormat(locale,{...options,...(showOffset?{timeZoneName:'shortOffset'}:{})});
     return intervals.map(row=>`${clock.format(row.start)}–${clock.format(row.end)}`).join(', ') || `${String(cell.hour).padStart(2,'0')}:00–${String(cell.hour+1).padStart(2,'0')}:00`;
   }
-  _hideTooltip(){
+  _hideTooltip(){this._tooltipPointer=null;
     this._tooltipKey=null;
     const tooltip=this.shadowRoot.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;
     this._tooltipButton?.removeAttribute('aria-describedby');this._tooltipButton=null;
   }
-  _showTooltip(key){
+  _showTooltip(key,event){
+    if(event)SharedGraph.rememberTooltipPointer(this,event);
     if(this._periodMenuOpen || this._insightOpen){this._hideTooltip();return;}
     const root=this.shadowRoot,cell=this._cells?.get(key),button=this._cellElements?.get(key)??[...root.querySelectorAll('[data-cell]')].find(button=>button.dataset.cell===key);
     const tooltip=root.querySelector('.tooltip'),chart=root.querySelector('.chart'),scroll=root.querySelector('.matrix-scroll');
@@ -1998,11 +2036,7 @@ class HeatmapCard extends HTMLElement {
     tooltip.innerHTML=`<strong>${esc(date)}${bounds?` · ${esc(bounds)}`:''}</strong><span><i style="background:${color}"></i><b class="tooltip-label">${esc(name)} <em class="tooltip-value">${esc(value)}</em></b>${cell.partial?`<small>${dutch?'Onvolledig':'Incomplete'}</small>`:''}</span>`;
     tooltip.style.width='max-content';tooltip.style.maxWidth=`${Math.max(0,Math.min(360,right-left-8))}px`;tooltip.style.maxHeight=`${Math.max(0,bottom-top-8)}px`;
     tooltip.hidden=false;
-    const measured=tooltip.getBoundingClientRect();
-    let x=target.right+10;if(x+measured.width>right-4)x=target.left-measured.width-10;
-    const y=target.bottom+measured.height+8<=bottom?target.bottom+8:target.top-measured.height-8;
-    tooltip.style.left=`${Math.max(left+4,Math.min(x,right-measured.width-4))-box.left}px`;
-    tooltip.style.top=`${Math.max(top+4,Math.min(y,bottom-measured.height-4))-box.top}px`;
+    SharedGraph.positionTooltip(this,{chart,tooltip,x:target.left-box.left+target.width/2,y:target.top-box.top+target.height/2});
     if(this._tooltipButton!==button)this._tooltipButton?.removeAttribute('aria-describedby');this._tooltipButton=button;
     button.setAttribute('aria-describedby','heatmap-tooltip');
   }
@@ -2153,7 +2187,7 @@ class HeatmapCard extends HTMLElement {
     if(grid){
       this._cellElements=new Map([...grid.querySelectorAll('[data-cell]')].map(element=>[element.dataset.cell,element]));
       const target=e=>e.target.closest('[data-cell]');
-      grid.onpointerover=e=>{const cell=target(e);if(cell && e.pointerType!=='touch')this._showTooltip(cell.dataset.cell);};
+      grid.onpointerover=grid.onpointermove=e=>{const cell=target(e);if(cell && e.pointerType!=='touch')this._showTooltip(cell.dataset.cell,e);};
       const cell=this._cellElements.get(tooltipKey);
       if(cell?.matches(':hover'))this._showTooltip(tooltipKey);else this._hideTooltip();
     }

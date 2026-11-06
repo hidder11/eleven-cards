@@ -29,7 +29,7 @@ test('rejected entities are omitted from the tooltip while valid entities remain
  const card=await history(Array.from({length:50},(_,i)=>String(i)));
  const tooltip={innerHTML:'',style:{},getBoundingClientRect:()=>({width:180,height:80})};
  const guide={style:{}};
- const chart={querySelector:s=>s==='.tooltip'?tooltip:guide,getBoundingClientRect:()=>({width:600,top:40})};
+ const chart={querySelector:s=>s==='.tooltip'?tooltip:s==='.guide'?guide:null,getBoundingClientRect:()=>({left:20,right:620,width:600,top:40,bottom:240,height:200})};
  card.shadowRoot.querySelector=s=>s==='.chart'?chart:null;
  card._showTooltip(card._viewStart+1000,false);
  assert.doesNotMatch(tooltip.innerHTML,/sensor\.test|Maximaal 20/);
