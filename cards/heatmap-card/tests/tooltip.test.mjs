@@ -6,8 +6,8 @@ const {HeatmapCard}=await import('../src/heatmap-card.js');
 
 function harness({value=0,partial=false,cellLeft=270,cellTop=260}={}){
   const attributes=new Map(),cell={key:'2026-10-01/0',hour:0,value,partial,records:[],coverage:3600000,intervals:[{start:Date.parse('2026-10-01T00:00:00Z'),end:Date.parse('2026-10-01T01:00:00Z')}]};
-  const target={dataset:{cell:cell.key},getBoundingClientRect:()=>({left:cellLeft,right:cellLeft+24,top:cellTop,bottom:cellTop+24}),setAttribute:(key,value)=>attributes.set(key,value),removeAttribute:key=>attributes.delete(key)};
-  const box={left:20,right:308,top:100,bottom:400},chart={getBoundingClientRect:()=>box};
+  const target={dataset:{cell:cell.key},getBoundingClientRect:()=>({left:cellLeft,right:cellLeft+24,top:cellTop,bottom:cellTop+24,width:24,height:24}),setAttribute:(key,value)=>attributes.set(key,value),removeAttribute:key=>attributes.delete(key)};
+  const box={left:20,right:308,top:100,bottom:400,width:288,height:300},chart={getBoundingClientRect:()=>box};
   const tooltip={hidden:true,style:{},getBoundingClientRect:()=>({width:260,height:70})},announcement={};
   const listeners=[];
   const events={addEventListener:(event,handler)=>listeners.push({event,handler}),removeEventListener:(event,handler)=>{const i=listeners.findIndex(row=>row.event===event&&row.handler===handler);if(i>=0)listeners.splice(i,1);}};
