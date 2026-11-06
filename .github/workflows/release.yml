@@ -73,6 +73,11 @@ jobs:
         run: python tests/browser-smoke.py
       - name: All-card cold-start render and migration regressions (synthetic HA)
         run: python tests/browser-all-cards-render.py
+      - name: Decorative background defaults and graph exclusion (synthetic HA)
+        run: |
+          python tests/browser-background-default.py
+          python tests/browser-background-graph-exclusion.py
+          BACKGROUND_GRAPH_ARTIFACT=standalones python tests/browser-background-graph-exclusion.py
       - name: Record release provenance
         run: |
           if ! test -s themes/eleven_material.yaml; then

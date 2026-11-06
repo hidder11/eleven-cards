@@ -3,9 +3,15 @@ import assert from 'node:assert/strict';
 globalThis.HTMLElement??=class{};
 const {cardBackgroundSettings,cardBackgroundEditorSchema,withCardBackground}=await import('../shared/card-background.js');
 
-test('new cards share the same restrained header background defaults',()=>{
+test('new cards keep decorative backgrounds off with shared opt-in defaults',()=>{
  assert.equal(cardBackgroundSettings({card_background:{height:180}}).variant,'isobars');
- const s=cardBackgroundSettings();assert.equal(s.variant,'isobars');assert.equal(s.coverage,'header');assert.equal(s.height,240);assert.equal(s.transparency,65);assert.equal(s.colorMode,'accent');assert.equal(s.enabled,true);assert.equal(s.legacy,false);
+ const s=cardBackgroundSettings();assert.equal(s.variant,'isobars');assert.equal(s.coverage,'header');assert.equal(s.height,240);assert.equal(s.transparency,65);assert.equal(s.colorMode,'accent');assert.equal(s.enabled,false);assert.equal(s.legacy,false);
+ for(const config of [{},{title:'No decoration'},{background_strength:40},{animate_background:true}])assert.equal(cardBackgroundSettings(config).enabled,false);
+});
+test('explicit shared and legacy backgrounds remain opt-in without mutation',()=>{
+ for(const card_background of [true,{}, {height:180},{enabled:true},{variant:'aurora'}])assert.equal(cardBackgroundSettings(Object.freeze({card_background})).enabled,true);
+ for(const background of ['ribbon','isobars','prism-glass'])assert.equal(cardBackgroundSettings(Object.freeze({background})).enabled,true);
+ assert.equal(cardBackgroundSettings({card_background:true,background:'none'}).enabled,false);
 });
 test('legacy background configuration remains usable without mutation',()=>{
  const config=Object.freeze({background:'ribbon',background_strength:40,animate_background:false});
