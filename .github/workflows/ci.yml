@@ -52,6 +52,11 @@ jobs:
           BACKGROUND_GRAPH_ARTIFACT=standalones python tests/browser-background-graph-exclusion.py
           python tests/browser-plot-inset-theme.py
           PLOT_THEME_ARTIFACT=standalones python tests/browser-plot-inset-theme.py
+      - name: Scene disclosure scroll stability (synthetic HA)
+        run: |
+          SCENE_SCROLL_MODE=source python tests/browser-scene-scroll-stability.py
+          SCENE_SCROLL_MODE=standalone python tests/browser-scene-scroll-stability.py
+          SCENE_SCROLL_MODE=collection python tests/browser-scene-scroll-stability.py
       - name: Shopping card browser regressions (synthetic HA)
         run: BUILT=1 python cards/shopping-card/tests/browser_test.py
       - name: House card browser regressions (synthetic HA)

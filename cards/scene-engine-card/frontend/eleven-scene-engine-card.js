@@ -204,7 +204,8 @@ export class ElevenSceneEngineCard extends HTMLElement {
         technicalBody.append(node('p',`Revisie ${text(a.revision)} · bron ${text(a.snapshot_source)}\nStandaard: ${text(a.default_scene)}`,'diagnostics muted'));
         technical.append(technicalBody); body.append(technical);
         details.append(body); slot.append(details);
-        if (focusedSummary) (focusedSummary === 'technical' ? technical : details).querySelector('summary').focus();
+        // Restore keyboard focus without scrolling the reader back to the grip.
+        if (focusedSummary) (focusedSummary === 'technical' ? technical : details).querySelector('summary').focus({preventScroll:true});
       }
     }
     this.$('reset').disabled = this._pending || !!this._reason();
