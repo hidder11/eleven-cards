@@ -2976,7 +2976,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
           <div class="sr-only" aria-live="polite"></div>
         </div>
       </ha-card>
-      <style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
+      <style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart,.price-periods .price-table-wrap',controls:'.price-periods>summary',surfaces:'.tooltip'})}</style>`;
     this._layoutChartLabels();
     this._labelResize?.disconnect();
     const labelChart=this.shadowRoot.querySelector('.chart');
@@ -3096,7 +3096,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _stateCard(title, message) {
-    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
+    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart,.price-periods .price-table-wrap',controls:'.price-periods>summary',surfaces:'.tooltip'})}</style>`;
   }
 
   _bindInteractions() {
@@ -3327,7 +3327,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .current-window.active { color: var(--import-best); }
       .current-metric.export .current-window.active { color: var(--export-best); }
       .y-grid-line { stroke: var(--divider-color,#ddd); stroke-width: 0.8; vector-effect: non-scaling-stroke; }
-      .legend { display: flex; flex-wrap: wrap; gap: 7px 16px; margin: 12px 0 2px; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
+      .legend { display: flex; flex-wrap: wrap; gap: 7px 16px; margin: 0 0 10px; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
       .legend span { display: inline-flex; align-items: center; gap: 6px; }
       .legend-label { color: var(--secondary-text-color); }
       .legend-value { color: var(--primary-text-color,#20252b); }
@@ -3398,13 +3398,13 @@ class DynamicEnergyPriceCard extends HTMLElement {
 
       .tooltip[data-horizontal="positioned"] { transform: none; }
 
-      .price-periods{flex:none;margin-top:8px;border-top:1px solid var(--divider-color)}
-      .price-periods>summary{min-height:44px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:var(--font-size-label);font-weight:500;color:var(--secondary-text-color);list-style:none}
+      .price-periods{flex:none;margin-top:8px}
+      .price-periods>summary{min-height:44px;min-width:44px;padding:10px 12px;box-sizing:border-box;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:var(--font-size-label);font-weight:500;color:var(--secondary-text-color);list-style:none}
       .price-periods>summary::-webkit-details-marker{display:none}
       .price-periods>summary::after{content:'⌄';margin-inline-start:auto}
       .price-periods[open]>summary::after{content:'⌃'}
       .price-periods>summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
-      .price-periods .price-table-wrap{margin-top:0;border-top:0;padding-top:0}
+      .price-periods .price-table-wrap{margin-top:8px;padding:8px;box-sizing:border-box;border-top:0}
       .price-periods .price-table-wrap h3{display:none}
       .price-table-wrap { flex: 0 1 auto; min-height: 0; max-height: 190px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider-color); overflow: auto; }
       .price-table-wrap h3 { margin: 0 0 4px; font-size: var(--font-size-label); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
@@ -3432,7 +3432,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         .heading { grid-column: 1 / -1; }
         .current-block { grid-column:1 / -1;width:100%;max-width:none;margin-left:0;gap:8px 24px;justify-content:flex-start; }
         .current { padding:0;column-gap:5px; }
-        .legend { gap: 6px 10px; margin-top: 9px; }
+        .legend { gap: 6px 10px; }
         .data-status { margin-top: 2px; }
         .chart { flex-basis: 260px; min-height: 110px; }
 
