@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Eleven Security · camera in groot beeld</title>
+  <link rel="stylesheet" href="security-designs.css">
+  <link rel="stylesheet" href="security-camera-designs.css">
+  <script type="module" src="security-camera-designs.js"></script>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <span class="eyebrow">ELEVEN CARDS / CAMERAONTWERPEN</span>
+      <h1>Van overzicht naar groot beeld.</h1>
+      <p>Drie uitwerkingen van de gekozen securitykaart. Open een camera om het grote beeld en de bediening zelf te proberen.</p>
+    </header>
+    <form class="toolbar" aria-label="Ontwerpen vergelijken" onsubmit="return false">
+      <label>Situatie<select id="scenario"><option value="quiet">Rust</option><option value="person" selected>Persoon bij voordeur</option><option value="open">Raam open</option><option value="unknown">Gegevens onbekend</option></select></label>
+      <label>Kaartbreedte<select id="width"><option value="standard">Standaard · 440 px</option><option value="narrow">Smal · 280 px</option><option value="wide">Breed · 560 px</option></select></label>
+      <label>Thema<select id="theme"><option value="dark">Donker</option><option value="light">Licht</option></select></label>
+      <label>Achtergrond<select id="background"></select></label>
+      <span class="fixture-note">Getekende voorbeeldbeelden · geen live camera’s</span>
+    </form>
+    <section class="examples" aria-label="Drie cameraontwerpen">
+      <article><div class="study-heading"><span class="number">01</span><div><h2>Overzicht met kijkvenster</h2><p>Twee camera’s naast elkaar. Tik op het beeld of op ‘Groot beeld’ voor een ruim kijkvenster.</p></div></div><security-camera-design variant="overview"></security-camera-design><p class="try">Mijn voorkeur voor je huidige kaart. Het overzicht blijft compact; het grote beeld krijgt alle ruimte.</p></article>
+      <article><div class="study-heading"><span class="number">02</span><div><h2>Eén camera centraal</h2><p>Een groter hoofdbeeld met camerakeuze eronder. Detecties blijven bij het bijbehorende beeld.</p></div></div><security-camera-design variant="hero"></security-camera-design><p class="try">Probeer: wissel tussen Voordeur en Tuin. ‘Groot beeld’ opent dezelfde camera in een kijkvenster.</p></article>
+      <article><div class="study-heading"><span class="number">03</span><div><h2>Rustige lijst, ruim detail</h2><p>Compacte camerarijen voor het dagelijkse overzicht. Open een camera met beeld, detecties en activiteit in één venster.</p></div></div><security-camera-design variant="inspector"></security-camera-design><p class="try">Probeer: ‘Bekijken’ opent het detailvenster. Op een smal scherm staan beeld en details onder elkaar.</p></article>
+    </section>
+    <nav class="viewer-demos" aria-label="Grote cameravensters vergelijken"><span>Direct proberen</span><button data-demo="overview">01 · Groot kijkvenster</button><button data-demo="hero">02 · Hoofdbeeld vergroten</button><button data-demo="inspector">03 · Beeld met details</button></nav>
+    <footer>Interactieve ontwerpvoorbeelden met fictieve gegevens en getekende camerabeelden. De bestaande securitykaart is behouden. <a href="security.html">Open de huidige kaart</a> · <a href="security-designs.html">Eerdere ontwerpstudie</a></footer>
+  </main>
+</body>
+</html>

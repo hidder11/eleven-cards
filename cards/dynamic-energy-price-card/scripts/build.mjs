@@ -1,3 +1,4 @@
+import {addSharedCardBackgrounds} from '../../../scripts/card-background-build.mjs';
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +29,6 @@ const banner = '// Eleven Dynamic Energy Price Card — standalone dashboard bun
 
 await mkdir(dirname(outputPath), { recursive: true });
 const temporaryPath = resolve(dirname(outputPath), `.energy-${process.pid}.tmp`);
-await writeFile(temporaryPath, `${banner}(()=>{\n"use strict";\n${surfaceSource.replace(/^export /gm, '')}\n${graphSource.replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '')}\n${periodsSource.replace(/^export /gm, '')}\n${bundledUtils}\n${bundledLocalization}\n${bundledCard}\n})();\n`, 'utf8');
+await writeFile(temporaryPath, await addSharedCardBackgrounds(`${banner}(()=>{\n"use strict";\n${surfaceSource.replace(/^export /gm, '')}\n${graphSource.replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '')}\n${periodsSource.replace(/^export /gm, '')}\n${bundledUtils}\n${bundledLocalization}\n${bundledCard}\n})();\n`), 'utf8');
 await rename(temporaryPath, outputPath);
 console.log(`Built ${outputPath}`);

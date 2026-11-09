@@ -15,11 +15,12 @@ Home Assistant dashboard cards for energy prices, sensor graphs, state timelines
 | **Car (beta)** | Vehicle image, percentage and custom readings, with optional EVCC charging integration and selectable tabs. | [Car documentation](cards/car-card/README.md) |
 | **Weather (beta)** | Compact current weather and a short hourly or daily forecast, with state-colored artwork. | [Weather documentation](cards/weather-card/README.md) |
 | **Energy Flow (beta)** | Solar, grid and home distribution using Home Assistant Energy configuration and Recorder, with live/history buttons. | [Energy Flow documentation](cards/energy-flow-card/README.md) |
+| **Camera (beta)** | Camera layouts, detection/doorbell focus, privacy, profiles, snapshots, activity, configurable controls and alarm/contact status. | [Camera documentation](cards/camera-card/README.md) |
 | **Calendar (beta)** | Calendar events in a day list, day columns or month view, with optional weather. | [Calendar documentation](cards/calendar-card/README.md) |
 
 ![Eleven Dynamic Energy Price Card preview](cards/dynamic-energy-price-card/docs/images/revised-default-dark-desktop.png)
 
-All ten cards include a visual editor and follow Home Assistant's light/dark theme and Dutch/English frontend language. Energy, History, Timeline and Bar Chart support synchronized hover across cards. History, Bar Chart and Timeline also share a compact period picker and a single group for previous/next, Now and zoom controls in the header, with rolling windows and local calendar days, weeks, months, quarters and years. These three cards also indicate zoom, support isolating one entity and provide an information icon beside History with compact per-sensor source and unit information. History and Bar Chart include per-sensor min/max/average for the viewed range; Delta Bar Chart adds sums in the same popup. Calendar has its own day/month navigation and does not join graph timeframe synchronization.
+All eleven cards include a visual editor and follow Home Assistant's light/dark theme and Dutch/English frontend language. Energy, History, Timeline and Bar Chart support synchronized hover across cards. History, Bar Chart and Timeline also share a compact period picker and a single group for previous/next, Now and zoom controls in the header, with rolling windows and local calendar days, weeks, months, quarters and years. These three cards also indicate zoom, support isolating one entity and provide an information icon beside History with compact per-sensor source and unit information. History and Bar Chart include per-sensor min/max/average for the viewed range; Delta Bar Chart adds sums in the same popup. Calendar has its own day/month navigation and does not join graph timeframe synchronization.
 
 Car combines the vehicle and EVCC cards. Enable EVCC integration to show charging data and choose the Controls, Session and EVCC tabs; disable it to choose your own percentage and three entity readings. Compact changes density independently of visible tabs. The standalone EVCC card has been removed. Migrate existing `custom:eleven-evcc-card` dashboards to `custom:eleven-car-card` with `evcc_enabled: true`; retain the entity mappings and other settings. The Climate prototype has also been removed.
 
@@ -89,8 +90,9 @@ For YAML configuration, use these types:
 | Car (beta) | `custom:eleven-car-card` |
 | Weather (beta) | `custom:eleven-weather-card` |
 | Energy Flow (beta) | `custom:eleven-energy-flow-card` |
+| Camera (beta) | `custom:eleven-camera-card` |
 
-Overview, Heatmap, Calendar, Car, Weather and Energy Flow are local betas in this working tree; they have not been published as a HACS release.
+Overview, Heatmap, Calendar, Car, Weather, Energy Flow and Camera are local betas in this working tree; they have not been published as a HACS release.
 
 The card documentation linked above includes YAML examples and option details.
 

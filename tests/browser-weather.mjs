@@ -173,12 +173,12 @@ try {
  card.hass={...hass,connection:{subscribeMessage:async()=>{throw Error('Synthetic subscription failure');}}};await Promise.resolve();await Promise.resolve();
  check('subscription failure has a retry action',!!query('.retry')&&card._forecastStatus==='error');
  card.hass=hass;await Promise.resolve();check('reconnection restores forecast',query('.forecast-list li')&&card._forecastStatus==='ready');
- const editor=await card.constructor.getConfigElement();editor.setConfig(config);editor.hass=hass;document.getElementById('editor').append(editor);
+ const editor=await card.constructor.backgroundBaseCard.getConfigElement();editor.setConfig(config);editor.hass=hass;document.getElementById('editor').append(editor);
  const editorSchema=()=>{const flatten=items=>items.flatMap(item=>[item,...flatten(item.schema??[])]);return flatten(editor._form._schema);};
  check('visual editor offers entity and forecast choices',editorSchema().some(f=>f.name==='entity')&&editorSchema().some(f=>f.name==='forecast_type'));
  check('visual editor offers compact layout and both metric selectors',['compact','metric_primary','metric_secondary'].every(name=>editorSchema().some(f=>f.name===name)));
  check('editor offers both approved icon styles',editorSchema().find(f=>f.name==='icon_style')?.selector.select.options.map(item=>item.value).join(',')==='classic,glass,neon');
- check('visual editor offers backgrounds and animation toggle',editorSchema().find(f=>f.name==='background')?.selector.select.options.length===8&&editorSchema().some(f=>f.name==='animate_icons'));
+ check('visual editor offers backgrounds and animation toggle',editorSchema().find(f=>f.name==='background')?.selector.select.options.length===(await import('/shared/header-backgrounds.js')).HEADER_BACKGROUNDS.length&&editorSchema().some(f=>f.name==='animate_icons'));
  editor.setConfig({...config,compact:true});
  check('compact editor offers visible tabs and hides the redundant default for a single forecast',editorSchema().find(f=>f.name==='tabs')?.selector.select.multiple&&!editorSchema().some(f=>f.name==='forecast_type')&&editorSchema().some(f=>f.name==='forecast_hourly_fields'));
  check('editor offers wide field configuration',editorSchema().some(item=>item.name==='metric_status')&&editorSchema().some(item=>item.name==='metric_status_icon'));
@@ -269,7 +269,7 @@ try {
  card.setConfig({...config,title:'<img src=x onerror=alert(1)>'});check('configured title is escaped',!query('img')&&query('ha-card').getAttribute('aria-label').includes('<img'));card.setConfig(config);
  await import('/cards/weather-card/dist/eleven-weather-card-test.js');const test=document.createElement('eleven-weather-card-test');test.setConfig({...config,type:'custom:eleven-weather-card-test'});test.hass=hass;document.body.append(test);await Promise.resolve();
  check('standalone test card coexists with normal card',test.constructor!==card.constructor&&!!test.shadowRoot.querySelector('.forecast-list'));
- const testEditor=await test.constructor.getConfigElement();check('test editor has a distinct name',testEditor.tagName==='ELEVEN-WEATHER-EDITOR-TEST');test.remove();
+ const testEditor=await test.constructor.backgroundBaseCard.getConfigElement();check('test editor has a distinct name',testEditor.tagName==='ELEVEN-WEATHER-EDITOR-TEST');test.remove();
  card.hass={...hass,language:'en',locale:{language:'en'},themes:{darkMode:false}};check('English and light theme render',query('.weather-status .ui-metric-value').textContent==='Sunny'&&query('.content').dataset.dark==='false');card.hass=hass;
  return checks;
  })()`);

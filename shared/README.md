@@ -1,5 +1,19 @@
 # Shared UI components
 
+## Shared backgrounds for every card
+
+All eleven released cards expose the same background editor through [card-background.js](card-background.js). The native editor and its events remain available inside this wrapper. [card-background-build.mjs](../scripts/card-background-build.mjs) attaches the adapter to standalone registrations in a private scope; the security card already uses the mixin in its source. Older cards pass `preserveNative: true`: without an explicit `card_background`, their original background renderer and YAML settings remain active. Selecting a shared design writes `card_background` and hides duplicate native background fields.
+
+`CARD_BACKGROUND_CHOICES` in [ui-card-background.js](ui-card-background.js) is the approved editor catalog: Aurora sky, Silk Flow, Atmospheric flow, Ink bloom, Holographic grid, Satin waves, Isometric depth, Comet trails and Lenticular glow. Other catalog entries remain readable for legacy YAML. The four new designs use the common palette, transparency, coverage, visibility pause and reduced-motion controls. Top-section backgrounds fade gradually from 45% via a translucent stop at 78% to transparent at 100%; whole-card backgrounds have no mask.
+
+[Background integration example](qa/backgrounds.html) renders all eleven cards with synthetic entities and checks editor round trips, artwork, fade and animation controls. Run `node tests/browser-backgrounds.mjs` with Node.js 22 and Chrome for checks without screenshots.
+
+## Theme opt-in for the security card
+
+The security card adopts the released v0.3.3 `card-theme.js`, `ui-action-button.js`, `ui-card-background.js` and `card-background.js` helpers. `ui-balanced-tabs.js` contains the released opt-in balanced tab styles, kept separate so existing cards retain their current defaults in this feature checkout. The optional theme owns Material palettes and shadow recipes; ordinary Home Assistant themes do not receive a hardcoded Material fallback. The camera adapter supplies semantic well/control roles and keeps identity rows compact. `withCardBackground()` wraps both the existing renderer and visual editor, preserving legacy YAML while defaulting new configurations to no decorative background.
+
+Editors may opt into placing the shared background controls inside their own hierarchy by exposing a `cardBackgroundSlot` name and a matching shadow-DOM slot. The wrapper retains ownership of configuration and events; editors without this property keep their existing layout.
+
 These small components render native HTML into the caller's existing shadow root. They do not register custom elements or require a framework. History, Bar Chart, Timeline and Heatmap use them through their shared header, period controls and information panel.
 
 Include each available style function once in the shadow root. `cardHeaderStyles()` includes the button and popup styles; `periodControlsStyles()` includes the tab styles. The legend uses each card's existing layout and swatch styles.

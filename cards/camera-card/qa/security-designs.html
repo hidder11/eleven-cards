@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Eleven Security · nieuwe ontwerpen</title>
+  <link rel="stylesheet" href="security-designs.css">
+  <script type="module" src="security-designs.js"></script>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <span class="eyebrow">ELEVEN CARDS / ONTWERPSTUDIE 02</span>
+      <h1>Vier blikken op beveiliging.</h1>
+      <p>Dezelfde woning, dezelfde gegevens. Vier verschillende manieren om direct te zien wat aandacht vraagt.</p>
+    </header>
+    <form class="toolbar" aria-label="Voorbeelden vergelijken" onsubmit="return false">
+      <label>Situatie<select id="scenario"><option value="quiet">Alles gesloten</option><option value="person">Persoon bij voordeur</option><option value="open">Raam keuken open</option><option value="alarm">Alarm actief</option><option value="unknown">Gegevens onbekend</option></select></label>
+      <label>Kaartbreedte<select id="width"><option value="standard">Standaard · 440 px</option><option value="narrow">Smal · 280 px</option><option value="wide">Breed · 560 px</option></select></label>
+      <label>Thema<select id="theme"><option value="dark">Donker</option><option value="light">Licht</option></select></label>
+      <label>Achtergrond optie 1<select id="background"></select></label>
+      <span class="fixture-note">Interactieve voorbeelden · fictieve gegevens</span>
+    </form>
+    <section class="examples" aria-label="Vier nieuwe ontwerpen">
+      <article><div class="study-heading"><span class="number">01</span><div><h2>In één oogopslag</h2><p>Compact zoals Weather. Status en contacten eerst, camerabeelden als rustige onderstrook.</p></div></div><security-design variant="glance"></security-design><p class="try">Probeer: klik op Deuren of Ramen voor de afzonderlijke sensoren.</p></article>
+      <article><div class="study-heading"><span class="number">02</span><div><h2>Een venster op buiten</h2><p>Het beeld voorop. Eén grote camera met een vaste statusbalk en een subtiele filmstrook.</p></div></div><security-design variant="window"></security-design><p class="try">Probeer: kies een andere camera onder het hoofdbeeld.</p></article>
+      <article><div class="study-heading"><span class="number">03</span><div><h2>Rondom het huis</h2><p>Ruimtelijk zoals Energy Flow. Een schematische plattegrond verbindt contacten en camera’s.</p></div></div><security-design variant="plan"></security-design><p class="try">Probeer: selecteer een ruimte in de plattegrond.</p></article>
+      <article><div class="study-heading"><span class="number">04</span><div><h2>Het verhaal van vandaag</h2><p>Chronologisch zoals Timeline en Calendar. Gebeurtenissen met het bijbehorende huidige camerabeeld.</p></div></div><security-design variant="journal"></security-design><p class="try">Probeer: open een gebeurtenis om het huidige beeld te bekijken.</p></article>
+    </section>
+    <footer>Ontwerpvoorbeelden, geen live dashboard. Getekende camerabeelden; geen opnamen of echte apparaten. Gedeelde Eleven-typografie, meetvlakken, tabbladen en Home Assistant-themakleuren.</footer>
+  </main>
+</body>
+</html>

@@ -1,17 +1,17 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 const root=new URL('../',import.meta.url),directory=new URL('.cache/home-assistant-test/',root);
 let source=await readFile(new URL('dist/eleven-cards.js',root),'utf8');
-const names=['eleven-energy-flow-card','eleven-energy-flow-editor','eleven-car-card','eleven-car-editor','eleven-dynamic-energy-price-card','eleven-history-graph-card','eleven-timeline-card','eleven-overview-card','eleven-bar-chart','eleven-heatmap-card','eleven-calendar-card','eleven-weather-card','eleven-weather-editor','eleven-energy-editor','eleven-history-graph-editor','eleven-timeline-editor','eleven-overview-editor','eleven-heatmap-editor','eleven-calendar-editor'];
+const names=['eleven-card-background-editor','eleven-camera-card','eleven-camera-editor','eleven-energy-flow-card','eleven-energy-flow-editor','eleven-car-card','eleven-car-editor','eleven-dynamic-energy-price-card','eleven-history-graph-card','eleven-timeline-card','eleven-overview-card','eleven-bar-chart','eleven-heatmap-card','eleven-calendar-card','eleven-weather-card','eleven-weather-editor','eleven-energy-editor','eleven-history-graph-editor','eleven-timeline-editor','eleven-overview-editor','eleven-heatmap-editor','eleven-calendar-editor'];
 for(const name of names)source=source.replaceAll(name,name+'-test');
 // Bar Chart's editor contains its card name and was renamed with it above.
 source=source.replaceAll("name:'Eleven ","name:'Eleven Test ").replaceAll("name: 'Eleven ","name: 'Eleven Test ");
 await mkdir(directory,{recursive:true});
 await writeFile(new URL('eleven-cards-test.js',directory),'// Local test collection with separate card/editor names.\n'+source);
-await writeFile(new URL('LEESMIJ.md',directory),'# Eleven Cards lokaal testen\n\nLees LEESMIJ-TIJDVAK.md voor de actuele testcollectie met tien kaarten en de installatie-instructies.\n');
+await writeFile(new URL('LEESMIJ.md',directory),'# Eleven Cards lokaal testen\n\nLees LEESMIJ-TIJDVAK.md voor de actuele testcollectie met elf kaarten en de installatie-instructies.\n');
 await writeFile(new URL('LEESMIJ-TIJDVAK.md',directory),`# Tijdvaksynchronisatie testen
 
 1. Kopieer eleven-cards-test.js naar /config/www/eleven-cards-test.js in Home Assistant.
-2. Voeg /local/eleven-cards-test.js?v=energy-flow-3 toe als JavaScript-module bij de dashboardbronnen. Bestaat deze resource al, wijzig alleen de versie achter ?v=.
+2. Voeg /local/eleven-cards-test.js?v=security-editor-4 toe als JavaScript-module bij de dashboardbronnen. Bestaat deze resource al, wijzig alleen de versie achter ?v=.
 3. Herlaad met Ctrl+F5. Dupliceer de te testen kaarten en gebruik de testtypes hieronder. De normale Eleven-resource kan blijven staan.
 
     custom:eleven-history-graph-card-test
@@ -19,11 +19,14 @@ await writeFile(new URL('LEESMIJ-TIJDVAK.md',directory),`# Tijdvaksynchronisatie
     custom:eleven-timeline-card-test
     custom:eleven-heatmap-card-test
     custom:eleven-car-card-test
+    custom:eleven-camera-card-test
     custom:eleven-energy-flow-card-test
     custom:eleven-weather-card-test
     custom:eleven-calendar-card-test
     custom:eleven-overview-card-test
     custom:eleven-dynamic-energy-price-card-test
+
+De camerakaart gebruikt nu vijf inklapbare configuratiesecties: Camera’s, Alarm, Deuren en ramen, Activiteiten en Weergave. Camera-instellingen en contactnamen staan genest bij de bijbehorende entiteiten; de gedeelde Achtergrond-instellingen staan binnen Weergave. Alarm tonen en Deuren en ramen tonen zijn onafhankelijk. Bestaande YAML blijft ondersteund; show_alarm en show_contacts vallen terug op show_security wanneer ze niet zijn opgegeven. Activiteiten ondersteunen geschiedenis, samenvoegen binnen dezelfde minuut en gebeurtenissen per pagina. Gekoppelde contactsensoren blijven activiteiten leveren als hun overzicht verborgen is. Gebruik je eigen entiteiten en controleer streams en bediening in je eigen Home Assistant-client.
 
 4. Zet bij de grafiekkaarten Tijdvak synchroniseren aan en vul dezelfde Synchronisatiegroep in, bijvoorbeeld energie. In YAML:
 
@@ -41,7 +44,7 @@ De samengevoegde autokaart is beschikbaar als custom:eleven-car-card-test. Zonde
 
 De weerkaart zit in dezelfde testcollectie als EVCC. Gebruik custom:eleven-weather-card-test met entity: weather.jouw_weerentiteit. De editor gebruikt inklapbare secties zoals de autokaart. Kies per gegevensveld een weerwaarde of eigen entiteit met eigen label, attribuut, eenheid en decimalen. Onder Tabbladen kies je Per uur, Per dag, beide of geen; een expliciete tabs-lijst geldt ook in compact. Bestaande compact_forecast-configuraties blijven werken. Onder Weergave > Achtergrond staan ook Aurora sky (aurora), Cloud layers (clouds) en Atmospheric flow (isobars). Onder Weergave > Icoonstijl kies je Klassiek (classic), Liquid glass (glass) of Neon (neon). De nieuwe sets ondersteunen alle 15 weerstatussen, met een neutraal icoon bij ontbrekende data. Alle achtergronden houden dezelfde headerafmetingen en vervagen binnen de header tot vóór de tabinhoud, ook in compact. Bij slechts een verwachting verdwijnt de tabbediening. Onder Weersverwachting kies je forecast_fields: condition, temperature, templow, precipitation_probability, precipitation, wind_speed, wind_gust_speed, humidity of uv_index. De waarden komen uit je weerintegratie. Onder Verwachting per uur en Verwachting per dag kies je nu aparte velden en decimalen; onder Volgorde wijzig je hun positie. forecast_hourly_fields en forecast_daily_fields overschrijven desgewenst forecast_fields. animate_background en animate_icons werken onafhankelijk. Uiterlijke wijzigingen behouden de verbinding en gekozen tab. Meetwaarden werken bij zonder de afbeelding of scrollpositie te vervangen. Oude uren worden elke minuut verwijderd; dagverwachtingen volgen de kalenderdag in je HA-tijdzone. Animaties pauzeren buiten beeld en in verborgen browsertabbladen, ook op de auto- en EVCC-kaart. De animaties volgen de animatieknop, verbinding en voorkeur voor minder beweging. Laad deze collectie zonder de losse EVCC- of Weather-testmodule.
 
-De energieverdelingskaart is beschikbaar als custom:eleven-energy-flow-card-test. Deze leest automatisch energy/get_prefs en Recorder-statistieken uit Home Assistant. Actueel gebruikt Energy-vermogenssensoren; ontbrekende sensoren kunnen in de editor worden ingesteld. Historisch heeft een eigen periodekiezer, zonder tabs of extra verbruikers.
+De energieverdelingskaart is beschikbaar als custom:eleven-energy-flow-card-test. Deze leest automatisch energy/get_prefs en Recorder-statistieken uit Home Assistant. Actueel gebruikt Energy-vermogenssensoren; ontbrekende sensoren kunnen in de editor worden ingesteld. Historisch heeft een eigen periodekiezer. De prijzentab is verwijderd. Kies bij Prijzen optioneel price_entity en export_price_entity voor de huidige afname- en terugleverprijs in Net · Actueel. De sensorwaarde en een geldige valuta-eenheid per Wh/kWh/MWh volstaan. Historische kosten blijven Recorder gebruiken. De tijdvakselectie gebruikt dezelfde tabstijl. Net toont netto kosten bovenaan, zonder verhoudingbalk of percentages. Woning en Zon gebruiken de nieuwe detailblokken met 8px-balken. In Woning kun je historisch sorteren op verbruik of geschatte kosten; Overig blijft onderaan. Apparaatnamen met een HA-entiteit openen de standaard entiteitsdetails. Geschatte apparaatkosten komen uit geregistreerde uurtarieven. Ontbrekende uurtarieven worden aangevuld met het gewogen gemiddelde uit hetzelfde tijdvak. Zonder bruikbaar historisch tarief blijft het bedrag onbekend. Het geschatte basisverbruik vereist minstens drie complete nachten aan Energy-bronstatistieken.
 
 
 De EVCC-kaart toont actuele laadgegevens van ha-evcc. Kies de laadvermogensensor van het juiste laadpunt en optioneel een image-entiteit van de auto. Controleer accu, laaddoel, status, sessie, zonne-aandeel en technische details; klik op waarden voor entiteitdetails. Gebruik bij afwijkende namen de entiteitkeuzes onder Entiteiten aanpassen. Deze kaart heeft geen tijdvaksynchronisatie.
@@ -64,4 +67,4 @@ Het losse heatmap-testbestand is niet daarnaast nodig: deze testcollectie bevat 
 
 Opruimen: verwijder de testkaarten en testresource. De normale kaarten blijven hun bestaande types gebruiken.
 `);
-console.log('Built ten test cards and LEESMIJ-TIJDVAK.md.');
+console.log('Built eleven test cards and LEESMIJ-TIJDVAK.md.');

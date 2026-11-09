@@ -169,10 +169,10 @@ try {
   for(let attempt=0;attempt<100 && query('img').naturalWidth===0;attempt++)await new Promise(resolve=>setTimeout(resolve,20));
   check('image recovers on update', !query('img').hidden && query('img').naturalWidth > 0);
   query('[data-ui-tab="session"]').focus();
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed', {detail:{value:{title:'Mijn laadkaart',tabs:['controls','technical'],soc:'sensor.my_battery'}},bubbles:true}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed', {detail:{value:{title:'Mijn laadkaart',tabs:['controls','technical'],soc:'sensor.my_battery'}},bubbles:true}));
   check('visual editor emits configuration including manual override', qa.config.title === 'Mijn laadkaart' && qa.config.entities.soc === 'sensor.my_battery' && !text().includes('Laadsessie'));
   check('hiding the active session tab selects an available panel',!query('[data-ui-tab="session"]') && !query('[data-ui-tab-panel="controls"]').hidden && card.shadowRoot.activeElement.dataset.uiTab==='controls');
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed', {detail:{value:{soc:'',tabs:['controls','session','technical']}},bubbles:true}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed', {detail:{value:{soc:'',tabs:['controls','session','technical']}},bubbles:true}));
   check('clearing override restores detection', !qa.config.entities.soc && card._entities.soc === 'sensor.evcc_driveway_vehicle_soc');
   qa.update('select.evcc_driveway_vehicle_name', {state:'<img src=x onerror=alert(1)>',attributes:{}});
   check('entity text is escaped',query('img').alt.includes('<img') && !query('.picture img img'));
@@ -248,12 +248,13 @@ try {
    qa.update('select.evcc_driveway_mode',{state:mode});
    check('solar preference is available for raw mode '+mode,!!root.querySelector('[data-solar-share]') && root.querySelector('[data-solar-share]').value==='60');
   }
-  const flatten=items=>items.flatMap(item=>[item,...flatten(item.schema??[])]);const schema=flatten(qa.editor._schema(true)),names=schema.map(field=>field.name);
+  const flatten=items=>items.flatMap(item=>[item,...flatten(item.schema??[])]);const schema=flatten(qa.editor._nativeEditor._schema(true)),names=schema.map(field=>field.name);
+  const catalog=(await import('/shared/header-backgrounds.js')).HEADER_BACKGROUNDS.map(row=>row.value);
   const designs=['lanes','halo','ribbon','prism-glass','eclipse','aurora','clouds','isobars'];
-  check('background dropdown includes all eight designs',JSON.stringify(schema.find(f=>f.name==='background').selector.select.options.map(o=>o.value))===JSON.stringify(designs));
+  check('native background dropdown retains the legacy catalog',JSON.stringify(schema.find(f=>f.name==='background').selector.select.options.map(o=>o.value))===JSON.stringify(catalog));
   check('existing configurations default to Energy Lanes',card._config.background==='lanes');
   for(const design of designs){
-   qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{background:design}}}));
+   qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{background:design}}}));
    check('editor persists background '+design,qa.config.background===design && root.querySelector('.content').dataset.background===design);
    for(const dark of [false,true])for(const width of [280,420]){
     document.querySelector('#host').style.width=width+'px';
@@ -263,10 +264,10 @@ try {
     check('native theme palette '+design+' '+dark,getComputedStyle(content).getPropertyValue('--tone').trim()===(dark?'#f2c451':'#896400'));
    }
   }
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{background:'lanes'}}}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{background:'lanes'}}}));
 
   check('editor exposes image scale and omits the old vehicle name',names.includes('image_scale') && !names.includes('vehicle_name'));
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_scale:125,vehicle_name:'obsolete'}}}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_scale:125,vehicle_name:'obsolete'}}}));
   check('editor saves the image size and strips the obsolete name',qa.config.image_scale===125 && !Object.hasOwn(qa.config,'vehicle_name') && root.querySelector('.content').style.getPropertyValue('--evcc-image-scale')==='1.25');
   for(const width of [260,280,320,420,700]){
    document.querySelector('#host').style.width=width+'px';let previous=0,stageHeight,sceneHeight,pictureHeight;
@@ -288,14 +289,14 @@ try {
    document.querySelector('#host').style.width=width+'px';
    let sceneHeight,previousTop;
    for(const offset of [-150,0,150]){
-    qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_offset_y:offset,image_scale:scale}}}));
+    qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_offset_y:offset,image_scale:scale}}}));
     const image=root.querySelector('.picture img').getBoundingClientRect(),viewport=root.querySelector('.picture').getBoundingClientRect(),scene=root.querySelector('.header-scene').getBoundingClientRect(),track=root.querySelector('.battery-track').getBoundingClientRect();
     sceneHeight??=scene.height;
     check('vertical position persists without resizing or horizontal shift '+width+' '+scale+' '+offset,qa.config.image_offset_y===offset && scene.height===sceneHeight && Math.abs(image.left+image.width/2-(viewport.left+viewport.width/2))<1 && (previousTop===undefined || Math.abs(image.top-previousTop-150)<1) && Math.min(image.bottom,viewport.bottom)<=track.top-7);
     previousTop=image.top;
    }
   }
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_offset_y:0,image_scale:100}}}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_offset_y:0,image_scale:100}}}));
   check('charging without explicit plan status uses neutral wording',root.querySelector('.charging-status .ui-metric-value').textContent==='Laden');
   qa.update('binary_sensor.evcc_driveway_plan_active',{state:'on'});
   check('active charging plan is detected from the selected loadpoint',card._entities.plan_active==='binary_sensor.evcc_driveway_plan_active' && root.querySelector('.charging-status .ui-metric-value').textContent==='Laden' && root.querySelector('.charging-status .ui-metric-info').textContent==='Volgens laadplanning' && root.querySelector('.content').dataset.tone==='planned' && root.querySelector('.content').dataset.view==='charging');
@@ -343,7 +344,7 @@ try {
   await new Promise(resolve=>setTimeout(resolve,0));
   if(!card.shadowRoot.querySelector('.gallery-top') || !card.shadowRoot.querySelector('[data-mode=pv]'))throw Error('separate test card did not render');
   const editor=await card.constructor.getConfigElement();
-  if(editor.tagName!=='ELEVEN-CAR-EDITOR-TEST' || card.constructor===evccQA.card.constructor)throw Error('test and regular card/editor names overlap');
+  if(editor.tagName!=='ELEVEN-CAR-BACKGROUND-EDITOR-TEST'||editor._nativeEditor.tagName!=='ELEVEN-CAR-EDITOR-TEST' || card.constructor===evccQA.card.constructor)throw Error('test and regular card/editor names overlap');
   card.remove();
  })()`);
  assert.deepEqual(exceptions,[],'no separate-test-bundle exceptions');

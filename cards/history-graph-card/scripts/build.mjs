@@ -1,3 +1,4 @@
+import {addSharedCardBackgrounds} from '../../../scripts/card-background-build.mjs';
 import {readFile,mkdir,writeFile,rename} from 'node:fs/promises';
 const root=new URL('../',import.meta.url);
 const sources=['../../shared/graph.js','../../shared/ui-surface.js','../../shared/ui-button.js','../../shared/ui-legend.js','../../shared/ui-tabs.js','../../shared/ui-popup.js','../../shared/card-header.js','../../shared/request.js','../../shared/periods.js','../../shared/period-controls.js','../../shared/ui-detail-surface.js','../../shared/chart-insights.js','src/history-utils.js','src/localization.js','src/eleven.js','src/library.js','src/history-graph-card.js'];
@@ -7,6 +8,7 @@ if(!library.includes(`ELEVEN_VERSION='${version}'`))throw new Error('Library/pac
 let bundle=`/* Eleven Cards ${version} — Eleven History Graph Card; standalone, no dependencies. */\n(()=>{\n"use strict";\n`;
 for(const source of sources){const code=await readFile(new URL(source,root),'utf8');bundle+=`\n// ${source}\n`+code.replace(/^import .*?;\n/gm,'').replace(/^export /gm,'');}
 bundle+='\n})();\n';
+bundle=await addSharedCardBackgrounds(bundle);
 await mkdir(new URL('dist/',root),{recursive:true});
 const target=new URL('dist/eleven-history-graph-card.js',root),temporary=new URL(`dist/.history-${process.pid}.tmp`,root);
 await writeFile(temporary,bundle);await rename(temporary,target);
