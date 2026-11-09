@@ -24621,7 +24621,7 @@ function normalizeCameraConfig(input={}){
   }
   return item;
  });
- const {activity_limit:legacyLimit,...settings}=input;
+ const {activity_limit:legacyLimit,background,...settings}=input;
  return {...settings,...normalizeCameraFeatures(input,cameras),cameras,title:typeof input.title==='string'?input.title:'',layout:CAMERA_LAYOUTS.includes(input.layout)?input.layout:'grid',
   columns:[1,2,3].includes(Number(input.columns))?Number(input.columns):'auto',camera_view:input.camera_view==='auto'?'auto':'live',
   aspect_ratio:CAMERA_RATIOS.includes(input.aspect_ratio)?input.aspect_ratio:'16:9',fit_mode:input.fit_mode==='contain'?'contain':'cover',
@@ -24629,7 +24629,8 @@ function normalizeCameraConfig(input={}){
   auto_cycle:input.auto_cycle===true,cycle_interval:Number.isFinite(Number(input.cycle_interval))?Math.max(5,Math.min(3600,Number(input.cycle_interval))):10,
   show_names:input.show_names!==false,compact:(input.compact??(input.density==='compact'))===true,
   color:CAMERA_COLORS.some(item=>item.value===input.color)?input.color:'charging',
-  background:HEADER_BACKGROUNDS.some(item=>item.value===input.background)?input.background:'lanes',
+  // Absence is meaningful: only an explicit background choice opts into decoration.
+  ...(background===undefined?{}:{background:background==='none'||HEADER_BACKGROUNDS.some(item=>item.value===background)?background:'lanes'}),
   background_strength:input.background_strength==null||!Number.isFinite(Number(input.background_strength))?100:Math.max(0,Math.min(100,Number(input.background_strength))),
   animate_background:input.animate_background!==false,
   default_camera:cameras.some(row=>row.show!==false&&row.entity===input.default_camera)?input.default_camera:(cameras.find(row=>row.show!==false)?.entity??'')};

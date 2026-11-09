@@ -104,3 +104,18 @@ test('helper/player errors do not spin requests and can be retried',async()=>{
  player.update({}, {},true);await tick();assert.equal(calls,1);
  player.retry();player.update({}, {},true);await tick();assert.equal(calls,2);assert.equal(statuses.at(-1),'ready');player.stop();
 });
+
+
+test('normalizing unrelated camera settings preserves an absent background choice',()=>{
+ for(const extra of [{},{background:undefined},{card_background:false},{card_background:{enabled:true,variant:'satin-waves'}}]){
+  const config=normalizeCameraConfig({cameras:[],...extra});
+  assert.equal(Object.hasOwn(config,'background'),false);
+  const saved=normalizeCameraConfig({...config,title:'Updated'});
+  assert.equal(Object.hasOwn(saved,'background'),false);
+  assert.deepEqual(saved.card_background,extra.card_background);
+ }
+ for(const background of ['none','lanes','aurora']){
+  const saved=normalizeCameraConfig({...normalizeCameraConfig({cameras:[],background}),title:'Updated'});
+  assert.equal(saved.background,background);
+ }
+});
