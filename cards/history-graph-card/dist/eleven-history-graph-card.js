@@ -849,11 +849,19 @@ function bindUITabs({tabs,panels,onSelect=()=>{}}){
  }
  return {select,disconnect(){cleanups.splice(0).forEach(remove=>remove());}};
 }
+// One underline recipe for standard and balanced card tabs. Keep the accent
+// above the divider; a negative margin would make the two lines overlap.
+function uiTabIndicatorStyles({strip='[data-ui-tabs]',tab=strip+' [role=tab]',color='var(--primary-color,#2196f3)'}={}){return `
+${strip}{border-bottom:1px solid var(--divider-color,#ddd)}
+${tab}{margin-bottom:0;border-bottom:2px solid transparent}
+${tab}[aria-selected=true]{border-bottom-color:${color}}
+`;}
 function uiTabsStyles(){return `
-[data-ui-tabs]{display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid var(--divider-color,#ddd)}
-[data-ui-tabs] [role="tab"]{flex:1;justify-content:center;min-width:0;min-height:36px;padding:8px 3px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--secondary-text-color,#666);white-space:nowrap}
+[data-ui-tabs]{display:flex;align-items:flex-end;gap:8px}
+[data-ui-tabs] [role="tab"]{flex:1;justify-content:center;min-width:0;min-height:36px;padding:8px 3px;border:0;border-radius:0;background:transparent;color:var(--secondary-text-color,#666);white-space:nowrap}
 [data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
-[data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
+[data-ui-tabs] [role="tab"][aria-selected="true"]{color:var(--primary-color,#2196f3);font-weight:600}
+${uiTabIndicatorStyles()}
 [data-ui-tab-panel][hidden]{display:none!important}
 [data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
 [data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}

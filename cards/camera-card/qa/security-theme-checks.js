@@ -39,7 +39,7 @@ try{
   card.setConfig(originalConfig);card.hass=originalHass;
   change('#alarm-mode','armed_away');change('#view','windows');await tick();
   const strip=root.querySelector('[role=tablist]'),selected=strip.querySelector('[aria-selected=true]'),bounds=strip.getBoundingClientRect(),tab=selected.getBoundingClientRect();
-  check(label+': selected tab is visible with accent underline',tab.left>=bounds.left-1&&tab.right<=bounds.right+1&&getComputedStyle(selected).borderBottomWidth==='2px');
+  check(label+': selected tab is visible with accent underline',tab.left>=bounds.left-1&&tab.right<=bounds.right+1&&getComputedStyle(selected).borderBottomWidth==='2px'&&getComputedStyle(selected).marginBottom==='0px');
   check(label+': navigation follows a custom accent',getComputedStyle(selected).borderBottomColor===color('var(--accent-color)'));
   check(label+': selected alarm follows accent rather than header status',style('[data-alarm-mode][aria-pressed=true]').color===color('var(--eleven-material-selection-color,color-mix(in srgb,var(--accent-color,var(--primary-color)) 40%,var(--primary-text-color)))'));
   check(label+': contact wells use theme base',style('[data-ui-detail-surface]').backgroundColor===style('[data-ui-metric]').backgroundColor&&style('[data-ui-detail-surface]').backgroundImage==='none');
