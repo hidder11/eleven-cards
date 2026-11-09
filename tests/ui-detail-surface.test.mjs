@@ -22,7 +22,7 @@ test('visual percentages clamp to bounds; unknown values have no bar',()=>{
  assert.ok(uiDetailSurface({percent:120}).includes('width:100%'));
  assert.ok(uiDetailSurface({percent:-20}).includes('width:0%'));
  for(const percent of [null,undefined,NaN,Infinity,'50; color:red'])assert.ok(!uiDetailSurface({percent}).includes('ui-detail-surface-track'));
- assert.ok(uiDetailSurfaceStyles().includes('height:8px'));
+ assert.ok(uiDetailSurface({percent:50}).includes('data-ui-bar'));
 });
 test('optional entity makes only the title a safe native details button',()=>{
  const html=uiDetailSurface({title:'Washer <x>',entity:'sensor.washer"<>',actionLabel:'Details "Washer"',metrics:[{label:'Energy',value:0,unit:'kWh'}]});

@@ -1,6 +1,235 @@
 // Eleven Heatmap (beta) 0.3.0 — self-contained standalone module
 (()=>{
-const withSharedCardBackground=(()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false,periodUI=chartUI}={}) {
+ // Segmented groups own their paint; descendants pressing must not press the group.
+ if(chartUI)controls=controls.split(',').filter(selector=>!['.zoom-controls','.chart-links'].includes(selector.trim())).join(',');
+ if(periodUI)controls=[controls,'.period-default [data-ui-button=surface]'].filter(Boolean).join(',');
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${wells?`:is(${wells}):is([data-ui-detail-surface]){background:var(--secondary-background-color,#eee)}`:''}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,var(--eleven-material-inset,transparent))}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${periodUI?`
+.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>[data-period]{position:relative;flex:none}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:4px 6px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+${segmentedControlStyles('.chart-controls','.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period]',{first:'.chart-controls>.period-controls>.period-trigger'})}
+${segmentedControlStyles('.zoom-controls','.zoom-controls>[data-zoom]')}
+${segmentedControlStyles('.chart-links','.chart-links>.history-link,.chart-links>.insight-control>.insight-trigger',{last:'.chart-links>.insight-control>.insight-trigger'})}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
+// A single raised group with separate native button press states; no parent :active.
+function segmentedControlStyles(group,buttons,{first=`:is(${group})>:is(button,a):first-child`,last=`:is(${group})>:is(button,a):last-child`,dividers=`:is(${group})>:not(:first-child)`}={}){return `
+${group}{gap:0;align-items:stretch;background:var(--eleven-material-control-background,var(--secondary-background-color,#eee));box-shadow:var(--eleven-material-control-shadow,var(--eleven-surface-shadow,none));border-radius:var(--eleven-material-radius-button,9px)}
+:is(${buttons}){position:relative;align-self:stretch;height:auto;padding:2px 6px;background:transparent;box-shadow:none;border:0;border-radius:0;min-height:36px;min-width:36px;font-size:12px;box-sizing:border-box}
+:is(${buttons}) svg{width:14px;height:14px}
+${first?`:is(${buttons}):is(${first}){border-start-start-radius:var(--eleven-material-radius-button,9px);border-end-start-radius:var(--eleven-material-radius-button,9px)}`:''}
+${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-material-radius-button,9px);border-end-end-radius:var(--eleven-material-radius-button,9px)}`:''}
+:is(${dividers}){position:relative}
+:is(${dividers})::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--divider-color,#ddd) 55%,transparent);pointer-events:none;z-index:1}
+:is(${buttons}):disabled{opacity:1;color:color-mix(in srgb,var(--primary-text-color,#20252b) 35%,transparent);cursor:default}
+:is(${buttons}):not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none}
+:is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
+:is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+@media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
+
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Calendar periods use the Home Assistant timezone, including DST boundaries.
+const periodZoneFormats=new Map();
+function periodLocalParts(t,zone){
+ let format=periodZoneFormats.get(zone);
+ if(!format){format=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});periodZoneFormats.set(zone,format);}
+ return Object.fromEntries(format.formatToParts(t).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
+}
+function periodLocalEpoch(t,zone){const p=periodLocalParts(t,zone);return Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second);}
+function periodMidnight(nominal,zone){
+ let t=nominal;for(let i=0;i<6;i++){const next=nominal-(periodLocalEpoch(t,zone)-t);if(next===t)return t;t=next;}
+ // Midnight can be skipped by a timezone transition. Use the first valid
+ // instant of that local date rather than oscillating across the transition.
+ let low=nominal-36*3600000,high=nominal+36*3600000;
+ while(high-low>1000){const mid=Math.floor((low+high)/2000)*1000,p=periodLocalParts(mid,zone);if(Date.UTC(p.year,p.month-1,p.day)>=nominal)high=mid;else low=mid;}
+ return high;
+}
+function calendarDayStart(key,zone='UTC'){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(key))return NaN;
+ const nominal=Date.parse(`${key}T00:00:00Z`);
+ return Number.isFinite(nominal)&&new Date(nominal).toISOString().slice(0,10)===key?periodMidnight(nominal,zone||'UTC'):NaN;
+}
+function graphPeriodBounds(t,period,zone='UTC'){
+ zone ||= 'UTC';const p=periodLocalParts(t,zone),size={minute:60000,quarter_hour:900000,hour:3600000}[period];
+ if(size){const local=Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second),a=t-(local%size)-(t%1000);return [a,a+size];}
+ let nominal=Date.UTC(p.year,p.month-1,period==='month'?1:p.day);let next;
+ if(period==='week'){const day=new Date(nominal).getUTCDay();nominal-=((day+6)%7)*86400000;next=nominal+7*86400000;}
+ else if(period==='month')next=Date.UTC(p.year,p.month,1);
+ else next=nominal+86400000;
+ return [periodMidnight(nominal,zone),periodMidnight(next,zone)];
+}
+const periodCalendarModes=['today','week','month','quarter','year'];
+const periodPresetHours={'1h':1,'6h':6,'12h':12,'24h':24,'48h':48,'7d':168,'14d':336,'30d':720,'90d':2160,'365d':8760};
+function periodDateTime(t,zone='UTC'){
+ const p=periodLocalParts(t,zone),pad=n=>String(n).padStart(2,'0');
+ return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+function parsePeriodDateTime(value,zone='UTC',edge='start',previous){
+ if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))return NaN;
+ if(Number.isFinite(previous)&&periodDateTime(previous,zone)===value)return previous;
+ const nominal=Date.parse(value+'Z');if(!Number.isFinite(nominal)||periodDateTime(nominal,'UTC')!==value)return NaN;
+ // Collect the offsets on both sides of a transition. Reject skipped local
+ // times; repeated times include both occurrences unless editing an existing bound.
+ const candidates=new Set();
+ for(let h=-48;h<=48;h+=6){const sample=nominal+h*3600000,offset=periodLocalEpoch(sample,zone)-sample,candidate=nominal-offset;if(periodDateTime(candidate,zone)===value)candidates.add(candidate);}
+ const times=[...candidates].sort((a,b)=>a-b);return times.length?(edge==='end'?times.at(-1):times[0]):NaN;
+}
+function chooseCustomGraphPeriod(host,start,end){
+ if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start||end-start>366*86400000)return false;
+ resetGraphPeriod(host);host._periodMode='custom';host._periodHours=(end-start)/3600000;host._periodEnd=end;
+ publishTimeframe(host);host._reloadPeriod();return true;
+}
+function timeframeSyncConfig(config,{draft=false}={}){
+ if(!draft){
+  if(config.sync_timeframe!==undefined&&typeof config.sync_timeframe!=='boolean')throw Error('sync_timeframe must be a boolean. / Tijdvak synchroniseren moet aan of uit zijn.');
+  for(const key of ['hover_sync_group','timeframe_sync_group'])if(config[key]!=null&&typeof config[key]!=='string')throw Error(`${key} must be text. / De synchronisatiegroep moet tekst zijn.`);
+ }
+ return {sync_timeframe:config.sync_timeframe??false,hover_sync_group:config.hover_sync_group??config.timeframe_sync_group??''};
+}
+function timeframeGroup(host){return host._config?.sync_timeframe===true?((host._config.hover_sync_group??host._config.timeframe_sync_group)?.trim()||'default'):null;}
+function timeframeGroups(){
+ const root=globalThis.window??globalThis,key=Symbol.for('eleven-cards.timeframe-sync.v1');
+ return root[key]??=new Map();
+}
+function applyTimeframe(host,selection){
+ // Default is a group-wide reset to each card's own configured range (or
+ // native price window), rather than a copy of the sender's hours.
+ if(selection.mode==='configured'&&selection.offset===0){resetGraphPeriod(host);return;}
+ host._sharedTimeframe=selection;
+ Object.assign(host,{_periodMode:selection.mode,_periodHours:selection.hours,_periodEnd:selection.end,_periodOffset:selection.offset,_periodAnchor:selection.anchor});
+}
+function disconnectTimeframeSync(host){
+ host._disconnectTimeframeSync?.();host._disconnectTimeframeSync=null;
+}
+function connectTimeframeSync(host){
+ disconnectTimeframeSync(host);
+ const group=timeframeGroup(host);if(group===null||!host._connected)return;
+ const groups=timeframeGroups();let entry=groups.get(group);
+ if(!entry){entry={selection:null,listeners:new Set()};groups.set(group,entry);}
+ const receive=(selection,source)=>{
+  if(source===host||host._sharedTimeframe===selection)return;
+  applyTimeframe(host,selection);host._reloadPeriod();
+ };
+ entry.listeners.add(receive);
+ host._disconnectTimeframeSync=()=>entry.listeners.delete(receive);
+ // Joining never publishes this card's default over an existing selection.
+ if(entry.selection)applyTimeframe(host,entry.selection);
+}
+function publishTimeframe(host){
+ const group=timeframeGroup(host);if(group===null||!host._connected)return;
+ const entry=timeframeGroups().get(group);if(!entry)return;
+ const selection={group,mode:host._periodMode,hours:host._periodHours??host._config.hours_to_show,
+  end:host._periodEnd,offset:host._periodOffset,anchor:host._periodAnchor,zone:host._hass?.config?.time_zone||'UTC',at:Date.now()};
+ selection.range=localGraphPeriodRange(host,selection.at);
+ entry.selection=selection;applyTimeframe(host,selection);
+ for(const receive of entry.listeners)receive(selection,host);
+}
+function resetGraphPeriod(host){host._sharedTimeframe=null;host._periodMode='configured';host._periodHours=null;host._periodEnd=null;host._periodOffset=0;host._periodAnchor=null;host._periodMenuOpen=false;host._periodMenuPending=false;host._periodCustomDraft=null;host._periodTab=null;host._insightPending=null;}
+function graphPeriodRange(host,now=Date.now()){
+ const shared=host._sharedTimeframe;
+ if(shared&&timeframeGroup(host)===shared.group){
+  // One clock and timezone for the whole group, including separate bundles.
+  // Live selections advance together on the minute; historical ranges stay fixed.
+  if(shared.offset===0&&shared.end==null&&(Math.floor(now/60000)!==Math.floor(shared.at/60000))){
+   shared.at=now;shared.range=localGraphPeriodRange({_periodMode:shared.mode,_periodHours:shared.hours,_periodOffset:0,_hass:{config:{time_zone:shared.zone}}},now);
+  }
+  return {...shared.range};
+ }
+ return localGraphPeriodRange(host,now);
+}
+function localGraphPeriodRange(host,now){
+ const mode=host._periodMode,offset=host._periodOffset??0;
+ if(periodCalendarModes.includes(mode)){
+  const zone=host._hass?.config?.time_zone||'UTC',p=periodLocalParts(host._periodAnchor??now,zone);
+  let nominal,finishNominal;
+  if(mode==='week'){
+   nominal=Date.UTC(p.year,p.month-1,p.day);nominal+=(offset*7-(new Date(nominal).getUTCDay()+6)%7)*86400000;finishNominal=nominal+7*86400000;
+  }else if(mode==='month'||mode==='quarter'){
+   const size=mode==='quarter'?3:1,month=(mode==='quarter'?Math.floor((p.month-1)/3)*3:p.month-1)+offset*size;
+   nominal=Date.UTC(p.year,month,1);finishNominal=Date.UTC(p.year,month+size,1);
+  }else if(mode==='year'){nominal=Date.UTC(p.year+offset,0,1);finishNominal=Date.UTC(p.year+offset+1,0,1);}
+  else{nominal=Date.UTC(p.year,p.month-1,p.day+offset);finishNominal=nominal+86400000;}
+  const start=periodMidnight(nominal,zone),finish=periodMidnight(finishNominal,zone);
+  return {start,end:Math.max(start+1,Math.min(now,finish))};
+ }
+ const end=host._periodEnd??now;
+ return {start:end-(host._periodHours??host._config.hours_to_show)*3600000,end};
+}
+function chooseGraphPeriod(host,value){
+ const calendar=value==='configured'||periodCalendarModes.includes(value),hours=periodPresetHours[value]??Number(value);
+ if(!calendar&&(!Number.isFinite(hours)||hours<1||hours>8760))return;
+ resetGraphPeriod(host);
+ host._periodMode=calendar?value:Object.entries(periodPresetHours).find(([,h])=>h===hours)?.[0]??String(value);
+ if(!calendar)host._periodHours=hours;
+ publishTimeframe(host);
+ return host._reloadPeriod();
+}
+function moveGraphPeriod(host,direction){
+ if(![-1,0,1].includes(direction))return;
+ if(host._periodMode==='custom'){
+  if(direction===0){host._periodEnd=null;host._periodOffset=0;}
+  else{const end=(host._periodEnd??Date.now())+direction*host._periodHours*3600000;host._periodEnd=direction>0?Math.min(Date.now(),end):end;host._periodOffset=(host._periodOffset??0)+direction;}
+  host._periodCustomDraft=null;host._periodTab=null;host._sharedTimeframe=null;publishTimeframe(host);return host._reloadPeriod();
+ }
+ if(direction===0){host._periodOffset=0;host._periodEnd=null;host._periodAnchor=null;}
+ else{
+  const previous=host._periodOffset??0;
+  const calendar=periodCalendarModes.includes(host._periodMode);
+  if(previous===0)host._periodAnchor=calendar?Date.now():host._status==='ready'?(host._end??Date.now()):Date.now();
+  host._periodOffset=Math.min(0,previous+direction);
+  if(host._periodOffset===0)host._periodAnchor=null;
+  if(!calendar){
+   host._periodEnd=host._periodOffset===0?null:host._periodAnchor+host._periodOffset*(host._periodHours??host._config.hours_to_show)*3600000;
+  }
+ }
+ host._sharedTimeframe=null;
+ publishTimeframe(host);
+ return host._reloadPeriod();
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -35,6 +264,24 @@ function uiButtonStyles(){return `
 [data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
 [data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
 [data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
+`;}
+
+
+// Opt-in ordinary actions. Legacy uiButtonStyles() and its callers stay unchanged.
+// The active HA theme supplies paint; variants distinguish commands from choices.
+function uiActionButtonStyles(){return uiButtonStyles()+`
+[data-ui-button^="action"]{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;flex:none;gap:8px;min-width:44px;min-height:44px;width:auto;max-width:100%;overflow-wrap:break-word;height:auto;padding:8px 12px;border:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));font:inherit;font-size:13px;font-weight:500;line-height:1.4;text-align:center;white-space:normal;color:var(--primary-text-color);background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);transform:none;text-decoration:none;cursor:pointer;transition:background 120ms ease-out,transform 120ms ease-out,box-shadow 120ms ease-out}
+[data-ui-button="action-icon"]{width:44px;padding:8px}
+[data-ui-button^="action"]:not(:disabled):hover{background:var(--eleven-material-control-hover-background,color-mix(in srgb,var(--primary-text-color) 5%,var(--secondary-background-color,transparent)))}
+[data-ui-button^="action"]:not(:disabled):active{transform:translateY(1px);box-shadow:var(--eleven-material-well,none)}
+[data-ui-button^="action"]:focus-visible{outline:2px solid var(--eleven-material-focus-color,color-mix(in srgb,var(--accent-color,var(--primary-color,#2196f3)) 60%,var(--primary-text-color,currentColor)));outline-offset:-2px}
+[data-ui-button^="action"]:disabled{opacity:.45;cursor:default;transform:none}
+[data-ui-button="action-choice"][aria-pressed="true"]{color:var(--eleven-material-selection-color,color-mix(in srgb,var(--accent-color,var(--primary-color)) 40%,var(--primary-text-color)));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);transform:translateY(1px)}
+[data-ui-button="action-choice"][aria-pressed="true"]:not(:disabled):hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+[data-ui-button="action-choice"][aria-pressed="true"]:not(:disabled):active{transform:translateY(1px);box-shadow:var(--eleven-material-selection-well,none)}
+[data-ui-button="action-danger"]{color:var(--eleven-material-danger-color,color-mix(in srgb,var(--error-color) 55%,var(--primary-text-color)));border:1px solid var(--error-color)}
+@media(prefers-reduced-motion:reduce){[data-ui-button^="action"]{transition:none}}
+@media(forced-colors:active){[data-ui-button^="action"]{color:ButtonText;background:ButtonFace;border:1px solid ButtonText;box-shadow:none}[data-ui-button^="action"]:focus-visible{outline-color:Highlight}[data-ui-button="action-choice"][aria-pressed="true"]{color:HighlightText;background:Highlight;box-shadow:none}}
 `;}
 
 
@@ -598,207 +845,6 @@ class ElevenCardBackgroundEditor extends HTMLElement{
  }
 }
 
-return Base=>withCardBackground(Base,{preserveNative:true});
-})();
-function retryDelay(failures, base = 60000, maximum = 300000) {
-  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
-}
-
-// Calendar periods use the Home Assistant timezone, including DST boundaries.
-const periodZoneFormats=new Map();
-function periodLocalParts(t,zone){
- let format=periodZoneFormats.get(zone);
- if(!format){format=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});periodZoneFormats.set(zone,format);}
- return Object.fromEntries(format.formatToParts(t).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
-}
-function periodLocalEpoch(t,zone){const p=periodLocalParts(t,zone);return Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second);}
-function periodMidnight(nominal,zone){
- let t=nominal;for(let i=0;i<6;i++){const next=nominal-(periodLocalEpoch(t,zone)-t);if(next===t)return t;t=next;}
- // Midnight can be skipped by a timezone transition. Use the first valid
- // instant of that local date rather than oscillating across the transition.
- let low=nominal-36*3600000,high=nominal+36*3600000;
- while(high-low>1000){const mid=Math.floor((low+high)/2000)*1000,p=periodLocalParts(mid,zone);if(Date.UTC(p.year,p.month-1,p.day)>=nominal)high=mid;else low=mid;}
- return high;
-}
-function calendarDayStart(key,zone='UTC'){
- if(!/^\d{4}-\d{2}-\d{2}$/.test(key))return NaN;
- const nominal=Date.parse(`${key}T00:00:00Z`);
- return Number.isFinite(nominal)&&new Date(nominal).toISOString().slice(0,10)===key?periodMidnight(nominal,zone||'UTC'):NaN;
-}
-function graphPeriodBounds(t,period,zone='UTC'){
- zone ||= 'UTC';const p=periodLocalParts(t,zone),size={minute:60000,quarter_hour:900000,hour:3600000}[period];
- if(size){const local=Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second),a=t-(local%size)-(t%1000);return [a,a+size];}
- let nominal=Date.UTC(p.year,p.month-1,period==='month'?1:p.day);let next;
- if(period==='week'){const day=new Date(nominal).getUTCDay();nominal-=((day+6)%7)*86400000;next=nominal+7*86400000;}
- else if(period==='month')next=Date.UTC(p.year,p.month,1);
- else next=nominal+86400000;
- return [periodMidnight(nominal,zone),periodMidnight(next,zone)];
-}
-const periodCalendarModes=['today','week','month','quarter','year'];
-const periodPresetHours={'1h':1,'6h':6,'12h':12,'24h':24,'48h':48,'7d':168,'14d':336,'30d':720,'90d':2160,'365d':8760};
-function periodDateTime(t,zone='UTC'){
- const p=periodLocalParts(t,zone),pad=n=>String(n).padStart(2,'0');
- return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
-}
-function parsePeriodDateTime(value,zone='UTC',edge='start',previous){
- if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))return NaN;
- if(Number.isFinite(previous)&&periodDateTime(previous,zone)===value)return previous;
- const nominal=Date.parse(value+'Z');if(!Number.isFinite(nominal)||periodDateTime(nominal,'UTC')!==value)return NaN;
- // Collect the offsets on both sides of a transition. Reject skipped local
- // times; repeated times include both occurrences unless editing an existing bound.
- const candidates=new Set();
- for(let h=-48;h<=48;h+=6){const sample=nominal+h*3600000,offset=periodLocalEpoch(sample,zone)-sample,candidate=nominal-offset;if(periodDateTime(candidate,zone)===value)candidates.add(candidate);}
- const times=[...candidates].sort((a,b)=>a-b);return times.length?(edge==='end'?times.at(-1):times[0]):NaN;
-}
-function chooseCustomGraphPeriod(host,start,end){
- if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start||end-start>366*86400000)return false;
- resetGraphPeriod(host);host._periodMode='custom';host._periodHours=(end-start)/3600000;host._periodEnd=end;
- publishTimeframe(host);host._reloadPeriod();return true;
-}
-function timeframeSyncConfig(config,{draft=false}={}){
- if(!draft){
-  if(config.sync_timeframe!==undefined&&typeof config.sync_timeframe!=='boolean')throw Error('sync_timeframe must be a boolean. / Tijdvak synchroniseren moet aan of uit zijn.');
-  for(const key of ['hover_sync_group','timeframe_sync_group'])if(config[key]!=null&&typeof config[key]!=='string')throw Error(`${key} must be text. / De synchronisatiegroep moet tekst zijn.`);
- }
- return {sync_timeframe:config.sync_timeframe??false,hover_sync_group:config.hover_sync_group??config.timeframe_sync_group??''};
-}
-function timeframeGroup(host){return host._config?.sync_timeframe===true?((host._config.hover_sync_group??host._config.timeframe_sync_group)?.trim()||'default'):null;}
-function timeframeGroups(){
- const root=globalThis.window??globalThis,key=Symbol.for('eleven-cards.timeframe-sync.v1');
- return root[key]??=new Map();
-}
-function applyTimeframe(host,selection){
- // Default is a group-wide reset to each card's own configured range (or
- // native price window), rather than a copy of the sender's hours.
- if(selection.mode==='configured'&&selection.offset===0){resetGraphPeriod(host);return;}
- host._sharedTimeframe=selection;
- Object.assign(host,{_periodMode:selection.mode,_periodHours:selection.hours,_periodEnd:selection.end,_periodOffset:selection.offset,_periodAnchor:selection.anchor});
-}
-function disconnectTimeframeSync(host){
- host._disconnectTimeframeSync?.();host._disconnectTimeframeSync=null;
-}
-function connectTimeframeSync(host){
- disconnectTimeframeSync(host);
- const group=timeframeGroup(host);if(group===null||!host._connected)return;
- const groups=timeframeGroups();let entry=groups.get(group);
- if(!entry){entry={selection:null,listeners:new Set()};groups.set(group,entry);}
- const receive=(selection,source)=>{
-  if(source===host||host._sharedTimeframe===selection)return;
-  applyTimeframe(host,selection);host._reloadPeriod();
- };
- entry.listeners.add(receive);
- host._disconnectTimeframeSync=()=>entry.listeners.delete(receive);
- // Joining never publishes this card's default over an existing selection.
- if(entry.selection)applyTimeframe(host,entry.selection);
-}
-function publishTimeframe(host){
- const group=timeframeGroup(host);if(group===null||!host._connected)return;
- const entry=timeframeGroups().get(group);if(!entry)return;
- const selection={group,mode:host._periodMode,hours:host._periodHours??host._config.hours_to_show,
-  end:host._periodEnd,offset:host._periodOffset,anchor:host._periodAnchor,zone:host._hass?.config?.time_zone||'UTC',at:Date.now()};
- selection.range=localGraphPeriodRange(host,selection.at);
- entry.selection=selection;applyTimeframe(host,selection);
- for(const receive of entry.listeners)receive(selection,host);
-}
-function resetGraphPeriod(host){host._sharedTimeframe=null;host._periodMode='configured';host._periodHours=null;host._periodEnd=null;host._periodOffset=0;host._periodAnchor=null;host._periodMenuOpen=false;host._periodMenuPending=false;host._periodCustomDraft=null;host._periodTab=null;host._insightPending=null;}
-function graphPeriodRange(host,now=Date.now()){
- const shared=host._sharedTimeframe;
- if(shared&&timeframeGroup(host)===shared.group){
-  // One clock and timezone for the whole group, including separate bundles.
-  // Live selections advance together on the minute; historical ranges stay fixed.
-  if(shared.offset===0&&shared.end==null&&(Math.floor(now/60000)!==Math.floor(shared.at/60000))){
-   shared.at=now;shared.range=localGraphPeriodRange({_periodMode:shared.mode,_periodHours:shared.hours,_periodOffset:0,_hass:{config:{time_zone:shared.zone}}},now);
-  }
-  return {...shared.range};
- }
- return localGraphPeriodRange(host,now);
-}
-function localGraphPeriodRange(host,now){
- const mode=host._periodMode,offset=host._periodOffset??0;
- if(periodCalendarModes.includes(mode)){
-  const zone=host._hass?.config?.time_zone||'UTC',p=periodLocalParts(host._periodAnchor??now,zone);
-  let nominal,finishNominal;
-  if(mode==='week'){
-   nominal=Date.UTC(p.year,p.month-1,p.day);nominal+=(offset*7-(new Date(nominal).getUTCDay()+6)%7)*86400000;finishNominal=nominal+7*86400000;
-  }else if(mode==='month'||mode==='quarter'){
-   const size=mode==='quarter'?3:1,month=(mode==='quarter'?Math.floor((p.month-1)/3)*3:p.month-1)+offset*size;
-   nominal=Date.UTC(p.year,month,1);finishNominal=Date.UTC(p.year,month+size,1);
-  }else if(mode==='year'){nominal=Date.UTC(p.year+offset,0,1);finishNominal=Date.UTC(p.year+offset+1,0,1);}
-  else{nominal=Date.UTC(p.year,p.month-1,p.day+offset);finishNominal=nominal+86400000;}
-  const start=periodMidnight(nominal,zone),finish=periodMidnight(finishNominal,zone);
-  return {start,end:Math.max(start+1,Math.min(now,finish))};
- }
- const end=host._periodEnd??now;
- return {start:end-(host._periodHours??host._config.hours_to_show)*3600000,end};
-}
-function chooseGraphPeriod(host,value){
- const calendar=value==='configured'||periodCalendarModes.includes(value),hours=periodPresetHours[value]??Number(value);
- if(!calendar&&(!Number.isFinite(hours)||hours<1||hours>8760))return;
- resetGraphPeriod(host);
- host._periodMode=calendar?value:Object.entries(periodPresetHours).find(([,h])=>h===hours)?.[0]??String(value);
- if(!calendar)host._periodHours=hours;
- publishTimeframe(host);
- return host._reloadPeriod();
-}
-function moveGraphPeriod(host,direction){
- if(![-1,0,1].includes(direction))return;
- if(host._periodMode==='custom'){
-  if(direction===0){host._periodEnd=null;host._periodOffset=0;}
-  else{const end=(host._periodEnd??Date.now())+direction*host._periodHours*3600000;host._periodEnd=direction>0?Math.min(Date.now(),end):end;host._periodOffset=(host._periodOffset??0)+direction;}
-  host._periodCustomDraft=null;host._periodTab=null;host._sharedTimeframe=null;publishTimeframe(host);return host._reloadPeriod();
- }
- if(direction===0){host._periodOffset=0;host._periodEnd=null;host._periodAnchor=null;}
- else{
-  const previous=host._periodOffset??0;
-  const calendar=periodCalendarModes.includes(host._periodMode);
-  if(previous===0)host._periodAnchor=calendar?Date.now():host._status==='ready'?(host._end??Date.now()):Date.now();
-  host._periodOffset=Math.min(0,previous+direction);
-  if(host._periodOffset===0)host._periodAnchor=null;
-  if(!calendar){
-   host._periodEnd=host._periodOffset===0?null:host._periodAnchor+host._periodOffset*(host._periodHours??host._config.hours_to_show)*3600000;
-  }
- }
- host._sharedTimeframe=null;
- publishTimeframe(host);
- return host._reloadPeriod();
-}
-
-// One recipe for raised information surfaces across all cards.
-const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
-function uiSurfaceStyles(selector){return `
-:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
-${selector}{box-shadow:var(--eleven-surface-shadow)}
-@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
-`;}
-
-// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
-function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function uiAttributes(values={}){
- return Object.entries(values).map(([key,value])=>{
-  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
-  if(value==null)return '';
-  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
-  return ` ${key}="${uiEscape(value)}"`;
- }).join('');
-}
-function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
- const classes=className?` class="${uiEscape(className)}"`:'';
- const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
- return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
-}
-function uiButtonStyles(){return `
-[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
-[data-ui-button="icon"]{width:32px;height:32px}
-[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
-[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
-[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
-[data-ui-button]:disabled{opacity:.35;cursor:default}
-[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
-[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
-[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
-[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
-`;}
-
 
 // The caller owns each item's trusted HTML (swatch, label and optional value).
 function uiLegendButton({id,visible=true,content='',title='',className='legend-item',attrs={}}={}){
@@ -847,7 +893,11 @@ function bindUITabs({tabs,panels,onSelect=()=>{}}){
   const target=buttons.find(tab=>tab.dataset.uiTab===value&&!tab.disabled);if(!target)return false;
   for(const tab of buttons){const active=tab===target;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
   for(const panel of sections)panel.hidden=panel.dataset.uiTabPanel!==value;
-  if(focus)target.focus({preventScroll:true});if(notify)onSelect(value,target);return true;
+  if(focus)target.focus({preventScroll:true});
+  // Keep a selected tab visible within a scrolling strip without moving the page.
+  const list=target.parentElement;
+  if(list&&list.scrollWidth>list.clientWidth&&target.getBoundingClientRect){const box=target.getBoundingClientRect(),view=list.getBoundingClientRect();list.scrollLeft+=box.left<view.left?box.left-view.left:box.right>view.right?box.right-view.right:0;}
+  if(notify)onSelect(value,target);return true;
  };
  for(const tab of buttons){
   const click=()=>select(tab.dataset.uiTab,{focus:true});
@@ -881,6 +931,24 @@ ${uiTabIndicatorStyles()}
 [data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
 [data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
+
+function uiBalancedTabsStyles(){
+ const strip=':host [data-ui-tabs][role=tablist]';
+ const tab=strip+' [role=tab][data-ui-tab]';
+ return `
+${strip}{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:stretch;gap:0;width:100%;box-sizing:border-box;padding:0;border:0;background:transparent;box-shadow:none;overflow:visible}
+${strip}:has(>[role=tab]:nth-child(4)){display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+${strip}::-webkit-scrollbar{display:none}
+${strip}:has(>[role=tab]:nth-child(4)) [role=tab][data-ui-tab]{flex:1 0 88px}
+${tab}{display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:44px;max-width:none;min-height:44px;height:auto;margin:0;padding:5px 6px 3px;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--secondary-text-color,#666);font-family:inherit;font-size:13px;font-weight:400;line-height:1.3;text-align:center;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;text-decoration:none;transform:none}
+${tab}:not(:disabled):hover{color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none;transform:none}
+${tab}[aria-selected=true],${tab}[aria-selected=true]:not(:disabled):hover{color:var(--primary-text-color,#20252b);font-weight:400;background:transparent;box-shadow:none;text-decoration:none;transform:none}
+${uiTabIndicatorStyles({strip,tab,color:'var(--accent-color,var(--primary-color))'})}
+${tab}:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+${strip}~[data-ui-tab-panel]{border:0;padding-block-start:12px;background:transparent}
+@media(forced-colors:active){${strip}{border-bottom-color:CanvasText}${tab}[aria-selected=true]{border-bottom-color:Highlight;outline:1px solid Highlight;outline-offset:-2px;box-shadow:none}${tab}:focus-visible{outline:2px solid CanvasText;outline-offset:-4px}}
+`;
+}
 
 
 
@@ -1032,7 +1100,7 @@ function compactPeriodName({start,end,mode,past,zoomed,hours,name,locale,zone}){
  return name;
 }
 function periodControls(host,language='en',{popupNavigation=false,tabVariant=''}={}){
- const active=host.shadowRoot.activeElement;
+ const adapter=host._periodAdapter,active=host.shadowRoot.activeElement;
  if(!host._periodMenuPending)host._periodFocus=null;
  if(active?.closest?.('.header-actions'))host._periodFocus=active.dataset.periodTab!=null?`tab:${active.dataset.periodTab}`:active.dataset.customField!=null?`custom:${active.dataset.customField}`:active.dataset.periodOption!=null?`option:${active.dataset.periodOption}`:active.dataset.zoom!=null?`zoom:${active.dataset.zoom}`:active.classList.contains('history-link')?'history':active.dataset.period;
  if(host._config.show_navigation===false){host._periodMenuOpen=false;host._periodMenuPending=false;return {};}
@@ -1042,29 +1110,29 @@ function periodControls(host,language='en',{popupNavigation=false,tabVariant=''}
   host._periodMenuOpen=!!host._periodMenuPending||(typeof previousMenu.showPopover==='function'?previousMenu.matches(':popover-open'):previousMenu.hasAttribute('data-fallback-open'));
  }
  const nl=language.startsWith('nl'),label=(en,nlText)=>nl?nlText:en,mode=host._periodMode??'configured',past=(host._periodOffset??0)<0;
- const standard=label(`Default (${host._config.hours_to_show} hours)`,`Standaard (${host._config.hours_to_show} uur)`);
- const rolling=[['1h',1],['6h',6],['12h',12],['24h',24],['48h',48],['7d',168],['14d',336],['30d',720],['90d',2160],['365d',8760]].map(([id,hours])=>[id,hours<168?label(`${hours} ${hours===1?'hour':'hours'}`,`${hours} uur`):label(`${hours/24} days`,`${hours/24} dagen`),hours<168?`${hours} ${nl?'u':'h'}`:`${hours/24} d`]);
- const calendar=[['today',label('Today','Vandaag'),label('Day','Dag')],['week',label('This week','Deze week'),label('Week','Week')],['month',label('This month','Deze maand'),label('Month','Maand')],['quarter',label('This quarter','Dit kwartaal'),label('Quarter','Kwartaal')],['year',label('This year','Dit jaar'),label('Year','Jaar')]];
+ const standard=adapter?.standard??label(`Default (${host._config.hours_to_show} hours)`,`Standaard (${host._config.hours_to_show} uur)`);
+ const rolling=adapter?.rolling??[['1h',1],['6h',6],['12h',12],['24h',24],['48h',48],['7d',168],['14d',336],['30d',720],['90d',2160],['365d',8760]].map(([id,hours])=>[id,hours<168?label(`${hours} ${hours===1?'hour':'hours'}`,`${hours} uur`):label(`${hours/24} days`,`${hours/24} dagen`),hours<168?`${hours} ${nl?'u':'h'}`:`${hours/24} d`]);
+ const calendar=adapter?.calendar??[['today',label('Today','Vandaag'),label('Day','Dag')],['week',label('This week','Deze week'),label('Week','Week')],['month',label('This month','Deze maand'),label('Month','Maand')],['quarter',label('This quarter','Dit kwartaal'),label('Quarter','Kwartaal')],['year',label('This year','Dit jaar'),label('Year','Jaar')]];
  const calendarChoice=calendar.find(([id])=>id===mode);
  if(!calendarChoice&&mode!=='configured'&&mode!=='custom'&&host._periodHours!=null&&!rolling.some(([id])=>id===mode))rolling.push([mode,label(`${host._periodHours} hours`,`${host._periodHours} uur`)]);
- const selectedStandard=label(`Default (${host._periodHours??host._config.hours_to_show} hours)`,`Standaard (${host._periodHours??host._config.hours_to_show} uur)`);
+ const selectedStandard=adapter?.standard??label(`Default (${host._periodHours??host._config.hours_to_show} hours)`,`Standaard (${host._periodHours??host._config.hours_to_show} uur)`);
  const name=mode==='configured'?selectedStandard:calendarChoice?.[past?2:1]??rolling.find(([id])=>id===mode)?.[1]??standard;
  const tabIds=['rolling','calendar','custom'];
  const selectedTab=host._periodMenuOpen&&tabIds.includes(host._periodTab)?host._periodTab:mode==='custom'?'custom':calendarChoice?'calendar':'rolling';
  host._periodTab=selectedTab;
  const choice=([value,text,compact])=>uiButton({variant:'surface',content:`<span>${periodEscape(compact??text)}</span><span aria-hidden="true">${value===mode?'✓':''}</span>`,attrs:{role:'menuitemradio','aria-checked':value===mode,tabindex:-1,'aria-label':text,title:text,'data-period-option':value}});
 
- const {start,end}=host._status==='ready'&&Number.isFinite(host._viewStart)&&Number.isFinite(host._viewEnd)?{start:host._viewStart,end:host._viewEnd}:graphPeriodRange(host);
+ const {start,end}=adapter?.range()??(host._status==='ready'&&Number.isFinite(host._viewStart)&&Number.isFinite(host._viewEnd)?{start:host._viewStart,end:host._viewEnd}:graphPeriodRange(host));
  const locale=nl?'nl-NL':'en-GB',zone=host._hass?.config?.time_zone||'UTC';
  const zoomed=host._status==='ready'&&(start>host._start+1||end<host._end-1);
- const compactName=compactPeriodName({start,end,mode,past,zoomed,hours:host._periodHours??host._config.hours_to_show,name,locale,zone});
+ const compactName=adapter?.name()??compactPeriodName({start,end,mode,past,zoomed,hours:host._periodHours??host._config.hours_to_show,name,locale,zone});
  const format=new Intl.DateTimeFormat(locale,{timeZone:zone,day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'shortOffset'});
  const range=`${format.format(start)} – ${format.format(end)}`;
- const customRange=graphPeriodRange(host),draft=host._periodCustomDraft??{start:periodDateTime(customRange.start,zone),end:periodDateTime(customRange.end,zone)};
- const canGoNext=mode==='custom'?host._periodEnd!=null&&customRange.end<Date.now():past;
+ const customRange=adapter?.range()??graphPeriodRange(host),draft=host._periodCustomDraft??{start:periodDateTime(customRange.start,zone),end:periodDateTime(customRange.end,zone)};
+ const canGoNext=adapter?true:mode==='custom'?host._periodEnd!=null&&customRange.end<Date.now():past;
  const custom=`<form data-custom-range><div class="period-custom-fields">${[['start',label('Start','Begin')],['end',label('End','Einde')]].map(([key,text])=>`<label>${text}<input type="datetime-local" name="${key}" data-custom-field="${key}" value="${periodEscape(draft[key])}" step="60" required></label>`).join('')}</div><p class="period-custom-zone">${periodEscape(zone)}</p><p class="period-custom-error" role="alert"${draft.error?'':' hidden'}>${periodEscape(draft.error??'')}</p>${uiButton({variant:'surface',type:'submit',text:label('Apply','Toepassen'),attrs:{'data-custom-field':'apply'}})}</form>`;
  const contents=uiTabs({id:'eleven-period',variant:tabVariant,label:label('Period type','Soort tijdvak'),selected:selectedTab,className:'period-tabs',panelClassName:'period-panel',items:[
-  {value:'rolling',label:label('Last','Afgelopen'),content:`<div class="period-options" role="menu" aria-label="${label('Last','Afgelopen')}">${rolling.map(choice).join('')}</div>`},
+  {value:'rolling',label:adapter?.rollingLabel??label('Last','Afgelopen'),content:`<div class="period-options" role="menu" aria-label="${label('Last','Afgelopen')}">${rolling.map(choice).join('')}</div>`},
   {value:'calendar',label:label('Calendar','Kalender'),content:`<div class="period-options period-calendar" role="menu" aria-label="${label('Calendar','Kalender')}">${calendar.map(([id,text])=>choice([id,text])).join('')}</div>`},
   {value:'custom',label:label('Custom range','Eigen bereik'),content:custom,className:'period-custom'}
  ].map(item=>({...item,tabAttrs:{'data-period-tab':item.value},panelAttrs:{'data-period-panel':item.value}}))});
@@ -1083,7 +1151,7 @@ function restorePeriodFocus(host,items=[]){
 function disconnectPeriodControls(host,preserveState=false){host._periodMenuCleanup?.();host._periodMenuCleanup=null;if(!preserveState)host._periodMenuPending=false;}
 function bindPeriodControls(host){
  disconnectPeriodControls(host,true);
- const root=host.shadowRoot,nav=root.querySelector('.period-controls');if(!nav){restorePeriodFocus(host);return;}
+ const adapter=host._periodAdapter,root=host.shadowRoot,nav=root.querySelector('.period-controls');if(!nav){restorePeriodFocus(host);return;}
  const menu=nav.querySelector('.period-menu'),trigger=nav.querySelector('[data-period="menu"]'),items=[...menu.querySelectorAll('[data-period-option]')];
  const nl=(host._hass?.language??'en').startsWith('nl'),label=(en,nlText)=>nl?nlText:en;
  const form=menu.querySelector('form[data-custom-range]'),tabs=[...menu.querySelectorAll('[data-period-tab]')],panels=[...menu.querySelectorAll('[data-period-panel]')];
@@ -1109,7 +1177,7 @@ function bindPeriodControls(host){
  });
  const {open,close,position}=controller;cleanups.push(()=>controller.disconnect());
  trigger.onkeydown=e=>{if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();open();if(e.key==='ArrowUp')visibleItems().at(-1)?.focus({preventScroll:true});}};
- for(const item of items)item.onclick=()=>{close(true);chooseGraphPeriod(host,item.dataset.periodOption);};
+ for(const item of items)item.onclick=()=>{close(true);if(adapter)adapter.choose(item.dataset.periodOption);else chooseGraphPeriod(host,item.dataset.periodOption);};
  const tabController=bindUITabs({tabs,panels,onSelect:value=>{
   host._periodTab=value;updateOptionFocus();host._periodMenuScroll=0;menu.scrollTop=0;position();
  }});cleanups.push(()=>tabController.disconnect());
@@ -1125,7 +1193,7 @@ function bindPeriodControls(host){
    else if(end<=start)message=label('End must be after start.','Einde moet na begin liggen.');
    else if(end-start>366*86400000)message=label('Choose a range of at most 366 days.','Kies een bereik van maximaal 366 dagen.');
    if(message){draft.error=message;const error=form.querySelector('.period-custom-error');error.textContent=message;error.hidden=false;position();return;}
-   close(true);chooseCustomGraphPeriod(host,start,end);
+   close(true);if(adapter)adapter.custom(start,end);else chooseCustomGraphPeriod(host,start,end);
   });
  }
  menu.onkeydown=e=>{
@@ -1135,7 +1203,7 @@ function bindPeriodControls(host){
    visible[next].focus();
   }
  };
- for(const [key,direction]of [['previous',-1],['next',1],['now',0]])for(const button of root.querySelectorAll(`[data-period="${key}"]`))button.onclick=()=>{close();moveGraphPeriod(host,direction);};
+ for(const [key,direction]of [['previous',-1],['next',1],['now',0]])for(const button of root.querySelectorAll(`[data-period="${key}"]`))button.onclick=()=>{close();if(adapter)adapter.move(direction);else moveGraphPeriod(host,direction);};
  if(host._periodMenuOpen)open(false);
  if(!host._periodMenuPending)restorePeriodFocus(host,items);
 }
@@ -1143,7 +1211,7 @@ function periodControlsStyles(){return uiTabsStyles()+`
 .period-menu-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;margin-top:12px;border-top:1px solid var(--divider-color,#ddd)}
 .period-menu-navigation>[data-period]{width:36px;height:32px}.period-menu-navigation>[data-period=now]{width:auto;padding:4px 12px}
 .period-controls{display:flex;min-width:0;max-width:100%;flex:0 1 auto}
-.header-actions .period-trigger{width:auto;min-width:0;max-width:100%;flex:0 1 auto;gap:6px;padding:4px 10px;border:0;border-radius:4px;background:transparent;font-weight:400}
+.header-actions .period-trigger{width:auto;min-width:0;max-width:100%;flex:0 1 auto;gap:6px;padding:4px 6px;border:0;border-radius:4px;background:transparent;font-weight:400}
 .header-actions .period-trigger:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
 .period-trigger span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .period-current-range{font-size:11px;line-height:1.5;color:var(--secondary-text-color,#666);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;margin:2px 0 10px}
@@ -1165,6 +1233,52 @@ function periodControlsStyles(){return uiTabsStyles()+`
 `;}
 
 
+const barBounds=(min,max)=>Number.isFinite(min)&&Number.isFinite(max)&&max>min?{min,max}:{min:0,max:100};
+const barPercent=(value,min,max)=>Math.max(0,Math.min(100,(value-min)/(max-min)*100));
+
+// All text/attributes are escaped; only finite measurements become fill widths.
+function uiBar({value=null,min=0,max=100,target=null,charging=false,label='',valueText='',decorative=false,attrs={}}={}){
+ ({min,max}=barBounds(min,max));
+ const known=Number.isFinite(value),amount=known?Math.max(min,Math.min(max,value)):null;
+ const percent=known?barPercent(amount,min,max):0,marker=Number.isFinite(target)?barPercent(target,min,max):null;
+ const active=!!charging&&known&&amount<max&&(!Number.isFinite(target)||amount<target);
+ return `<div${uiAttributes({...attrs,'data-ui-bar':'','data-charging':String(active),'data-unavailable':String(!known),...(decorative?{'aria-hidden':'true'}:{'aria-label':label,...(known?{role:'progressbar','aria-valuemin':min,'aria-valuemax':max,'aria-valuenow':amount,...(valueText?{'aria-valuetext':valueText}:{})}:{})})})}><span class="ui-bar-fill" style="width:${percent}%">${active?'<span class="ui-bar-motion" aria-hidden="true"></span>':''}</span>${marker==null?'':`<span class="ui-bar-marker" style="left:${marker}%" aria-hidden="true"></span>`}</div>`;
+}
+
+function uiSlider({value=0,min=0,max=100,step=1,disabled=false,attrs={}}={}){
+ ({min,max}=barBounds(min,max));
+ const amount=Number.isFinite(value)?Math.max(min,Math.min(max,value)):min;
+ return `<input${uiAttributes({...attrs,type:'range','data-ui-slider':'',min,max,step:Number.isFinite(step)&&step>0?step:1,value:amount,...(disabled?{disabled:true}:{}),style:(attrs.style?attrs.style+';':'')+`--ui-bar-position:${barPercent(amount,min,max)}%`})}>`;
+}
+
+// Call alongside existing input handlers; never sends a command or replaces events.
+function syncUISlider(input){
+ const min=Number(input.min),max=Number(input.max),value=Number(input.value);
+ input.style.setProperty('--ui-bar-position',Number.isFinite(value)&&Number.isFinite(min)&&Number.isFinite(max)&&max>min?barPercent(value,min,max)+'%':'0%');
+}
+
+function uiBarStyles(){return `
+[data-ui-bar]{--_bar-tone:var(--ui-bar-tone,var(--accent-color,var(--primary-color,#2196f3)));position:relative;box-sizing:border-box;display:block;min-width:0;width:100%;height:var(--ui-bar-height,12px);border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%),inset -1px -1px 0 rgb(255 255 255 / 20%));isolation:isolate}
+[data-ui-bar]>.ui-bar-fill{display:block;position:relative;overflow:hidden;isolation:isolate;height:100%;border-radius:inherit;background:var(--_bar-tone);box-shadow:inset 0 1px 0 #ffffff30}
+[data-ui-bar]>.ui-bar-marker{position:absolute;top:-5px;width:2px;height:calc(100% + 10px);transform:translateX(-50%);max-width:100%;border-radius:2px;background:var(--primary-text-color,#20252b);pointer-events:none}
+[data-ui-bar]>.ui-bar-marker[style*="left:0%"]{transform:none}
+[data-ui-bar]>.ui-bar-marker[style*="left:100%"]{transform:translateX(-100%)}
+[data-ui-bar] .ui-bar-motion{position:absolute;inset:0 auto 0 0;width:65%;pointer-events:none;background:linear-gradient(90deg,transparent,#ffffff4d 50%,transparent);animation:ui-bar-charge var(--ui-bar-duration,3.8s) linear infinite;animation-delay:var(--ui-bar-delay,0s)}
+@keyframes ui-bar-charge{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
+input[data-ui-slider]{--_bar-tone:var(--ui-bar-tone,var(--accent-color,var(--primary-color,#2196f3)));box-sizing:border-box;appearance:none;-webkit-appearance:none;display:block;width:100%;height:44px;min-height:44px;min-width:0;margin:0;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);cursor:pointer;touch-action:pan-y}
+input[data-ui-slider]::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:linear-gradient(var(--_bar-tone),var(--_bar-tone)) 0 / var(--ui-bar-position,0%) 100% no-repeat,var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%))}
+input[data-ui-slider]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:18px;height:18px;margin-top:-3px;border-radius:50%;border:2px solid var(--card-background-color,#fff);background:var(--_bar-tone);box-shadow:0 0 0 1px var(--_bar-tone)}
+input[data-ui-slider]::-moz-range-track{height:12px;border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%))}
+input[data-ui-slider]::-moz-range-progress{height:12px;border-radius:999px;background:var(--_bar-tone)}
+input[data-ui-slider]::-moz-range-thumb{box-sizing:border-box;width:18px;height:18px;border-radius:50%;border:2px solid var(--card-background-color,#fff);background:var(--_bar-tone);box-shadow:0 0 0 1px var(--_bar-tone)}
+input[data-ui-slider]:focus-visible{outline:2px solid var(--_bar-tone);outline-offset:3px}
+input[data-ui-slider]:disabled{opacity:.45;cursor:default}
+@media(prefers-reduced-motion:reduce){[data-ui-bar] .ui-bar-motion{display:none;animation:none}}
+@media(forced-colors:active){[data-ui-bar]{background:Canvas;border:1px solid CanvasText;box-shadow:none}[data-ui-bar]>.ui-bar-fill{background:Highlight;box-shadow:none;forced-color-adjust:none}[data-ui-bar]>.ui-bar-marker{background:CanvasText}[data-ui-bar] .ui-bar-motion{display:none}input[data-ui-slider]{appearance:auto;accent-color:Highlight}}
+`;}
+
+
+
 
 // Informational detail surface. Callers format/translate text and compute percentages.
 // All content is escaped; this component deliberately accepts no trusted HTML.
@@ -1176,11 +1290,11 @@ function uiDetailSurface({title='',metrics=[],percent=null,entity='',actionLabel
    const missing=value==null||value==='';
    return `<div><dt>${uiEscape(label)}</dt><dd>${uiEscape(missing?'—':value)}${!missing&&unit?' '+uiEscape(unit):''}${hint?`<small class="ui-detail-surface-hint">${uiEscape(hint)}</small>`:''}</dd></div>`;
   }).join('')}</dl>
-  ${progress==null?'':`<div class="ui-detail-surface-track" aria-hidden="true"><i style="width:${progress}%"></i></div>`}
+  ${progress==null?'':uiBar({value:progress,decorative:true,attrs:{class:'ui-detail-surface-track',style:'--ui-bar-tone:var(--ui-detail-tone,var(--primary-color,#2196f3))'}})}
  </section>`;
 }
 
-function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+`
+function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface]')+uiBarStyles()+`
 [data-ui-detail-surface]{box-sizing:border-box;min-width:0;padding:12px;border-radius:8px;color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--ui-detail-tone,var(--primary-color,#2196f3)) 5%,transparent)}
 [data-ui-detail-surface] .ui-detail-surface-title{font-family:inherit;font-size:12px;font-weight:600;line-height:1.4;color:inherit;margin:0 0 8px;overflow-wrap:anywhere}
 [data-ui-detail-surface] .ui-detail-surface-action{font:inherit;line-height:1.4;color:inherit;background:none;border:0;border-radius:4px;padding:4px 0;margin:-4px 0;text-align:start;cursor:pointer}
@@ -1190,8 +1304,7 @@ function uiDetailSurfaceStyles(){return uiSurfaceStyles('[data-ui-detail-surface
 [data-ui-detail-surface] dt{font-size:10px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere;margin:0 0 2px}
 [data-ui-detail-surface] dd{margin:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 [data-ui-detail-surface] .ui-detail-surface-hint{display:block;margin-top:3px;font-size:10px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--secondary-text-color,#626a78)}
-[data-ui-detail-surface] .ui-detail-surface-track{height:8px;border-radius:8px;background:var(--divider-color,#ddd);overflow:hidden;margin-top:8px}
-[data-ui-detail-surface] .ui-detail-surface-track>i{display:block;height:100%;background:var(--ui-detail-tone,var(--primary-color,#2196f3))}
+[data-ui-detail-surface] .ui-detail-surface-track{margin-top:8px}
 @container(max-width:360px){[data-ui-detail-surface] dd{font-size:15px}}
 @media(forced-colors:active){[data-ui-detail-surface]{border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track{background:Canvas;border:1px solid CanvasText}[data-ui-detail-surface] .ui-detail-surface-track>i{background:Highlight;forced-color-adjust:none}}
 `;}
@@ -1208,7 +1321,7 @@ function chartZoomState(host){
  const zoomed=ready&&(a>host._start+1||b<host._end-1);
  return {zoomed,in:ready&&width>Math.min(60000,total)+1,out:ready&&width<total-1,reset:zoomed};
 }
-function chartEntityItems(host){return host._config.entities.map(id=>({id,name:host._config.series_options?.find(row=>row.entity===id)?.name||host._hass?.states?.[id]?.attributes?.friendly_name||id}));}
+function chartEntityItems(host){return host._config.entities.map(id=>{const option=host._config.series_options?.find(row=>row.entity===id);return {id,name:option?.name||[id,...(option?.sum_entities??[])].map(source=>host._hass?.states?.[source]?.attributes?.friendly_name||source).join(' + ')};});}
 function chartSeriesVisible(host,index){return host._visibility?.get(host._config.entities[index])??true;}
 function isolateChartSeries(host,id){
  if(!host._config.entities.includes(id))return;
@@ -1390,7 +1503,52 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -1510,7 +1668,13 @@ function normalizeConfig(input = {}, {draft = false} = {}) {
   if(draft)for(const key of ['hours_to_show','cell_width','cell_height','cell_gap','border_radius','max_height']){
     if(Object.hasOwn(input,key) && input[key]===undefined)c[key]=undefined;
   }
-  if (!draft && !/^sensor\.[a-z0-9_]+$/.test(c.entity)) throw Error('Select one sensor. / Kies één sensor.');
+  if (!draft && (typeof c.entity!=='string' || !/^sensor\.[a-z0-9_]+$/.test(c.entity))) throw Error('Select one sensor. / Kies één sensor.');
+  if(Object.hasOwn(input,'sum_entities')){
+    const extra=input.sum_entities;
+    if(!draft && (!Array.isArray(extra) || extra.length>7 || [...extra].some(id=>typeof id!=='string' || !/^sensor\.[a-z0-9_]+$/.test(id) || id===c.entity) || new Set(extra).size!==extra.length))
+      throw Error('sum_entities: choose up to 7 distinct additional sensors, not the primary sensor. / sum_entities: kies maximaal 7 unieke extra sensoren, niet de hoofdsensor.');
+    c.sum_entities=Array.isArray(extra)?[...extra]:extra;
+  }
   if (!draft && (!Number.isFinite(c.hours_to_show) || c.hours_to_show < 1 || c.hours_to_show > 8760)) throw Error('Period must be 1–8760 hours. / Periode moet 1–8760 uur zijn.');
   if (!draft && !['average','consumption'].includes(c.mode)) throw Error('Mode must be average or consumption. / Kies gemiddelde of verbruik.');
   if (!draft && !['hour','day','week','month'].includes(c.aggregation_period)) throw Error('Choose hour, day, week or month. / Kies uur, dag, week of maand.');
@@ -1543,9 +1707,44 @@ function normalizeConfig(input = {}, {draft = false} = {}) {
 const time = value => typeof value === 'number' ? (value < 1e12 ? value * 1000 : value) : Date.parse(value);
 
 async function loadHeatmapData(hass, config, start, end) {
+  const ids=[config.entity,...(config.sum_entities??[])];
+  if(ids.length===1)return loadSingleHeatmapData(hass,config,start,end);
+  if(ids.some(id=>!hass.states?.[id]))throw Error('sum_entity_missing');
+  const unit=hass.states[ids[0]].attributes?.unit_of_measurement??'';
+  if(ids.some(id=>(hass.states[id].attributes?.unit_of_measurement??'')!==unit))throw Error('sum_unit_mismatch');
+  let loaded=await Promise.all(ids.map(entity=>loadSingleHeatmapData(hass,{...config,entity},start,end)));
+  if(loaded.every(data=>data.source==='statistics')){
+    // Hourly summaries are indivisible: never hold or interpolate a mean over
+    // another contributor's differently aligned bin.
+    const indexed=loaded.map(data=>new Map(data.intervals.map(row=>[`${row.start}/${row.end}`,row])));
+    const intervals=loaded[0].intervals.map(row=>{
+      const matches=indexed.map(rows=>rows.get(`${row.start}/${row.end}`));
+      const complete=config.mode!=='consumption' || row.end-row.start===3600000;
+      return {...row,value:complete && matches.every(match=>match?.value!=null)?matches.reduce((sum,match)=>sum+match.value,0):null};
+    });
+    return {source:'statistics',unit:loaded[0].unit,intervals};
+  }
+  // A mean is not a raw reading. When sources differ, reload just the
+  // statistics contributors as history, then intersect actual valid coverage.
+  loaded=await Promise.all(loaded.map((data,i)=>data.source==='statistics'?loadSingleHeatmapData(hass,{...config,entity:ids[i]},start,end,true):data));
+  const boundaries=[...new Set([start,end,...loaded.flatMap(data=>data.intervals.flatMap(row=>[Math.max(start,row.start),Math.min(end,row.end)]))])].sort((a,b)=>a-b);
+  const indices=loaded.map(()=>0),intervals=[];
+  for(let i=0;i<boundaries.length-1;i++){
+    const a=boundaries[i],b=boundaries[i+1];
+    const values=loaded.map((data,j)=>{
+      while(indices[j]<data.intervals.length && data.intervals[indices[j]].end<=a)indices[j]++;
+      const row=data.intervals[indices[j]];
+      return row && row.start<=a && row.end>=b?row.value:null;
+    });
+    intervals.push({start:a,end:b,value:values.every(value=>value!=null)?values.reduce((sum,value)=>sum+value,0):null});
+  }
+  return {source:'history',unit:loaded[0].unit,intervals};
+}
+
+async function loadSingleHeatmapData(hass, config, start, end, historyOnly=false) {
   const id = config.entity, unit = hass.states?.[id]?.attributes?.unit_of_measurement ?? '';
   let statisticsFailed = false;
-  try {
+  if(!historyOnly)try {
     const metadata = await hass.callWS({type:'recorder/get_statistics_metadata', statistic_ids:[id]});
     const meta = metadata.find(row => row.statistic_id === id);
     const supported = config.mode === 'consumption' ? meta?.has_sum === true : meta?.mean_type!=null ? meta.mean_type===1 : meta?.has_mean===true;
@@ -1730,18 +1929,28 @@ function summarizeHeatmap(rows, mode) {
 
 
 
+
+
+
+
 const esc=escapeHtml;
 const isDutch=hass=>String(hass?.locale?.language ?? hass?.language ?? 'en').startsWith('nl');
+const dataContext=(hass,config)=>JSON.stringify([hass?.config?.time_zone,isDutch(hass),[config?.entity,...(config?.sum_entities??[])].map(id=>{
+  const state=hass?.states?.[id],attributes=state?.attributes;
+  return [id,!!state,attributes?.unit_of_measurement,attributes?.friendly_name,attributes?.state_class,attributes?.device_class];
+})]);
 const labels={sync_timeframe:['Tijdvak synchroniseren','Synchronize timeframe'],hover_sync_group:['Synchronisatiegroep','Synchronization group'],
+  sum_entities:['Sensoren optellen','Add sensors'],
   title:['Titel','Title'],entity:['Sensor','Sensor'],name:['Sensornaam','Sensor name'],hours_to_show:['Aantal uren','Hours to show'],mode:['Waarde per tijdvak','Value per interval'],aggregation_period:['Aggregatieperiode','Aggregation period'],
   show_title:['Titel tonen','Show title'],show_legend:['Legenda tonen','Show legend'],show_labels:['Rij- en kolomlabels tonen','Show row and column labels'],show_navigation:['Tijdvakselectie tonen','Show timeframe selection'],
   graph_settings:['Grafiek','Graph'],data_processing:['Dataverwerking','Data processing'],color_settings:['Kleuren','Colors'],matrix_settings:['Rasteropmaak','Grid appearance'],
   scale_min:['Minimum kleurschaal','Color scale minimum'],scale_max:['Maximum kleurschaal','Color scale maximum'],
   low_color:['Kleur lage waarden','Low value color'],high_color:['Kleur hoge waarden','High value color'],
   color_mode:['Kleurmodus','Color mode'],gradient_mode:['Kleurovergang','Color transitions'],gradient_stops:['Kleurovergangen','Color stops'],
-  cell_width:['Minimale vakbreedte','Minimum cell width'],cell_height:['Vakhoogte','Cell height'],cell_gap:['Tussenruimte','Cell gap'],border_radius:['Hoekafronding','Border radius'],max_height:['Maximale rasterhoogte','Maximum grid height']
+  cell_width:['Voorkeursbreedte vak','Preferred cell width'],cell_height:['Vakhoogte','Cell height'],cell_gap:['Tussenruimte','Cell gap'],border_radius:['Hoekafronding','Border radius'],max_height:['Oude rasterhoogte (compatibiliteit)','Legacy grid height (compatibility)']
 };
 const helpers={sync_timeframe:['Deelt tijdvakkeuze en vorige/volgende/Nu met ingeschakelde kaarten in dezelfde groep.','Shares timeframe selection and previous/next/Now with enabled cards in the same group.'],hover_sync_group:['Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.','Cards with the same group share hover and timeframe when the corresponding synchronization is enabled. Empty uses the default group.'],
+  sum_entities:['Tel maximaal 7 extra sensoren bij de hoofdsensor op (maximaal 8 totaal). Dezelfde eenheid is vereist; ontbrekende waarden zijn geen nul. Sensornaam benoemt het totaal.','Add up to 7 additional sensors to the primary sensor (8 total). The same unit is required; missing values are not zero. Sensor name labels the total.'],
   hours_to_show:['Standaardperiode: 1–8760 uur. De tijdvakselectie kan deze tijdelijk wijzigen.','Default range: 1–8760 hours. The timeframe menu can change it temporarily.'],
   mode:['Gemiddelde weegt waarden naar hun duur. Verbruik telt de uurwijzigingen uit tellerstatistieken op, inclusief tellerresets.','Average weights values by their duration. Consumption sums hourly counter changes from statistics, including counter resets.'],
   aggregation_period:['Uren per dag, dagen per week, weken per ISO-jaar of maanden per jaar. Kalendergrenzen volgen de Home Assistant-tijdzone; weken beginnen op maandag.','Hours per day, days per week, weeks per ISO year or months per year. Calendar boundaries follow the Home Assistant timezone; weeks start on Monday.'],
@@ -1749,8 +1958,8 @@ const helpers={sync_timeframe:['Deelt tijdvakkeuze en vorige/volgende/Nu met ing
   scale_max:['Optioneel, in de sensoreenheid. Moet hoger zijn dan het minimum.','Optional, in the sensor unit. Must exceed the minimum.'],
   color_mode:['De kleurschaal volgt het waardenbereik. Kleurovergangen gebruiken vaste sensorwaarden en blijven tussen perioden vergelijkbaar.','The color scale follows the value range. Color stops use fixed sensor values and remain comparable across periods.'],
   gradient_stops:['Stel 2–32 unieke waarden in de sensoreenheid in, geen percentages. Pas de beginwaarden aan je sensor aan.','Set 2–32 distinct values in the sensor unit, not percentages. Adjust the initial values to your sensor.'],
-  cell_width:['Minimale breedte in pixels. Kleinere vakken en minder tussenruimte passen meer kolommen op smalle kaarten.','Minimum width in pixels. Smaller cells and gaps fit more columns on narrow cards.'],
-  max_height:['Grotere rasters scrollen binnen de kaart.','Larger grids scroll within the card.']
+  cell_width:['Voorkeursbreedte in pixels. Alle kolommen delen de beschikbare breedte; op smalle kaarten worden vakken smaller en kolomlabels schaarser.','Preferred width in pixels. All columns share the available width; narrow cards use smaller cells and fewer column captions.'],
+  max_height:['Bewaard voor bestaande configuraties; begrenst het raster niet meer. De kaart groeit met alle rijen, zonder intern scrollen.','Retained for existing configurations; no longer caps the grid. The card grows with all rows, without internal scrolling.']
 };
 
 class HeatmapEditor extends HTMLElement {
@@ -1806,6 +2015,7 @@ class HeatmapCard extends HTMLElement {
     }}};
     return {schema:[
       {name:'entity',required:true,selector:{entity:{domain:'sensor'}}},
+      {name:'sum_entities',selector:{entity:{domain:'sensor',multiple:true}}},
       {name:'name',selector:{text:{}}},
       {name:'title',selector:{text:{}}},
       {name:'show_title',default:true,selector:{boolean:{}}},
@@ -1852,21 +2062,22 @@ class HeatmapCard extends HTMLElement {
     const previous=this._context;
     this._hass=hass;
     const state=hass?.states?.[this._config?.entity];
-    this._context=JSON.stringify([hass?.config?.time_zone,state?.attributes?.unit_of_measurement,state?.attributes?.friendly_name,isDutch(hass),!!state]);
+    this._context=dataContext(hass,this._config);
     if(previous!==this._context){
       const unit=state?.attributes?.unit_of_measurement ?? '',zone=hass?.config?.time_zone || 'UTC';
-      if(this._data && (this._data.unit!==unit || this._zone!==zone))this._invalidate();
+      if((previous!==undefined && this._config?.sum_entities?.length) || (this._data && (this._data.unit!==unit || this._zone!==zone)))this._invalidate();
       this._render();
     }
     if(this._connected && !this._promise && this._status==='loading')this._refresh();
   }
   get hass(){return this._hass;}
   connectedCallback(){this._connected=true;connectTimeframeSync(this);this._refresh();}
-  disconnectedCallback(){disconnectTimeframeSync(this);this._connected=false;this._generation++;this._promise=null;clearTimeout(this._timer);this._timer=null;disconnectPeriodControls(this);disconnectChartInsights(this);this._disconnectTooltip();this._hideTooltip();}
+  disconnectedCallback(){globalThis.document?.removeEventListener?.('pointerdown',this._chartToolsOutside);disconnectTimeframeSync(this);this._connected=false;this._generation++;this._promise=null;clearTimeout(this._timer);this._timer=null;disconnectPeriodControls(this);disconnectChartInsights(this);this._disconnectTooltip();this._hideTooltip();}
   getCardSize(){
     const c=this._config??{},hours=c.hours_to_show??672,period=c.aggregation_period??'hour';
     const rows=this._rows.length || Math.ceil(hours/({hour:24,day:168,week:8760,month:8760}[period]))+(period==='hour'||period==='day'?1:2);
-    return Math.ceil((90+Math.min(c.max_height??800,(rows+(c.show_labels!==false?1:0))*((c.cell_height??24)+(c.cell_gap??2))))/50);
+    const estimate=150+(rows+(c.show_labels!==false?1:0))*((this._matrixRowHeight??c.cell_height??24)+(c.cell_gap??2));
+    return Math.ceil(Math.max(estimate,this.shadowRoot?.querySelector('.content')?.offsetHeight??0)/50);
   }
   getGridOptions(){return {columns:12,min_columns:6,rows:Math.max(3,Math.ceil(this.getCardSize()*50/64)),min_rows:3};}
   _invalidate(){this._hideTooltip();this._insightOpen=null;this._insightPending=null;this._generation++;this._promise=null;this._data=null;this._rows=[];this._status='loading';this._refreshFailures=0;clearTimeout(this._timer);this._timer=null;}
@@ -1875,13 +2086,13 @@ class HeatmapCard extends HTMLElement {
     if(!this._connected || !this._hass || !this._config)return Promise.resolve();
     if(this._promise)return this._promise;
     clearTimeout(this._timer);
-    const generation=this._generation,hass=this._hass,config=this._config,range=graphPeriodRange(this),zone=hass.config?.time_zone || 'UTC';
+    const generation=this._generation,hass=this._hass,config=this._config,range=graphPeriodRange(this),zone=hass.config?.time_zone || 'UTC',context=dataContext(hass,config);
     let timeout;
     const work=Promise.race([loadHeatmapData(hass,config,range.start,range.end),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),20000);})])
       .then(data=>{
         if(!this._connected || generation!==this._generation)return;
         const currentUnit=this._hass.states?.[config.entity]?.attributes?.unit_of_measurement ?? '';
-        if(data.unit!==currentUnit || zone!==(this._hass.config?.time_zone || 'UTC')){this._invalidate();return;}
+        if(data.unit!==currentUnit || zone!==(this._hass.config?.time_zone || 'UTC') || (config.sum_entities?.length && context!==dataContext(this._hass,config))){this._invalidate();return;}
         this._rows=buildHeatmap(data,range.start,range.end,zone,config.mode,config.aggregation_period);
         this._data=data;this._zone=zone;this._start=range.start;this._end=range.end;this._viewStart=range.start;this._viewEnd=range.end;
         this._status='ready';this._refreshFailures=0;
@@ -1913,13 +2124,13 @@ class HeatmapCard extends HTMLElement {
     const summary={rows:[{id:this._config.entity,unit:this._data?.unit,...summarizeHeatmap(this._rows,this._config.mode)}]};
     // Adapt the single sensor to the shared information popup without adding
     // internal collection fields to the card's saved configuration.
-    return chartDataInformation({_config:{entities:[this._config.entity],series_options:[{entity:this._config.entity,name:this._config.name?.trim()}]},_hass:this._hass,
+    return chartDataInformation({_config:{entities:[this._config.entity],series_options:[{entity:this._config.entity,name:this._sensorName()}]},_hass:this._hass,
       _insightOpen:this._insightOpen,_status:this._status,_inFlight:!!this._promise || this._status==='loading',_loadFailed:this._status==='error',
       _lastLoad:this._data?{sources:[{id:this._config.entity,source:this._data.source}],summary}:null,
       _isSeriesVisible:()=>true,_dataInformation:()=>summary,
       _insightColor:()=>{const scale=colorScale(this._rows,this._config),average=summary.rows[0].average;return scale.color(Number.isFinite(average)?average:(scale.min+scale.max)/2);}},language);
   }
-  _sensorName(){return this._config.name?.trim()||this._hass?.states?.[this._config.entity]?.attributes?.friendly_name||this._config.entity;}
+  _sensorName(){return this._config.name?.trim()||[this._config.entity,...(this._config.sum_entities??[])].map(id=>this._hass?.states?.[id]?.attributes?.friendly_name||id).join(' + ');}
   _cellBounds(cell){
     const intervals=cell.records.length?cell.records:cell.intervals;
     if(this._config.aggregation_period!=='hour'){
@@ -1934,19 +2145,20 @@ class HeatmapCard extends HTMLElement {
     const clock=new Intl.DateTimeFormat(locale,{...options,...(showOffset?{timeZoneName:'shortOffset'}:{})});
     return intervals.map(row=>`${clock.format(row.start)}–${clock.format(row.end)}`).join(', ') || `${String(cell.hour).padStart(2,'0')}:00–${String(cell.hour+1).padStart(2,'0')}:00`;
   }
-  _hideTooltip(){
+  _hideTooltip(){this._tooltipPointer=null;
     this._tooltipKey=null;
     const tooltip=this.shadowRoot.querySelector('.tooltip');if(tooltip)tooltip.hidden=true;
     this._tooltipButton?.removeAttribute('aria-describedby');this._tooltipButton=null;
   }
-  _showTooltip(key){
+  _showTooltip(key,event){
+    if(event)SharedGraph.rememberTooltipPointer(this,event);
     if(this._periodMenuOpen || this._insightOpen){this._hideTooltip();return;}
     const root=this.shadowRoot,cell=this._cells?.get(key),button=this._cellElements?.get(key)??[...root.querySelectorAll('[data-cell]')].find(button=>button.dataset.cell===key);
     const tooltip=root.querySelector('.tooltip'),chart=root.querySelector('.chart'),scroll=root.querySelector('.matrix-scroll');
     if(!cell || !button || !tooltip || !chart || !scroll){this._hideTooltip();return;}
     const box=chart.getBoundingClientRect(),target=button.getBoundingClientRect(),grid=scroll.getBoundingClientRect();
-    const left=Math.max(box.left,8),right=Math.min(box.right,window.innerWidth-8),top=Math.max(box.top,8),bottom=Math.min(box.bottom,window.innerHeight-8);
-    if(target.right<=Math.max(grid.left+(this._config.show_labels?82+this._config.cell_gap:0),left) || target.left>=Math.min(grid.right,right) || target.bottom<=Math.max(grid.top,top) || target.top>=Math.min(grid.bottom,bottom)) {this._hideTooltip();return;}
+    const left=Math.max(box.left,8),right=Math.min(box.right,window.innerWidth-8),top=8,bottom=window.innerHeight-8;
+    if(target.right<=Math.max(grid.left,left) || target.left>=Math.min(grid.right,right) || target.bottom<=top || target.top>=bottom) {this._hideTooltip();return;}
     this._tooltipKey=key;
     const dutch=isDutch(this._hass),name=this._sensorName();
     const value=cell.value==null?(dutch?'Geen gegevens':'No data'):`${this._number(cell.value)} ${this._data.unit}`;
@@ -1954,11 +2166,7 @@ class HeatmapCard extends HTMLElement {
     tooltip.innerHTML=`<strong>${esc(date)}${bounds?` · ${esc(bounds)}`:''}</strong><span><i style="background:${color}"></i><b class="tooltip-label">${esc(name)} <em class="tooltip-value">${esc(value)}</em></b>${cell.partial?`<small>${dutch?'Onvolledig':'Incomplete'}</small>`:''}</span>`;
     tooltip.style.width='max-content';tooltip.style.maxWidth=`${Math.max(0,Math.min(360,right-left-8))}px`;tooltip.style.maxHeight=`${Math.max(0,bottom-top-8)}px`;
     tooltip.hidden=false;
-    const measured=tooltip.getBoundingClientRect();
-    let x=target.right+10;if(x+measured.width>right-4)x=target.left-measured.width-10;
-    const y=target.bottom+measured.height+8<=bottom?target.bottom+8:target.top-measured.height-8;
-    tooltip.style.left=`${Math.max(left+4,Math.min(x,right-measured.width-4))-box.left}px`;
-    tooltip.style.top=`${Math.max(top+4,Math.min(y,bottom-measured.height-4))-box.top}px`;
+    SharedGraph.positionTooltip(this,{chart,tooltip,x:target.left-box.left+target.width/2,y:target.top-box.top+target.height/2});
     if(this._tooltipButton!==button)this._tooltipButton?.removeAttribute('aria-describedby');this._tooltipButton=button;
     button.setAttribute('aria-describedby','heatmap-tooltip');
   }
@@ -1971,6 +2179,9 @@ class HeatmapCard extends HTMLElement {
     const viewportChange=()=>this._hideTooltip();
     listen(window,'resize',viewportChange);
     const scroll=root.querySelector('.matrix-scroll');let scrollLeft=scroll?.scrollLeft ?? 0,scrollTop=scroll?.scrollTop ?? 0;
+    const updateHint=()=>this._layoutMatrixLabels();
+    updateHint();
+    if(scroll&&typeof ResizeObserver!=='undefined'){const observer=new ResizeObserver(updateHint);observer.observe(scroll);cleanups.push(()=>observer.disconnect());}
     const targets=new Set([window,root]);for(let node=this;node;){const tree=node.getRootNode?.();if(!tree || targets.has(tree))break;targets.add(tree);node=tree.host;}
     for(const target of targets)listen(target,'scroll',event=>{
       if(event.composedPath().includes(root.querySelector('.tooltip')))return;
@@ -1982,7 +2193,7 @@ class HeatmapCard extends HTMLElement {
       viewportChange();
     },true);
     listen(document,'pointerdown',event=>{if(!event.composedPath().includes(chart))this._hideTooltip();},true);
-    listen(root,'keydown',event=>{if(event.key==='Escape' && this._tooltipKey){event.preventDefault();this._hideTooltip();}});
+    listen(document,'keydown',event=>{if(event.key==='Escape' && this._tooltipKey){event.preventDefault();this._hideTooltip();}});
     chart.onpointerleave=()=>this._hideTooltip();
   }
   _matrixRow(row,index){
@@ -1990,19 +2201,45 @@ class HeatmapCard extends HTMLElement {
     const fmt=this._rowFormatter??=new Intl.DateTimeFormat(locale,{timeZone:this._zone||this._hass?.config?.time_zone||'UTC',weekday:'short',day:'numeric',month:'short'});
     return `<div class="matrix-row" role="row" aria-rowindex="${index+2}"><span class="day" role="rowheader">${esc(['week','month'].includes(c.aggregation_period)?row.key:fmt.format(row.timestamp))}</span>${row.cells.map(cell=>`<div role="cell" data-cell="${cell.key}" aria-label="${esc(this._label(cell))}" class="cell ${cell.value==null?'missing':''} ${!cell.intervals.length?'outside':''} ${cell.partial?'partial':''}"${cell.value!=null?` style="background-color:${scale.color(cell.value)}"`:''}></div>`).join('')}</div>`;
   }
-  _matrixWindow(scrollTop,height){
-    const step=this._config.cell_height+this._config.cell_gap,offset=this._config.show_labels?step:0,first=Math.min(Math.max(0,this._rows.length-1),Math.max(0,Math.floor((scrollTop-offset)/step)-8));
-    return [first,Math.min(this._rows.length,first+Math.ceil(Math.max(height||0,200)/step)+17)];
+  _heatmapHeader(options){
+    const label=options.language==='nl'?'Grafiekopties':'Graph tools',open=this.shadowRoot.querySelector('.chart-tools')?.open;
+    return cardHeader({...options,periods:{}}).replace('<div class="header-actions">',`<details class="chart-tools"${open?' open':''}><summary aria-label="${label}" title="${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></summary><div class="header-actions chart-tools-panel">`).replace('</div></header>',`</div></details>${options.periods.picker?`<div class="header-actions primary-timeframe"><div class="chart-controls" role="group" aria-label="${options.language==='nl'?'Tijdvak':'Timeframe'}">${options.periods.picker}${options.periods.navigation??''}</div></div>`:''}</header>`);
   }
-  _updateMatrixWindow(){
-    if(!this._virtualRows)return;
-    const scroll=this.shadowRoot.querySelector('.matrix-scroll'),body=this.shadowRoot.querySelector('.matrix-body');if(!scroll||!body)return;
-    const [first,last]=this._matrixWindow(scroll.scrollTop,scroll.clientHeight);
-    if(this._windowRange?.[0]===first&&this._windowRange?.[1]===last)return;
-    this._hideTooltip();this._windowRange=[first,last];const step=this._config.cell_height+this._config.cell_gap;
-    this._cells=new Map(this._rows.slice(first,last).flatMap(row=>row.cells).map(cell=>[cell.key,cell]));
-    body.innerHTML=this._rows.slice(first,last).map((row,index)=>`<div class="virtual-row" style="top:${(first+index)*step}px">${this._matrixRow(row,first+index)}</div>`).join('');
-    this._cellElements=new Map([...body.querySelectorAll('[data-cell]')].map(element=>[element.dataset.cell,element]));
+  _layoutMatrixLabels(){
+    const root=this.shadowRoot,scroll=root.querySelector('.matrix-scroll');if(!scroll||!globalThis.getComputedStyle)return;
+    const ctx=document.createElement('canvas').getContext('2d');if(!ctx)return;
+    const labels=[...root.querySelectorAll('.day,.hours span')];let rowHeight=this._config.cell_height;
+    for(const node of labels)rowHeight=Math.max(rowHeight,Math.ceil(parseFloat(getComputedStyle(node).fontSize)*1.4));
+    const measure=node=>{ctx.font=getComputedStyle(node).font;return Math.ceil(ctx.measureText(node.dataset.visualCaption??node.dataset.caption??node.textContent).width);};
+    let column=Math.max(82,...labels.filter(n=>n.classList.contains('day')).map(n=>measure(n)+16));
+    const reference=root.querySelector('.day');if(reference){ctx.font=getComputedStyle(reference).font;for(const row of this._rows)column=Math.max(column,Math.ceil(ctx.measureText(['week','month'].includes(this._config.aggregation_period)?row.key:this._rowFormatter.format(row.timestamp)).width)+16);}
+    const captions=[...root.querySelectorAll('.hours span')].slice(1),count=captions.length;
+    captions.forEach((node,i)=>{
+      node.dataset.caption??=node.textContent;
+      // The corner already identifies weeks; numeric captions preserve both
+      // range endpoints even with enlarged text in a narrow dashboard column.
+      node.dataset.visualCaption=this._config.aggregation_period==='week'?String(i+1):node.dataset.caption;
+      node.setAttribute('aria-label',node.dataset.caption);
+    });
+    const available=scroll.clientWidth-(this._config.show_labels?column:0);
+    // Saved gaps remain preferred, but never consume the complete data width.
+    const gap=Math.min(this._config.cell_gap,Math.max(0,available/(count*3)));
+    scroll.style.setProperty('--heatmap-label-width',column+'px');scroll.style.setProperty('--heatmap-gap',gap+'px');scroll.style.setProperty('--heatmap-row-height',rowHeight+'px');this._matrixLabelWidth=column;this._matrixRowHeight=rowHeight;
+    const width=Math.max(0,(available-gap*(count-(this._config.show_labels?0:1)))/count);
+    // Omit only visual captions. Column names and all cells stay accessible.
+    // Keep boundary captions aligned inward; greedily retain legible intermediates.
+    let edge=-Infinity;
+    const lastWidth=captions.length?measure(captions.at(-1)):0;
+    const end=available-gap-(this._config.show_labels?gap:0);
+    captions.forEach((node,i)=>{
+
+      const ink=measure(node),center=(i+.5)*(width+gap),start=i===0?0:i===count-1?end-ink:center-ink/2;
+      const fits=i===0 || (start>=edge+8 && (i===count-1 || start+ink+8<=end-lastWidth));
+      node.textContent=fits?node.dataset.visualCaption:'';
+      node.style.justifySelf=i===0?'start':i===count-1?'end':'center';
+      node.style.width='max-content';
+      if(fits)edge=start+ink;
+    });
   }
   _render(){
     if(!this._config){
@@ -2010,11 +2247,12 @@ class HeatmapCard extends HTMLElement {
       return;
     }
     const c=this._config,dutch=isDutch(this._hass),text=(en,nl)=>dutch?nl:en,language=dutch?'nl':'en';
-    const scroll=this.shadowRoot.querySelector('.matrix-scroll');
-    const scrollLeft=scroll?.scrollLeft ?? 0,scrollTop=scroll?.scrollTop ?? 0,tooltipKey=this._tooltipKey;
+    const toolsHadFocus=this.shadowRoot.activeElement?.matches?.('.chart-tools summary');
+    const header=this._heatmapHeader;
+    const tooltipKey=this._tooltipKey;
     captureChartInsights(this);
     const periods=periodControls(this,language),range=this._data?{start:this._start,end:this._end}:graphPeriodRange(this);
-    const historyUrl=`/history?entity_id=${encodeURIComponent(c.entity)}&start_date=${encodeURIComponent(new Date(range.start).toISOString())}&end_date=${encodeURIComponent(new Date(range.end).toISOString())}`;
+    const historyUrl=`/history?entity_id=${encodeURIComponent([c.entity,...(c.sum_entities??[])].join(','))}&start_date=${encodeURIComponent(new Date(range.start).toISOString())}&end_date=${encodeURIComponent(new Date(range.end).toISOString())}`;
     const name=this._sensorName();
     const scale=colorScale(this._rows,c);this._scale=scale;
     this._rowByKey=new Map(this._rows.map(row=>[row.key,row]));this._monthFormatter=null;this._dayFormatter=null;
@@ -2024,53 +2262,69 @@ class HeatmapCard extends HTMLElement {
     const fmt=new Intl.DateTimeFormat(locale,{timeZone:zone,weekday:'short',day:'numeric',month:'short'});this._rowFormatter=fmt;
     const fullDate=new Intl.DateTimeFormat(locale,{timeZone:zone,weekday:'short',day:'numeric',month:'short',year:'numeric'});
     this._dateLabels=new Map(this._rows.map(row=>[row.key,fullDate.format(row.timestamp)]));
-    this._virtualRows=this._rows.length>80;const step=c.cell_height+c.cell_gap;
-    const [first,last]=this._virtualRows?this._matrixWindow(scrollTop,scroll?.clientHeight||Math.min(c.max_height,600)):[0,this._rows.length];
-    this._windowRange=[first,last];
-    this._cells=new Map(this._rows.slice(first,last).flatMap(row=>row.cells).map(cell=>[cell.key,cell]));
-    const matrix=this._virtualRows?`<div class="matrix-body" role="rowgroup" style="height:${Math.max(0,this._rows.length*step-c.cell_gap)}px">${this._rows.slice(first,last).map((row,index)=>`<div class="virtual-row" style="top:${(first+index)*step}px">${this._matrixRow(row,first+index)}</div>`).join('')}</div>`:this._rows.map((row,index)=>this._matrixRow(row,index)).join('');
-    const status=this._status==='error'?(this._error==='consumption_statistics_required'?text('No counter statistics for this sensor.','Geen tellerstatistieken voor deze sensor.'):text('Could not load data.','Laden mislukt.')):text('Loading…','Laden…');
+    this._virtualRows=false;
+    this._cells=new Map(this._rows.flatMap(row=>row.cells).map(cell=>[cell.key,cell]));
+    const matrix=this._rows.map((row,index)=>this._matrixRow(row,index)).join('');
+    const sumErrors={sum_entity_missing:text('A selected sensor does not exist.','Een geselecteerde sensor bestaat niet.'),sum_unit_mismatch:text('All added sensors must have the same exact unit.','Alle opgetelde sensoren moeten exact dezelfde eenheid hebben.')};
+    const status=this._status==='error'?(sumErrors[this._error]??(this._error==='consumption_statistics_required'?text('No counter statistics for one or more selected sensors.','Geen tellerstatistieken voor één of meer geselecteerde sensoren.'):text('Could not load data.','Laden mislukt.'))):text('Loading…','Laden…');
     const hasValues=this._rows.some(row=>row.cells.some(cell=>cell.value!=null)),information=this._information(language);
     disconnectPeriodControls(this,true);disconnectChartInsights(this,true);this._disconnectTooltip();
-    this.shadowRoot.innerHTML=`<style>${cardHeaderStyles()}${periodControlsStyles()}${chartInsightStyles()}${SharedGraph.tooltipStyles()}
-      :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
-      ha-card{display:block;height:100%;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-family:inherit}
-      .content{display:flex;flex-direction:column;height:100%;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box}.content>.card-header,.content>.legend,.content>.status{flex-shrink:0}.chart{position:relative;display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
-      .matrix-scroll{flex:1;min-height:0;overflow:auto;max-height:${c.max_height}px;box-sizing:border-box;padding-bottom:6px}
-      .matrix{min-width:${(c.show_labels?82+c.cell_gap:0)+columnCount*c.cell_width+(columnCount-1)*c.cell_gap}px;display:grid;gap:${c.cell_gap}px}.matrix-row{display:grid;grid-template-columns:${c.show_labels?'82px ':''}repeat(${columnCount},minmax(${c.cell_width}px,1fr));gap:${c.cell_gap}px}.matrix-row:not(.hours){content-visibility:auto;contain-intrinsic-size:auto ${c.cell_height}px}.matrix-body{position:relative;min-width:100%}.virtual-row{position:absolute;left:0;right:0;height:${c.cell_height}px}
-      .hours{${c.show_labels?'':'display:none;'}position:sticky;top:0;z-index:3;background:var(--ha-card-background,var(--card-background-color,#fff))}
-      .hours span{font-size:10px;text-align:center;color:var(--secondary-text-color,#666);line-height:${c.cell_height}px}
-      .day{${c.show_labels?'':'display:none;'}position:sticky;left:0;z-index:2;background:var(--ha-card-background,var(--card-background-color,#fff));font-size:11px;line-height:${c.cell_height}px;white-space:nowrap;color:var(--secondary-text-color,#666)}
-      .cell{appearance:none;position:relative;border:0;border-radius:${c.border_radius}px;min-width:${c.cell_width}px;height:${c.cell_height}px;padding:0;cursor:default}
+    this.shadowRoot.innerHTML=`<style>${cardHeaderStyles()}${uiActionButtonStyles()}${periodControlsStyles()}${chartInsightStyles()}${SharedGraph.tooltipStyles()}
+      :host{display:block;height:auto!important;min-width:0;min-height:0;container-type:inline-size}
+      ha-card{display:block;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-family:inherit}
+      .content{display:flex;flex-direction:column;padding:var(--eleven-card-padding,16px);min-width:0;box-sizing:border-box}.content>.card-header,.content>.legend,.content>.status{flex-shrink:0}.chart{position:relative;display:flex;flex-direction:column;min-width:0}
+
+      .matrix-well{display:flex;flex-direction:column;min-width:0;box-sizing:border-box;padding:10px}
+      .matrix-scroll{min-width:0;overflow:visible;box-sizing:border-box;padding:0}
+      .matrix{min-width:0;width:100%;display:grid;gap:var(--heatmap-gap,${c.cell_gap}px)}.matrix-row{display:grid;min-width:0;grid-template-columns:${c.show_labels?'var(--heatmap-label-width,82px) ':''}repeat(${columnCount},minmax(0,1fr));gap:var(--heatmap-gap,${c.cell_gap}px)}
+      .hours{${c.show_labels?'':'display:none;'}margin-bottom:4px}
+      .hours span{min-width:0;font-size:11px;text-align:center;color:var(--secondary-text-color,#666);line-height:var(--heatmap-row-height,${c.cell_height}px);white-space:nowrap}.hours span:first-child{text-align:start;padding-inline:0 8px;box-sizing:border-box;white-space:normal}.hours span:not(:first-child){align-self:end}
+      .day{${c.show_labels?'':'display:none;'}font-size:11px;line-height:var(--heatmap-row-height,${c.cell_height}px);white-space:nowrap;color:var(--secondary-text-color,#666);padding-inline:0 8px;box-sizing:border-box}
+      .cell{appearance:none;position:relative;border:0;border-radius:${c.border_radius}px;min-width:0;height:var(--heatmap-row-height,${c.cell_height}px);padding:0;cursor:default}
       .cell:hover{box-shadow:inset 0 0 0 2px var(--primary-text-color,#20252b)}
       .missing{background:repeating-linear-gradient(135deg,transparent,transparent 3px,var(--divider-color,#ddd) 3px,var(--divider-color,#ddd) 5px);box-shadow:inset 0 0 0 1px var(--divider-color,#ddd)}.outside{opacity:.35}
-      .partial:after{content:'';position:absolute;right:2px;bottom:2px;width:4px;height:4px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #20252b}
-      .legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--secondary-text-color,#666);margin:0 0 10px;font-variant-numeric:tabular-nums}
-      .ramp{width:100px;height:10px;border-radius:3px;flex-shrink:1;background:${scale.gradient}}
-      .legend-value{overflow-wrap:anywhere;min-width:0}
+      .partial:after{content:'';position:absolute;right:0;bottom:2px;width:min(4px,100%);height:4px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1px #20252b}
+      .legend{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:6px 8px;font-size:11px;color:var(--secondary-text-color,#666);margin:8px 0 12px;font-variant-numeric:tabular-nums}
+      .ramp{grid-column:1/-1;grid-row:1;width:100%;height:10px;border-radius:3px;background:${scale.gradient}}
+      .legend-value{min-width:min-content;max-width:100%}.scale-number{display:inline-block;white-space:nowrap}.scale-unit{overflow-wrap:anywhere}.legend-value{grid-row:2}.legend-value:last-child{margin-inline-start:auto}
       .tooltip{pointer-events:auto}.tooltip .tooltip-label{color:var(--secondary-text-color,#666)}.tooltip .tooltip-value{color:var(--primary-text-color,#20252b);font-style:normal}
       .status{font-size:12px;line-height:1.5;margin:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-      .retry{font:inherit;color:inherit;background:transparent;border:1px solid var(--divider-color,#ddd);border-radius:5px;min-height:32px;padding:4px 10px;cursor:pointer}.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3)}
       @media(forced-colors:active){.cell{border:1px solid CanvasText}.missing{border-style:dashed}}
-    </style><ha-card><div class="content">${cardHeader({title:c.title,showTitle:c.show_title,historyUrl,language,periods,information})}
-    ${this._status!=='ready'?`<div class="status" role="status"><span>${esc(status)}${this._data?' '+text('Previous data shown.','Vorige gegevens worden getoond.'):''}</span>${this._status==='error'?`<button class="retry" type="button">${text('Retry','Opnieuw')}</button>`:''}</div>`:''}
-    ${this._data?`${!hasValues?`<p class="status" role="status">${text('No data','Geen gegevens')}</p>`:''}${c.show_legend?`<div class="legend" aria-label="${text('Color scale','Kleurschaal')}"><span class="legend-value">${this._number(scale.min)} ${esc(this._data.unit)}</span><span class="ramp" aria-hidden="true"></span><span class="legend-value">${this._number(scale.max)} ${esc(this._data.unit)}</span></div>`:''}<div class="chart"><div class="matrix-scroll"><div class="matrix" role="table" aria-label="${esc(name)}" aria-rowcount="${this._rows.length+(c.show_labels?1:0)}" aria-colcount="${columnCount+(c.show_labels?1:0)}"><div class="matrix-row hours" role="row"><span role="columnheader">${corner}</span>${columns.map(label=>`<span role="columnheader">${esc(label)}</span>`).join('')}</div>${matrix}</div></div><div class="tooltip" id="heatmap-tooltip" role="tooltip" hidden></div></div>`:''}</div></ha-card>`;
-    bindPeriodControls(this);bindChartInsights(this);
+    ${cardThemeStyles({chartUI:true,plots:'.matrix-well',wells:'.insight-sensor[data-ui-detail-surface]',controls:'.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period],.zoom-controls,.chart-links,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'.tooltip,[data-ui-popup]'})}${uiBalancedTabsStyles()}
+.content>.card-header{display:flex;align-items:center;gap:12px 8px;margin:0 0 4px;position:relative}
+.content>.card-header h2{font-size:16px;line-height:24px;font-weight:600;flex:1 1 0;margin:0}
+.chart-tools{margin-inline-start:auto;flex:none;height:24px}
+.chart-tools summary{display:flex;align-items:center;justify-content:center;list-style:none;width:44px;height:44px;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));cursor:pointer;color:var(--secondary-text-color)}
+.chart-tools summary{position:relative;top:-10px}
+.chart-tools summary::-webkit-details-marker{display:none}
+.chart-tools summary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
+.chart-tools summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.chart-tools-panel.header-actions{position:absolute;z-index:5;inset-inline-end:0;top:48px;width:max-content;max-width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:var(--ha-card-border-radius,12px);background:var(--card-background-color);box-shadow:var(--eleven-material-surface-shadow,var(--ha-card-box-shadow,none));gap:8px;justify-content:flex-start}
+.chart-tools:not([open])>.chart-tools-panel{display:none}
+.primary-timeframe.header-actions{width:100%;flex:1 1 100%;margin:0;gap:0}
+.primary-timeframe .chart-controls{width:100%;flex:1 1 100%}
+.primary-timeframe .period-controls{min-width:0;flex:1 1 auto}
+.primary-timeframe .period-trigger{font-size:12px}
+</style><ha-card><div class="content">${header.call(this,{title:c.title,showTitle:c.show_title,historyUrl,language,periods,information})}
+    ${this._status!=='ready'?`<div class="status" role="status"><span>${esc(status)}${this._data?' '+text('Previous data shown.','Vorige gegevens worden getoond.'):''}</span>${this._status==='error'?`${uiButton({variant:'action',className:'retry',text:text('Retry','Opnieuw')})}`:''}</div>`:''}
+    ${this._data?`${!hasValues?`<p class="status" role="status">${text('No data','Geen gegevens')}</p>`:''}${c.show_legend?`<div class="legend" aria-label="${text('Color scale','Kleurschaal')}"><span class="legend-value"><span class="scale-number">${this._number(scale.min)}</span> <span class="scale-unit">${esc(this._data.unit)}</span></span><span class="ramp" aria-hidden="true"></span><span class="legend-value"><span class="scale-number">${this._number(scale.max)}</span> <span class="scale-unit">${esc(this._data.unit)}</span></span></div>`:''}<div class="chart"><div class="matrix-well"><div class="matrix-scroll" role="region" aria-label="${esc(name)}"><div class="matrix" role="table" aria-label="${esc(name)}" aria-rowcount="${this._rows.length+(c.show_labels?1:0)}" aria-colcount="${columnCount+(c.show_labels?1:0)}"><div class="matrix-row hours" role="row"><span role="columnheader">${corner}</span>${columns.map(label=>`<span role="columnheader">${esc(label)}</span>`).join('')}</div>${matrix}</div></div></div><div class="tooltip" id="heatmap-tooltip" role="tooltip" hidden></div></div>`:''}</div></ha-card>`;
+    bindPeriodControls(this);bindChartInsights(this);this._layoutMatrixLabels();
+    const tools=this.shadowRoot.querySelector('.chart-tools');if(tools){tools.onkeydown=e=>{if(e.key==='Escape'&&!e.target.closest?.('[popover]')){e.preventDefault();tools.open=false;tools.querySelector('summary').focus();}};this._chartToolsOutside??=e=>{const current=this.shadowRoot.querySelector('.chart-tools');if(current?.open&&!e.composedPath().includes(current)&&!e.composedPath().some(n=>n?.matches?.('[popover]')))current.open=false;};globalThis.document?.addEventListener?.('pointerdown',this._chartToolsOutside);if(toolsHadFocus)tools.querySelector('summary').focus({preventScroll:true});}
     const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();
-    const container=this.shadowRoot.querySelector('.matrix-scroll');if(container){container.scrollLeft=scrollLeft;container.scrollTop=scrollTop;container.onscroll=()=>this._updateMatrixWindow();}
+
     this._bindTooltip();
     const grid=this.shadowRoot.querySelector('.matrix');
     if(grid){
-      this._cellElements=new Map([...grid.querySelectorAll('[data-cell]')].map(element=>[element.dataset.cell,element]));this._updateMatrixWindow();
+      this._cellElements=new Map([...grid.querySelectorAll('[data-cell]')].map(element=>[element.dataset.cell,element]));
       const target=e=>e.target.closest('[data-cell]');
-      grid.onpointerover=e=>{const cell=target(e);if(cell && e.pointerType!=='touch')this._showTooltip(cell.dataset.cell);};
+      grid.onpointerover=grid.onpointermove=e=>{const cell=target(e);if(cell && e.pointerType!=='touch')this._showTooltip(cell.dataset.cell,e);};
       const cell=this._cellElements.get(tooltipKey);
       if(cell?.matches(':hover'))this._showTooltip(tooltipKey);else this._hideTooltip();
     }
   }
 }
 
-if(!customElements.get('eleven-heatmap-card'))customElements.define('eleven-heatmap-card',withSharedCardBackground(HeatmapCard));
+if(!customElements.get('eleven-heatmap-card'))customElements.define('eleven-heatmap-card',withCardBackground(HeatmapCard));
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==='eleven-heatmap-card'))window.customCards.push({type:'eleven-heatmap-card',name:'Eleven Heatmap (beta)',description:'Sensor averages or consumption grouped by hour, day, week or month.',preview:true});
 })();

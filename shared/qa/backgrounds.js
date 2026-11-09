@@ -13,7 +13,7 @@ try{
   const config={...Class.getStubConfig(hass),entities:slug==='timeline-card'?['binary_sensor.door']:slug==='calendar-card'?[{entity:'calendar.home'}]:['sensor.example'],entity:slug==='weather-card'?'weather.home':'sensor.example',cameras:[],import_entity:'sensor.example'};
   const article=document.createElement('article');article.innerHTML='<h2>'+slug+'</h2>';document.querySelector('main').append(article);article.append(card);card.setConfig(config);card.hass=hass;await tick();
   check(slug+': shared adapter',!!Class.backgroundBaseCard);
-  if(slug!=='camera-card')check(slug+': original default retained',!card.shadowRoot.querySelector('[data-ui-background-host]'));
+  check(slug+': shared background host',!!card.shadowRoot.querySelector('[data-ui-background-host]'));
   for(const variant of selected){
    const background={variant,coverage:'header',height:280,transparency:45,colorMode:'custom',colors:['#85baaf','#8ca9e5','#c49ac8'],animated:true};
    card.setConfig({...config,card_background:background});card.hass=hass;await tick();

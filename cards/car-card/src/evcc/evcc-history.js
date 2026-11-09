@@ -105,36 +105,38 @@ export const evccHistoryMethods = {
   if (!this._entities.power) return '';
   const title = dutch ? 'Laadverloop' : 'Charging power';
   const points = this._historyData ?? [];
-  if (!points.some(point => point.value != null)) return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><p class="notice">${this._historyLoading ? (dutch ? 'Laadverloop laden…' : 'Loading charge history…') : this._historyMissingSession ? (dutch ? 'Sessiebegin niet beschikbaar. Controleer de historie van de aangesloten-sensor.' : 'Session start unavailable. Check the connection sensor history.') : (dutch ? 'Geen vermogenshistorie beschikbaar.' : 'No power history available.')}</p></div>`;
+  if (!points.some(point => point.value != null)) return `<div class="history"><div class="chart-head"><span>${title}</span></div><p class="notice">${this._historyLoading ? (dutch ? 'Laadverloop laden…' : 'Loading charge history…') : this._historyMissingSession ? (dutch ? 'Sessiebegin niet beschikbaar. Controleer de historie van de aangesloten-sensor.' : 'Session start unavailable. Check the connection sensor history.') : (dutch ? 'Geen vermogenshistorie beschikbaar.' : 'No power history available.')}</p></div>`;
   const {start, end} = this._historyRange, max = Math.max(2, Math.ceil(points.reduce((maximum, p) => Math.max(maximum, p.value ?? 0), 0) / 2) * 2);
-  const x = time => 38 + (time - start) / (end - start) * 256, y = value => value == null ? NaN : 100 - value / max * 88;
+  const x = time => (time - start) / (end - start) * 300, y = value => value == null ? NaN : 112 - value / max * 104;
   const graph = this._historyGraph ??= new SharedGraph();
   const coordinates = points.map(p => [x(p.time), y(p.value)]);
-  const svg = graph.render({shadowRoot: this.shadowRoot, isConnected: false}, {viewBox: '0 0 300 120', defs: '<defs><linearGradient id="evcc-power-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--primary-color,#2196f3)" stop-opacity=".22"/><stop offset="100%" stop-color="var(--primary-color,#2196f3)" stop-opacity="0"/></linearGradient></defs>', before: '<path class="grid-line" d="M38 12H294M38 56H294"/><path class="grid-line grid-zero" d="M38 100H294"/>', fills: [{d: evccHistoryArea(coordinates, 100), className: 'power-area', fill: 'url(#evcc-power-fade)'}], lines: [{d: SharedGraph.path(coordinates, 'step'), className: 'series-line', appearance: {...graphLineStyle('solid', 2), stroke: 'var(--primary-color,#2196f3)'}}], after: '<path class="cursor" hidden/>'});
+  const svg = graph.render({shadowRoot: this.shadowRoot, isConnected: false}, {viewBox: '0 0 300 120', defs: '<defs><linearGradient id="evcc-power-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--primary-color,#2196f3)" stop-opacity=".22"/><stop offset="100%" stop-color="var(--primary-color,#2196f3)" stop-opacity="0"/></linearGradient></defs>', before: '<path class="grid-line" d="M0 8H300M0 60H300"/><path class="grid-line grid-zero" d="M0 112H300"/>', fills: [{d: evccHistoryArea(coordinates, 112), className: 'power-area', fill: 'url(#evcc-power-fade)'}], lines: [{d: SharedGraph.path(coordinates, 'step'), className: 'series-line', appearance: {...graphLineStyle('solid', 3.5), stroke: 'var(--primary-color,#2196f3)'}}], after: '<path class="cursor" hidden/>'});
   const format = time => new Intl.DateTimeFormat(this._hass.locale?.language ?? this._hass.language ?? 'en', {...(end-start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(time);
   this._historyGeometry = {x, y, points};
-  return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><div class="plot" tabindex="0" role="group" aria-label="${dutch ? 'Laadvermogen. Gebruik links en rechts voor meetpunten.' : 'Charging power. Use left and right for readings.'}">${svg}<span class="point hover-dot" aria-hidden="true" hidden></span>${[max, max / 2, 0].map((value, index) => `<span class="axis-y" style="top:${10 + index * 36.6667}%">${value}</span>`).join('')}<div class="tooltip" hidden><strong></strong><span><i style="--series-color:var(--primary-color)"></i><b>${dutch ? 'Laadvermogen' : 'Charging power'} <em class="tooltip-value"></em></b></span></div></div><div class="chart-axis">${[start, (start + end) / 2, end].map(time => `<span>${uiEscape(format(time))}</span>`).join('')}</div><p class="sr-only chart-readout" aria-live="polite"></p></div>`;
+  return `<div class="history"><div class="chart-head"><span>${title}</span></div><div class="history-chart"><span class="axis-unit">kW</span><div class="chart-scale" aria-hidden="true">${[max, max / 2, 0].map(value => `<span class="axis-y" style="top:${y(value) / 120 * 100}%">${value}</span>`).join('')}</div><div class="plot" tabindex="0" role="group" aria-label="${dutch ? 'Laadvermogen. Gebruik links en rechts voor meetpunten.' : 'Charging power. Use left and right for readings.'}">${svg}<span class="point hover-dot" aria-hidden="true" hidden></span><div class="tooltip" hidden><strong></strong><span><i style="--series-color:var(--primary-color)"></i><b>${dutch ? 'Laadvermogen' : 'Charging power'} <em class="tooltip-value"></em></b></span></div></div><div class="chart-axis">${[start, (start + end) / 2, end].map(time => `<span>${uiEscape(format(time))}</span>`).join('')}</div></div><p class="sr-only chart-readout" aria-live="polite"></p></div>`;
  },
  _bindHistory() {
   const plot = this.shadowRoot.querySelector('.plot');
   if (!plot) return;
   const {points, x, y} = this._historyGeometry, tooltip = plot.querySelector('.tooltip');
   const hide = () => { tooltip.hidden = true; plot.querySelector('.cursor').setAttribute('hidden', ''); plot.querySelector('.point').setAttribute('hidden', ''); };
-  const select = index => {
+  const select = (index,event) => {
+   SharedGraph.rememberTooltipPointer(this,event);
    this._historyIndex = Math.max(0, Math.min(points.length - 1, index));
    const point = points[this._historyIndex];
    if (point.value == null) { hide(); return; }
    const cursor = plot.querySelector('.cursor'), dot = plot.querySelector('.point');
-   cursor.removeAttribute('hidden'); dot.removeAttribute('hidden'); cursor.setAttribute('d', `M${x(point.time)} 12V100`); dot.style.left = `${x(point.time) / 300 * 100}%`; dot.style.top = `${y(point.value) / 120 * 100}%`;
+   cursor.removeAttribute('hidden'); dot.removeAttribute('hidden'); cursor.setAttribute('d', `M${x(point.time)} 8V112`); dot.style.left = `${x(point.time) / 300 * 100}%`; dot.style.top = `${y(point.value) / 120 * 100}%`;
    const language = this._hass.locale?.language ?? this._hass.language ?? 'en';
    tooltip.hidden = false; tooltip.querySelector('strong').textContent = new Intl.DateTimeFormat(language, {...(this._historyRange.end-this._historyRange.start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(point.time);
    tooltip.querySelector('.tooltip-value').textContent = new Intl.NumberFormat(language, {maximumFractionDigits: 2}).format(point.value) + ' kW';
-   tooltip.style.left = x(point.time) < 166 ? 'auto' : '38px'; tooltip.style.right = x(point.time) < 166 ? '6px' : 'auto';
+   const box=plot.getBoundingClientRect();tooltip.style.right='auto';
+   SharedGraph.positionTooltip(this,{chart:plot,tooltip,x:x(point.time)/300*box.width,y:y(point.value)/120*box.height});
    this.shadowRoot.querySelector('.chart-readout').textContent = tooltip.textContent;
   };
   plot.addEventListener('pointermove', event => {
    const rect = plot.getBoundingClientRect(), position = (event.clientX - rect.left) / rect.width * 300;
-   select(points.reduce((best, point, index) => Math.abs(x(point.time) - position) < Math.abs(x(points[best].time) - position) ? index : best, 0));
+   select(points.reduce((best, point, index) => Math.abs(x(point.time) - position) < Math.abs(x(points[best].time) - position) ? index : best, 0),event);
   });
   plot.addEventListener('pointerleave', hide); plot.addEventListener('blur', hide);
   plot.addEventListener('focus', () => select(this._historyIndex ?? points.length - 1));

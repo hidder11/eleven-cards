@@ -1,0 +1,10 @@
+import {readFile,mkdir,writeFile,rename} from 'node:fs/promises';
+const root=new URL('../',import.meta.url);const utils=await readFile(new URL('src/control-utils.mjs',root),'utf8');const shared=await readFile(new URL('src/shared-ui.js',root),'utf8');
+const theme=await readFile(new URL('../../shared/card-theme.js',root),'utf8');
+const bar=(await readFile(new URL('../../shared/ui-button.js',root),'utf8'))+'\n'+(await readFile(new URL('../../shared/ui-action-button.js',root),'utf8'))+'\n'+(await readFile(new URL('../../shared/ui-bar.js',root),'utf8'));
+const background=(await readFile(new URL('../../shared/ui-card-background.js',root),'utf8'))+'\n'+(await readFile(new URL('../../shared/card-background.js',root),'utf8'));
+const adapters=await readFile(new URL('src/standalone-utils.mjs',root),'utf8');
+const cards=await readFile(new URL('src/standalone-cards.js',root),'utf8');
+const flatten=s=>s.replace(/^import[^\n]+\n/gm,'').replaceAll('export ','');
+const bundle='// Eleven standalone Actions, Controls and Waste\n(()=>{\n'+flatten(theme)+'\n'+flatten(bar)+'\n'+flatten(background)+'\n'+flatten(utils)+'\n'+flatten(shared)+'\n'+flatten(adapters)+'\n'+flatten(cards)+'\n})();\n';
+await mkdir(new URL('dist/',root),{recursive:true});const dest=new URL('dist/eleven-home-controls-card.js',root);const tmp=new URL(`dist/.home-${process.pid}.js`,root);await writeFile(tmp,bundle);await rename(tmp,dest);console.log('Built',dest.pathname);

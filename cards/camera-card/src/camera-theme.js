@@ -1,6 +1,6 @@
 import {cardThemeStyles} from '../../../shared/card-theme.js';
 import {uiActionButtonStyles} from '../../../shared/ui-action-button.js';
-import {uiBalancedTabsStyles} from '../../../shared/ui-balanced-tabs.js';
+import {uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';
 import {uiButtonStyles} from '../../../shared/ui-button.js';
 
 // Opt in only this card: the active HA theme owns paint and depth. The camera

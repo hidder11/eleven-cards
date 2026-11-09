@@ -1,6 +1,10 @@
 # Eleven Car (beta)
 
-A single vehicle card with optional EVCC integration. The vehicle image, header, eleven backgrounds and soft fade are shared between both modes. The standalone module includes the EVCC engine; no other card resource is needed.
+The percentage bar and EVCC solar-preference slider reuse the shared recessed bar component. The default track is 12px high; explicit `slim` and `line` settings retain 8px and 4px heights. The EVCC bar keeps its target marker and shows the selected broad, soft light band C only while charging with positive measured power, below the target, and online. Its fill remains the actual SOC; planned/waiting states do not animate. Reduced motion disables the band, and `animation_speed` still adjusts its tempo. The ordinary Car percentage bar remains static because it has no charging-state source.
+
+The EVCC charging-history plot groups its kW unit, value scale and time labels inside one themed recessed chart surface, matching History Graph. The title stays above the chart, and the plot has no separate inset shadow. Axis alignment, Recorder gaps and pointer/keyboard inspection remain shared with the existing history behavior.
+
+A single vehicle card with optional EVCC integration. The vehicle image, header, eleven backgrounds and soft fade are shared between both modes. Both modes use the same layout without a visible card title, like Weather; the configured title remains the accessible card name and vehicle image description. The standalone module includes the EVCC engine; no other card resource is needed.
 
 The visual editor starts with **Use EVCC integration**. When off, it offers a percentage and three custom readings. When on, it offers the loadpoint sensor, entity overrides and visible charging tabs. Settings for the other mode remain stored when you switch.
 
@@ -61,7 +65,7 @@ Automatic EVCC discovery waits for the entity registry and keeps matches within 
 
 The standalone EVCC card has been removed. Migrate old `custom:eleven-evcc-card` YAML to `custom:eleven-car-card`, add `evcc_enabled: true` and keep its entity mappings and other options. EVCC integration is now provided only through Car. Remove any standalone EVCC resource from the dashboard resources and load the current collection or Car module. Its internal engine, synthetic QA fixtures and regression tests live in this card's src/evcc, qa/evcc and tests/evcc directories.
 
-Choose any Home Assistant entity for each field. Labels default to its friendly name, values retain units, numeric values use the frontend language, and clicking a value opens entity details. Missing or unavailable entities show a dash; zero remains visible.
+Without EVCC, field 1 spans the full width above fields 2 and 3. The lower fields share a row when their readings fit, and stack on narrow cards. Hidden fields leave no empty panels; a single lower field fills the width. Choose any Home Assistant entity for each field. Labels default to its friendly name, values retain units, numeric values use the frontend language, and clicking a value opens entity details. Missing or unavailable entities show a dash; zero remains visible.
 
 For custom fields, replace `2` with `1`, `2` or `3` in these options:
 
@@ -77,7 +81,7 @@ For example, `field_2_attribute: fuel_range`, `field_2_unit: km` and `field_2_de
 
 For a fixed percentage, omit `percentage_entity` and set `percentage: 65`. This only changes the card display; it does not write to a sensor. A configured percentage entity takes precedence, including when unavailable. Values are clamped to 0–100.
 
-Non-EVCC range appears under the title, in the same position as EVCC range. The **Range** editor section offers hide (`range_source: none`, default), entity (`entity`) or estimate (`calculated`). With EVCC enabled, the loadpoint's own range source is used instead; the custom settings remain stored.
+Non-EVCC range appears under the percentage, in the same position as EVCC range. The **Range** editor section offers hide (`range_source: none`, default), entity (`entity`) or estimate (`calculated`). With EVCC enabled, the loadpoint's own range source is used instead; the custom settings remain stored.
 
 For a remaining-range sensor:
 
@@ -159,3 +163,7 @@ A horizontal image offset of 0 centers the vehicle in the full card, in both cus
 Car, Energy and Weather share all eleven backgrounds and the exact same localized editor names, including Animated/Static labels: lanes, halo, ribbon, prism-glass, eclipse, aurora, clouds, isobars, hologram, ink and terrain. Existing YAML IDs stay unchanged. New patterns use the shared header renderer, intensity, animation toggle and reduced-motion behavior.
 
 Information surfaces use the shared matte relief from shared/ui-surface.js, matching Energy, Car (including EVCC), Weather and Camera. Cross-card computed-style and narrow-layout checks are available in shared/qa/surface-consistency.html.
+
+## Shared card background
+
+The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

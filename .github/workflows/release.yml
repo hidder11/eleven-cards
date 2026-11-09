@@ -22,7 +22,8 @@ concurrency:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # Keep the OS compatible with the pinned Playwright browser dependencies.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
@@ -62,7 +63,7 @@ jobs:
         run: |
           npm test
           npm run check
-          git diff --exit-code -- dist cards/*/dist
+          git diff --exit-code -- dist cards/*/dist experiments/material-house/dist
           git diff --check
       - name: Install browser smoke test dependencies
         run: |
@@ -70,30 +71,55 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Browser smoke test
         run: python tests/browser-smoke.py
+      - name: All-card cold-start render and migration regressions (synthetic HA)
+        run: python tests/browser-all-cards-render.py
+      - name: Decorative background defaults and graph exclusion (synthetic HA)
+        run: |
+          python tests/browser-background-default.py
+          python tests/browser-background-graph-exclusion.py
+          BACKGROUND_GRAPH_ARTIFACT=standalones python tests/browser-background-graph-exclusion.py
+          python tests/browser-plot-inset-theme.py
+          PLOT_THEME_ARTIFACT=standalones python tests/browser-plot-inset-theme.py
       - name: Record release provenance
         run: |
+          if ! test -s themes/eleven_material.yaml; then
+            echo "Required Eleven Material theme is missing or empty: themes/eleven_material.yaml" >&2
+            exit 1
+          fi
           printf 'Version: %s\nCommit: %s\n' "$VERSION" "$RELEASE_SHA" > release-provenance.txt
-          sha256sum dist/eleven-cards.js >> release-provenance.txt
+          sha256sum dist/eleven-cards.js themes/eleven_material.yaml >> release-provenance.txt
           cat release-provenance.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Create draft only (never publish)
         if: ${{ !inputs.dry_run }}
         run: |
-          gh release create "$VERSION" dist/eleven-cards.js release-provenance.txt \
-            --target "$RELEASE_SHA" --title "Eleven Cards $VERSION" \
+          gh release create "$VERSION" dist/eleven-cards.js themes/eleven_material.yaml release-provenance.txt \
+            --target "$RELEASE_SHA" --title "$VERSION" \
             --generate-notes --draft --latest=false
       - name: Verify draft and asset
         if: ${{ !inputs.dry_run }}
         run: |
-          gh release view "$VERSION" --json isDraft,isPrerelease,tagName,targetCommitish,assets > "$RUNNER_TEMP/release.json"
+          gh release view "$VERSION" --json isDraft,isPrerelease,name,tagName,targetCommitish,assets > "$RUNNER_TEMP/release.json"
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
           import {readFileSync, statSync} from 'node:fs';
           const release = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/release.json`, 'utf8'));
           assert.equal(release.isDraft, true);
           assert.equal(release.isPrerelease, false);
+          assert.equal(release.name, process.env.VERSION);
           assert.equal(release.tagName, process.env.VERSION);
           assert.equal(release.targetCommitish, process.env.RELEASE_SHA);
-          const asset = release.assets.find(asset => asset.name === 'eleven-cards.js');
-          assert.ok(asset, 'HACS bundle must be attached');
-          assert.equal(asset.size, statSync('dist/eleven-cards.js').size);
+          const expectedAssets = [
+            ['eleven-cards.js', 'dist/eleven-cards.js'],
+            ['eleven_material.yaml', 'themes/eleven_material.yaml'],
+            ['release-provenance.txt', 'release-provenance.txt'],
+          ];
+          assert.deepEqual(
+            release.assets.map(asset => asset.name).sort(),
+            expectedAssets.map(([name]) => name).sort(),
+            'Release assets must be exactly the HACS bundle, Eleven Material theme and provenance',
+          );
+          for (const [name, path] of expectedAssets) {
+            const asset = release.assets.find(asset => asset.name === name);
+            assert.equal(asset.size, statSync(path).size, `Release asset size mismatch: ${name}`);
+          }
           JS

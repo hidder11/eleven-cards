@@ -1,3 +1,4 @@
+import {withCardBackground} from '../../../shared/card-background.js';
 import {HistoryGraphCard,HistoryGraphEditor} from '../../history-graph-card/src/history-graph-card.js';
 import {editorConfig,graphAxes,yAxis,alignZeroAxes,alignGridAxes,periodBounds,valueAt,aggregateSeries,displayPoints} from '../../history-graph-card/src/history-utils.js';
 import {language,frontendHass} from '../../history-graph-card/src/localization.js';
@@ -36,6 +37,8 @@ export class BarChartEditor extends HistoryGraphEditor {
  _emit(){this._render();super._emit();}
 }
 export class BarChartCard extends HistoryGraphCard {
+ get _calmChartLayout(){return true;}
+ get _legendUnitsInline(){return true;}
  constructor(){super();this._graph=new BarGraph();}
  static async getConfigElement(){
   await super.getConfigElement();
@@ -210,8 +213,8 @@ export class BarChartCard extends HistoryGraphCard {
    const height=valueAt((this._plotSeries??this._series)[i].points,interval.start),axis=this._axes?.[this._seriesAxes[i]]??{min:this._range[0],max:this._range[1]};
    if(height!==null&&height>=axis.min&&height<=axis.max){const b=bounds[visible.indexOf(i)];markers[dot++].style.left=`${(b.left+b.right)/2}px`;}
   }
-  const measured=tooltip.getBoundingClientRect();
-  tooltip.style.left=`${Math.max(4,Math.min(box.width-measured.width-4,px+14+measured.width>box.width-4?px-measured.width-14:px+14))}px`;
+  const points=[...chart.querySelectorAll('.hover-dot')].map(dot=>{const r=dot.getBoundingClientRect();return {x:r.left-box.left+r.width/2,y:r.top-box.top+r.height/2};});
+  SharedGraph.positionTooltip(this,{chart,tooltip,x:px,y:points.length?points.reduce((sum,m)=>sum+m.y,0)/points.length:plot.top-box.top+plot.height/2,markers:points,local:publish});
   if(publish)SharedGraph.publishHover(this,(interval.start+interval.end)/2);
  }
  _defaultTitle(lang){return lang==='nl'?'Staafdiagram':'Bar chart';}
@@ -221,6 +224,6 @@ export class BarChartCard extends HistoryGraphCard {
 `;
  }
 }
-if(!customElements.get('eleven-bar-chart'))customElements.define('eleven-bar-chart',BarChartCard);
+if(!customElements.get('eleven-bar-chart'))customElements.define('eleven-bar-chart',withCardBackground(BarChartCard));
 window.customCards=window.customCards??[];
 if(!window.customCards.some(c=>c.type==='eleven-bar-chart'))window.customCards.push({type:'eleven-bar-chart',name:'Eleven Bar Chart',get description(){return local('Vertical sensor history bars, based on Eleven History.','Verticale staven van sensorhistorie, gebaseerd op Eleven History.');}});

@@ -1,4 +1,5 @@
 import {uiDetailSurface,uiDetailSurfaceStyles} from '../../../shared/ui-detail-surface.js';
+import {uiBar} from '../../../shared/ui-bar.js';
 import {energyFlowDeviceCosts} from './energy-flow-insights.js';
 import {uiEscape,uiButton} from '../../../shared/ui-button.js';
 import {uiPopup} from '../../../shared/ui-popup.js';
@@ -23,7 +24,7 @@ export function energyFlowDetailContent(host,kind,data){
  const metric=(label,value,tone='home')=>`<div data-tone="${tone}"><dt>${uiEscape(label)}</dt><dd>${uiEscape(value)}</dd></div>`;
  const deviceMetric=(label,value,total,{tone='home',hint=''}={})=>{
   const comparable=Number.isFinite(value)&&value>=0&&Number.isFinite(total)&&total>0,percent=comparable?value/total*100:null;
-  return `<div data-tone="${tone}"><dt>${uiEscape(label)}</dt><dd><strong>${uiEscape(reading(value))}</strong>${percent!=null&&percent<=100?`<small>${uiEscape(reading(percent,'%'))}</small>`:''}</dd>${comparable?`<div class="energy-detail-track" aria-hidden="true"><i style="width:${Math.min(100,percent)}%"></i></div>`:''}${hint?`<small class="energy-home-hint">${uiEscape(hint)}</small>`:''}</div>`;
+  return `<div data-tone="${tone}"><dt>${uiEscape(label)}</dt><dd><strong>${uiEscape(reading(value))}</strong>${percent!=null&&percent<=100?`<small>${uiEscape(reading(percent,'%'))}</small>`:''}</dd>${comparable?uiBar({value:percent,decorative:true,attrs:{class:'energy-detail-track',style:'--ui-bar-tone:var(--detail-tone)'}}):''}${hint?`<small class="energy-home-hint">${uiEscape(hint)}</small>`:''}</div>`;
  };
  const state=host._detailResult??{},stats=state.statistics??{},meta=state.metadata??{};
  let html='';
@@ -34,7 +35,7 @@ export function energyFlowDetailContent(host,kind,data){
  if(kind==='home'){
   html+=`<dl class="energy-grid-metrics energy-home-summary">${metric(t('Woning totaal','Home total'),reading(data.home))}${metric(t('Geschat basisverbruik','Estimated base consumption'),reading(host._baseResult?.value?.watts??null,'W'))}</dl>`;
   const devices=energyFlowDeviceRows(prefs,hass,history,stats),costs=history?energyFlowDeviceCosts(prefs,hass,state):{};
-  if(!devices.length)return html+note(t('Geen afzonderlijke apparaten ingesteld in Home Assistant Energy.','No individual devices configured in Home Assistant Energy.'));
+  if(!devices.length)return html;
   const costReading=cost=>cost?.currency?reading(cost.value,cost.currency):'—';
   const surface=(label,value,{entity='',cost=null,hint='',id=''}={})=>{
    const share=Number.isFinite(data.home)&&data.home>0?value/data.home*100:null;
@@ -114,7 +115,7 @@ export const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 .energy-device-sort select:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
 @container(max-width:360px){.energy-home-summary dd{font-size:16px}}
 
-:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--detail-bar-radius:8px;--detail-home:var(--house,var(--primary-color,#578d83));--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,#9576bb)}
+:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--detail-bar-radius:8px;--detail-home:var(--house,var(--primary-color,#578d83));--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
 :is([data-energy-popup],[data-energy-panel]) .ui-popup-heading>strong{font-size:14px;font-weight:600}
 :is([data-energy-popup],[data-energy-panel]) button{border-radius:8px}
 .energy-grid-metrics>.energy-grid-net{grid-column:1/-1}
@@ -124,7 +125,8 @@ export const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 :is([data-energy-popup],[data-energy-panel]) :is([data-tone=home],[data-tone=other]){--detail-tone:var(--detail-home)}
 :is([data-energy-popup],[data-energy-panel]) [data-tone=solar]{--detail-tone:var(--detail-solar)}
 .energy-detail-section{margin:16px 0 0}.energy-detail-section h3{font-size:12px;font-weight:650;line-height:1.4;margin:0;color:var(--primary-text-color)}
-.energy-detail-track,.energy-detail-supply{display:flex;height:var(--detail-bar-height);margin:8px 0 0;border-radius:var(--detail-bar-radius);background:var(--divider-color,#ddd);overflow:hidden}
+.energy-detail-track{margin:8px 0 0}
+.energy-detail-supply{display:flex;height:var(--detail-bar-height);margin:8px 0 0;border-radius:var(--detail-bar-radius);background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,none);overflow:hidden}
 .energy-detail-track i,.energy-detail-supply i{display:block;height:100%;flex:none;border-radius:0;background:var(--detail-tone)}
 .energy-detail-supply [data-supply=solar]{background:var(--detail-solar)}
 .energy-detail-supply [data-supply=grid]{background:var(--detail-import)}
@@ -132,6 +134,7 @@ export const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 .energy-detail-supply [data-supply=export]{background:var(--detail-export)}
 .energy-grid-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 16px;margin:16px 0 0}
 .energy-grid-summary{margin-top:0}
+.content [data-ui-detail-surface]{background:var(--secondary-background-color,#eee)}
 .energy-grid-metrics>div{display:grid;grid-template-rows:subgrid;grid-row:span 2;min-width:0}
 .energy-grid-metrics>div:nth-child(n+3){padding-top:14px}
 .energy-grid-metrics dt{font-size:11px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere;line-height:1.4}

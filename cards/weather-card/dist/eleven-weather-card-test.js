@@ -1,6 +1,72 @@
 // Eleven Weather (beta) — self-contained module
 (()=>{
-const withSharedCardBackground=(()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false,periodUI=chartUI}={}) {
+ // Segmented groups own their paint; descendants pressing must not press the group.
+ if(chartUI)controls=controls.split(',').filter(selector=>!['.zoom-controls','.chart-links'].includes(selector.trim())).join(',');
+ if(periodUI)controls=[controls,'.period-default [data-ui-button=surface]'].filter(Boolean).join(',');
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${wells?`:is(${wells}):is([data-ui-detail-surface]){background:var(--secondary-background-color,#eee)}`:''}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,var(--eleven-material-inset,transparent))}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${periodUI?`
+.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>[data-period]{position:relative;flex:none}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:4px 6px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+${segmentedControlStyles('.chart-controls','.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period]',{first:'.chart-controls>.period-controls>.period-trigger'})}
+${segmentedControlStyles('.zoom-controls','.zoom-controls>[data-zoom]')}
+${segmentedControlStyles('.chart-links','.chart-links>.history-link,.chart-links>.insight-control>.insight-trigger',{last:'.chart-links>.insight-control>.insight-trigger'})}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
+// A single raised group with separate native button press states; no parent :active.
+function segmentedControlStyles(group,buttons,{first=`:is(${group})>:is(button,a):first-child`,last=`:is(${group})>:is(button,a):last-child`,dividers=`:is(${group})>:not(:first-child)`}={}){return `
+${group}{gap:0;align-items:stretch;background:var(--eleven-material-control-background,var(--secondary-background-color,#eee));box-shadow:var(--eleven-material-control-shadow,var(--eleven-surface-shadow,none));border-radius:var(--eleven-material-radius-button,9px)}
+:is(${buttons}){position:relative;align-self:stretch;height:auto;padding:2px 6px;background:transparent;box-shadow:none;border:0;border-radius:0;min-height:36px;min-width:36px;font-size:12px;box-sizing:border-box}
+:is(${buttons}) svg{width:14px;height:14px}
+${first?`:is(${buttons}):is(${first}){border-start-start-radius:var(--eleven-material-radius-button,9px);border-end-start-radius:var(--eleven-material-radius-button,9px)}`:''}
+${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-material-radius-button,9px);border-end-end-radius:var(--eleven-material-radius-button,9px)}`:''}
+:is(${dividers}){position:relative}
+:is(${dividers})::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--divider-color,#ddd) 55%,transparent);pointer-events:none;z-index:1}
+:is(${buttons}):disabled{opacity:1;color:color-mix(in srgb,var(--primary-text-color,#20252b) 35%,transparent);cursor:default}
+:is(${buttons}):not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none}
+:is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
+:is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+@media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -35,6 +101,24 @@ function uiButtonStyles(){return `
 [data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
 [data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
 [data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
+`;}
+
+
+// Opt-in ordinary actions. Legacy uiButtonStyles() and its callers stay unchanged.
+// The active HA theme supplies paint; variants distinguish commands from choices.
+function uiActionButtonStyles(){return uiButtonStyles()+`
+[data-ui-button^="action"]{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;flex:none;gap:8px;min-width:44px;min-height:44px;width:auto;max-width:100%;overflow-wrap:break-word;height:auto;padding:8px 12px;border:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));font:inherit;font-size:13px;font-weight:500;line-height:1.4;text-align:center;white-space:normal;color:var(--primary-text-color);background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);transform:none;text-decoration:none;cursor:pointer;transition:background 120ms ease-out,transform 120ms ease-out,box-shadow 120ms ease-out}
+[data-ui-button="action-icon"]{width:44px;padding:8px}
+[data-ui-button^="action"]:not(:disabled):hover{background:var(--eleven-material-control-hover-background,color-mix(in srgb,var(--primary-text-color) 5%,var(--secondary-background-color,transparent)))}
+[data-ui-button^="action"]:not(:disabled):active{transform:translateY(1px);box-shadow:var(--eleven-material-well,none)}
+[data-ui-button^="action"]:focus-visible{outline:2px solid var(--eleven-material-focus-color,color-mix(in srgb,var(--accent-color,var(--primary-color,#2196f3)) 60%,var(--primary-text-color,currentColor)));outline-offset:-2px}
+[data-ui-button^="action"]:disabled{opacity:.45;cursor:default;transform:none}
+[data-ui-button="action-choice"][aria-pressed="true"]{color:var(--eleven-material-selection-color,color-mix(in srgb,var(--accent-color,var(--primary-color)) 40%,var(--primary-text-color)));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);transform:translateY(1px)}
+[data-ui-button="action-choice"][aria-pressed="true"]:not(:disabled):hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+[data-ui-button="action-choice"][aria-pressed="true"]:not(:disabled):active{transform:translateY(1px);box-shadow:var(--eleven-material-selection-well,none)}
+[data-ui-button="action-danger"]{color:var(--eleven-material-danger-color,color-mix(in srgb,var(--error-color) 55%,var(--primary-text-color)));border:1px solid var(--error-color)}
+@media(prefers-reduced-motion:reduce){[data-ui-button^="action"]{transition:none}}
+@media(forced-colors:active){[data-ui-button^="action"]{color:ButtonText;background:ButtonFace;border:1px solid ButtonText;box-shadow:none}[data-ui-button^="action"]:focus-visible{outline-color:Highlight}[data-ui-button="action-choice"][aria-pressed="true"]{color:HighlightText;background:Highlight;box-shadow:none}}
 `;}
 
 
@@ -475,8 +559,8 @@ const withCardBackground=(Base,options={})=>class extends Base{
   if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
-  if(!customElements.get('eleven-weather-background-editor-test'))customElements.define('eleven-weather-background-editor-test',ElevenCardBackgroundEditor);
-  const editor=document.createElement('eleven-weather-background-editor-test');editor.backgroundOptions=options;
+  if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
+  const editor=document.createElement('eleven-card-background-editor');editor.backgroundOptions=options;
   if(super.getConfigElement)editor.nativeEditor=await super.getConfigElement();
   else if(super.getConfigForm){
    if(!customElements.get('ha-form')&&window.loadCardHelpers){
@@ -598,63 +682,38 @@ class ElevenCardBackgroundEditor extends HTMLElement{
  }
 }
 
-return Base=>withCardBackground(Base,{preserveNative:true});
-})();
-// One recipe for raised information surfaces across all cards.
-const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
-function uiSurfaceStyles(selector){return `
-:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
-${selector}{box-shadow:var(--eleven-surface-shadow)}
-@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
-`;}
-
-// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
-function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function uiAttributes(values={}){
- return Object.entries(values).map(([key,value])=>{
-  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
-  if(value==null)return '';
-  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
-  return ` ${key}="${uiEscape(value)}"`;
- }).join('');
-}
-function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
- const classes=className?` class="${uiEscape(className)}"`:'';
- const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
- return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
-}
-function uiButtonStyles(){return `
-[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
-[data-ui-button="icon"]{width:32px;height:32px}
-[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
-[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
-[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
-[data-ui-button]:disabled{opacity:.35;cursor:default}
-[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
-[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
-[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
-[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
-`;}
-
 
 // The caller formats measurements and translates the subtitle. All text is escaped.
-function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',attrs={}}={}){
+function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',layout='',unitPosition='raised',attrs={}}={}){
  const missing=value==null||value==='';
  const number=uiEscape(missing?'—':value);
  const label=subtitle!==''&&subtitle!=null?(subtitleEntity?`<button type="button" class="primary-label" data-entity="${uiEscape(subtitleEntity)}">${uiEscape(subtitle)}</button>`:`<div class="primary-label">${uiEscape(subtitle)}</div>`):'';
- return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
+ return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing),'data-primary-layout':layout==='uniform'?'uniform':null,'data-unit-position':layout==='uniform'&&['raised','baseline','center'].includes(unitPosition)?unitPosition:null})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
 }
 
 function uiPrimaryValueStyles(){return `
-[data-ui-primary-value]{--_primary-tone:var(--ui-primary-tone,var(--tone,var(--primary-color,#2196f3)));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-primary-value]{--_primary-tone:var(--accent-color,var(--primary-color,#2196f3));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
 [data-ui-primary-value] .primary-value{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin:0;font-size:var(--ui-primary-size,60px);line-height:1.15;font-weight:650;letter-spacing:-.055em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 [data-ui-primary-value] .primary-number{display:block;min-width:0;max-width:100%;overflow-wrap:anywhere}
 [data-ui-primary-value] button.primary-number{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}[data-ui-primary-value] button:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px;border-radius:3px}
 [data-ui-primary-value] .primary-value small{display:block;margin:8px 0 0;font-size:var(--ui-primary-unit-size,16px);line-height:1.4;font-weight:400;letter-spacing:-.03em;color:var(--secondary-text-color,#626a78)}
-[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid color-mix(in srgb,var(--_primary-tone) 55%,transparent);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
-[data-ui-primary-value] button.primary-label{display:block;max-width:100%;min-height:0;margin-bottom:0;padding-block:0;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
+[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid var(--_primary-tone);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-label{display:flex;align-items:center;box-sizing:border-box;max-width:100%;min-width:44px;min-height:44px;margin-bottom:0;padding-block:6px;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
 [data-ui-primary-value][data-density=compact] .primary-value{font-size:var(--ui-primary-size,46px)}
 [data-ui-primary-value][data-density=compact] .primary-value small{font-size:var(--ui-primary-unit-size,14px);margin-top:5px}
+/* One opt-in composition owns value, unit and subtitle geometry for all cards. */
+[data-ui-primary-value][data-primary-layout=uniform]{--ui-primary-size:44px;--ui-primary-unit-size:16px}
+[data-ui-primary-value][data-primary-layout=uniform][data-density=compact]{--ui-primary-size:36px;--ui-primary-unit-size:14px}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-value{display:flex;align-items:flex-start;flex-wrap:nowrap;gap:6px;min-height:44px;font-size:var(--ui-primary-size);line-height:1.1;font-weight:650;letter-spacing:-.035em;white-space:nowrap;overflow-wrap:normal}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-number{display:block;min-width:0;min-height:0;max-width:none;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+[data-ui-primary-value][data-primary-layout=uniform] button.primary-number{min-height:44px}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-value small{flex:none;margin:6px 0 0;font-size:var(--ui-primary-unit-size);line-height:1.4;letter-spacing:0;white-space:nowrap}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=baseline] .primary-value{align-items:baseline}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=baseline] .primary-value small{margin:0}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=center] .primary-value{align-items:center}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=center] .primary-value small{margin:0}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-label{position:relative;display:flex;align-items:flex-start;box-sizing:border-box;min-width:0;min-height:44px;max-width:100%;margin:2px 0 0;padding:0 0 0 8px;border:0;border-radius:0;background:none;font-family:inherit;font-size:12px;font-weight:400;line-height:1.4;letter-spacing:0;color:var(--secondary-text-color,#626a78);text-align:start;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-label::before{content:'';position:absolute;inset-inline-start:0;top:2px;width:2px;height:12px;border-radius:1px;background:var(--_primary-tone)}
 `;}
 
 
@@ -689,9 +748,10 @@ function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
 [data-ui-metric][data-density=compact] .ui-metric-icon{width:20px;height:20px;border-radius:6px;transform:translate(2px,-2px)}
 [data-ui-metric][data-density=compact] .ui-metric-icon svg,[data-ui-metric][data-density=compact] .ui-metric-icon ha-icon{width:16px;height:16px;--mdc-icon-size:16px}
 [data-ui-metric][data-density=compact] .ui-metric-value{font-size:20px}
+[data-ui-metric][data-value-kind=text] .ui-metric-value{font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-.03em;white-space:normal;overflow-wrap:break-word}
 [data-ui-metric][data-density=compact] .ui-metric-info{margin-top:4px;padding-top:4px}
 [data-ui-metric][data-unavailable=true]{--_metric-tone:var(--secondary-text-color,#626a78)}
-button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:hover{filter:brightness(1.04)}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:not(:disabled):hover{background:color-mix(in srgb,var(--secondary-background-color,#eee) 94%,var(--primary-text-color,#20252b));color:var(--primary-text-color,#20252b);filter:none}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
 [data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
 [data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
 @supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
@@ -712,7 +772,11 @@ function bindUITabs({tabs,panels,onSelect=()=>{}}){
   const target=buttons.find(tab=>tab.dataset.uiTab===value&&!tab.disabled);if(!target)return false;
   for(const tab of buttons){const active=tab===target;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
   for(const panel of sections)panel.hidden=panel.dataset.uiTabPanel!==value;
-  if(focus)target.focus({preventScroll:true});if(notify)onSelect(value,target);return true;
+  if(focus)target.focus({preventScroll:true});
+  // Keep a selected tab visible within a scrolling strip without moving the page.
+  const list=target.parentElement;
+  if(list&&list.scrollWidth>list.clientWidth&&target.getBoundingClientRect){const box=target.getBoundingClientRect(),view=list.getBoundingClientRect();list.scrollLeft+=box.left<view.left?box.left-view.left:box.right>view.right?box.right-view.right:0;}
+  if(notify)onSelect(value,target);return true;
  };
  for(const tab of buttons){
   const click=()=>select(tab.dataset.uiTab,{focus:true});
@@ -746,6 +810,24 @@ ${uiTabIndicatorStyles()}
 [data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
 [data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
+
+function uiBalancedTabsStyles(){
+ const strip=':host [data-ui-tabs][role=tablist]';
+ const tab=strip+' [role=tab][data-ui-tab]';
+ return `
+${strip}{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:stretch;gap:0;width:100%;box-sizing:border-box;padding:0;border:0;background:transparent;box-shadow:none;overflow:visible}
+${strip}:has(>[role=tab]:nth-child(4)){display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+${strip}::-webkit-scrollbar{display:none}
+${strip}:has(>[role=tab]:nth-child(4)) [role=tab][data-ui-tab]{flex:1 0 88px}
+${tab}{display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:44px;max-width:none;min-height:44px;height:auto;margin:0;padding:5px 6px 3px;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--secondary-text-color,#666);font-family:inherit;font-size:13px;font-weight:400;line-height:1.3;text-align:center;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;text-decoration:none;transform:none}
+${tab}:not(:disabled):hover{color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none;transform:none}
+${tab}[aria-selected=true],${tab}[aria-selected=true]:not(:disabled):hover{color:var(--primary-text-color,#20252b);font-weight:400;background:transparent;box-shadow:none;text-decoration:none;transform:none}
+${uiTabIndicatorStyles({strip,tab,color:'var(--accent-color,var(--primary-color))'})}
+${tab}:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+${strip}~[data-ui-tab-panel]{border:0;padding-block-start:12px;background:transparent}
+@media(forced-colors:active){${strip}{border-bottom-color:CanvasText}${tab}[aria-selected=true]{border-bottom-color:Highlight;outline:1px solid Highlight;outline-offset:-2px;box-shadow:none}${tab}:focus-visible{outline:2px solid CanvasText;outline-offset:-4px}}
+`;
+}
 
 // Decorative header layers; all paint inherits the weather state's --tone.
 function observeCardMotion(host,onVisibility=()=>{}){
@@ -1060,11 +1142,15 @@ const weatherStyledIconStyles=`
 ﻿// Layered vector illustrations with CSS motion; unique paint IDs per instance.
 
 let weatherArtId=0;
-function weatherArt(kind,style='classic',iconKind=kind) {
+function weatherArt(kind,style='classic',iconKind=kind,hero=true) {
  if(style==='glass'||style==='neon')return weatherStyledArt(iconKind,style);
  const id=`wx-${++weatherArtId}`,paint=name=>`url(#${id}-${name})`;
- const sun=`<g class="wx-sun"><circle class="wx-corona" cx="70" cy="55" r="32" fill="${paint('glow')}"/><g class="wx-rays" stroke="#f8cd70" stroke-width="3.5" stroke-linecap="round"><path d="M70 14v-6m0 94v-6M29 55h-6m94 0h-6M41 26l-5-5m68 68-5-5M41 84l-5 5m68-68-5 5"/></g><circle cx="70" cy="55" r="25" fill="${paint('sun')}" stroke="#ffe5a3" stroke-width="1.5"/><path d="M51 53a20 20 0 0 1 25-17" stroke="#fff6d6" stroke-width="3" stroke-linecap="round" opacity=".8"/></g>`;
- const cloud=`<g class="wx-cloud"><path d="M43 101a23 23 0 0 1 1-46 32 32 0 0 1 60-10 27 27 0 0 1 8 54H43z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/><path d="M47 62a26 26 0 0 1 49-11" stroke="#fff" stroke-opacity=".8" stroke-width="2.5" stroke-linecap="round"/><path d="M29 87c21 10 59 14 91 0" stroke="#65829f" stroke-opacity=".16" stroke-width="4" stroke-linecap="round"/></g>`;
+ const clippedRays=hero&&kind==='partly';
+ const sun=`<g class="wx-sun">${clippedRays?`<g clip-path="${paint('partly-rays')}">`:''}<g class="wx-rays" stroke="#f8cd70" stroke-width="3.5" stroke-linecap="round"><path d="M70 14v-6m0 94v-6M29 55h-6m94 0h-6M41 26l-5-5m68 68-5-5M41 84l-5 5m68-68-5 5"/></g>${clippedRays?'</g>':''}<circle cx="70" cy="55" r="25" fill="${paint('sun')}" stroke="#ffe5a3" stroke-width="1.5"/><path d="M51 53a20 20 0 0 1 25-17" stroke="#fff6d6" stroke-width="3" stroke-linecap="round" opacity=".8"/></g>`;
+ // A single continuous outline: soft side lobes, a taller main dome and a calm base.
+ const cloud=hero?`<g class="wx-cloud"><path d="M46 101C32 101 22 91 22 78C22 65 32 55 45 55C48 39 61 28 77 29C93 29 105 40 108 55C123 52 138 64 138 79C138 92 128 101 114 101Z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/></g>`:`<g class="wx-cloud"><path d="M43 101a23 23 0 0 1 1-46 32 32 0 0 1 60-10 27 27 0 0 1 8 54H43z" fill="${paint('cloud')}" stroke="#ecf5ff" stroke-opacity=".65" stroke-width="1.5"/><path d="M47 62a26 26 0 0 1 49-11" stroke="#fff" stroke-opacity=".8" stroke-width="2.5" stroke-linecap="round"/><path d="M29 87c21 10 59 14 91 0" stroke="#65829f" stroke-opacity=".16" stroke-width="4" stroke-linecap="round"/></g>`;
+ // Offset/scale outside wx-rays so its CSS rotation retains the local 70/55 origin.
+ const partlySun=`<g class="wx-partly-sun" transform="translate(54.6 -3.1) scale(.82)">${sun}</g>`;
  const rain='<g class="wx-rain" stroke="#8dcfff" stroke-width="5" stroke-linecap="round"><path class="wx-drop wx-drop-one" d="m54 109-6 12"/><path class="wx-drop wx-drop-two" d="m80 109-6 12"/><path class="wx-drop wx-drop-three" d="m106 109-6 12"/></g>';
  const snow='<g class="wx-snow" fill="#e0f7ff" stroke="#d0efff" stroke-width="1.5"><path class="wx-flake wx-drop-one" d="M52 108v12m-6-6h12m-10-4 8 8m-8 0 8-8"/><path class="wx-flake wx-drop-two" d="M80 116v12m-6-6h12m-10-4 8 8m-8 0 8-8"/><path class="wx-flake wx-drop-three" d="M108 106v12m-6-6h12m-10-4 8 8m-8 0 8-8"/></g>';
  const night=`<g class="wx-moon"><path d="M102 91a39 39 0 0 1-38-64 40 40 0 1 0 38 64" fill="${paint('moon')}" stroke="#dce4ff" stroke-width="1.5"/><path d="M43 49a33 33 0 0 0 7 40" stroke="#f5f4ff" stroke-width="2.5" stroke-linecap="round" opacity=".6"/></g><g fill="#e6e6ff"><path class="wx-star wx-star-one" d="m114 24 2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/><path class="wx-star wx-star-two" d="m128 64 1.5 4.5L134 70l-4.5 1.5L128 76l-1.5-4.5L122 70l4.5-1.5z"/><circle class="wx-star wx-star-three" cx="93" cy="17" r="2"/></g>`;
@@ -1072,8 +1158,8 @@ function weatherArt(kind,style='classic',iconKind=kind) {
  const fog='<g class="wx-fog" stroke="#c6dbe9" stroke-width="5" stroke-linecap="round"><path d="M30 110h100"/><path d="M43 122h74"/><path d="M52 134h63"/></g>';
  const lightning=`<path class="wx-lightning" d="m84 94-20 27h15l-6 20 27-31H84l8-16z" fill="${paint('sun')}" stroke="#ffe9b1" stroke-width="1"/>`;
  const unknown='<circle cx="80" cy="70" r="34" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 8"/><path d="M70 58c0-16 25-16 25 0 0 11-15 9-15 20m0 10v3" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
- const body=kind==='sun'?sun:kind==='night'?night:kind==='wind'?wind:kind==='unknown'?unknown:(kind==='partly'?sun:'')+cloud+(kind==='rain'?rain:kind==='snow'?snow:kind==='storm'?rain+lightning:kind==='fog'?fog:'');
- return `<svg class="weather-icon" viewBox="0 0 160 150" fill="none" aria-hidden="true" focusable="false"><defs><radialGradient id="${id}-glow"><stop stop-color="#ffd775" stop-opacity=".3"/><stop offset="1" stop-color="#ffd775" stop-opacity="0"/></radialGradient><linearGradient id="${id}-sun" x2=".3" y2="1"><stop stop-color="#fff0b4"/><stop offset=".5" stop-color="#f6ce6d"/><stop offset="1" stop-color="#eda743"/></linearGradient><linearGradient id="${id}-cloud" x2=".2" y2="1"><stop stop-color="#f8fbff"/><stop offset=".5" stop-color="#c8d9ea"/><stop offset="1" stop-color="#91aac2"/></linearGradient><linearGradient id="${id}-moon" x2=".6" y2="1"><stop stop-color="#f0edff"/><stop offset="1" stop-color="#9aadee"/></linearGradient><linearGradient id="${id}-wind"><stop stop-color="#88b1cb" stop-opacity=".6"/><stop offset="1" stop-color="#d4efff"/></linearGradient></defs>${body}</svg>`;
+ const body=kind==='sun'?sun:kind==='night'?night:kind==='wind'?wind:kind==='unknown'?unknown:(kind==='partly'?(hero?partlySun:sun):'')+cloud+(kind==='rain'?rain:kind==='snow'?snow:kind==='storm'?rain+lightning:kind==='fog'?fog:'');
+ return `<svg class="weather-icon" viewBox="0 0 160 150" fill="none" aria-hidden="true" focusable="false"><defs>${clippedRays?`<clipPath id="${id}-partly-rays"><path d="M0 0H160V58H0Z"/></clipPath>`:''}<linearGradient id="${id}-sun" x2=".3" y2="1"><stop stop-color="#fff0b4"/><stop offset=".5" stop-color="#f6ce6d"/><stop offset="1" stop-color="#eda743"/></linearGradient><linearGradient id="${id}-cloud" x2=".2" y2="1"><stop stop-color="#f8fbff"/><stop offset=".5" stop-color="#c8d9ea"/><stop offset="1" stop-color="#91aac2"/></linearGradient><linearGradient id="${id}-moon" x2=".6" y2="1"><stop stop-color="#f0edff"/><stop offset="1" stop-color="#9aadee"/></linearGradient><linearGradient id="${id}-wind"><stop stop-color="#88b1cb" stop-opacity=".6"/><stop offset="1" stop-color="#d4efff"/></linearGradient></defs>${body}</svg>`;
 }
 
 
@@ -1088,20 +1174,21 @@ const weatherAtmosphereStyles=headerAtmosphereStyles;
 const weatherStyles=`
 :host{display:block;min-width:0;container-type:inline-size;font:inherit}
 *{box-sizing:border-box}ha-card{display:block;overflow:hidden;border-radius:var(--ha-card-border-radius,12px);background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#20252b);font:inherit}
-.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--tone:#536b82}.content[data-dark=true]{--tone:#a8c9eb}
-.content[data-kind=sun],.content[data-kind=partly]{--tone:#946800}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--tone:#f2c451}
-.content[data-kind=rain]{--tone:#427fac}.content[data-dark=true][data-kind=rain]{--tone:#82b8e8}
-.content[data-kind=night],.content[data-kind=storm]{--tone:#6553a3}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--tone:#aca3f1}
-.content[data-kind=snow]{--tone:#45858c}.content[data-dark=true][data-kind=snow]{--tone:#a2dce6}
+/* Supplemental semantic glyphs have fresh paint; readable text is a separate theme role. */
+.content{position:relative;isolation:isolate;padding:var(--eleven-card-padding,16px);--weather-icon-tone:#6599bb;--weather-text-tone:var(--secondary-text-color,#666);--tone:var(--weather-icon-tone)}.content[data-dark=true]{--weather-icon-tone:#add6ef}
+.content[data-kind=sun],.content[data-kind=partly]{--weather-icon-tone:#f3b51b}.content[data-dark=true]:is([data-kind=sun],[data-kind=partly]){--weather-icon-tone:#ffd45c}
+.content[data-kind=rain]{--weather-icon-tone:#269ad5}.content[data-dark=true][data-kind=rain]{--weather-icon-tone:#76cafa}
+.content[data-kind=night],.content[data-kind=storm]{--weather-icon-tone:#8873dc}.content[data-dark=true]:is([data-kind=night],[data-kind=storm]){--weather-icon-tone:#b8a7ff}
+.content[data-kind=snow]{--weather-icon-tone:#32a9bb}.content[data-dark=true][data-kind=snow]{--weather-icon-tone:#8bdeec}
 .scene{position:relative;isolation:isolate;margin:-16px -16px 0;padding:16px 16px 16px;overflow:visible}
 .hero{min-height:160px;position:relative;display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:12px;align-content:start;padding-top:6px}
 .temperature{font-size:76px;font-weight:500;line-height:1.15;letter-spacing:-.065em;font-variant-numeric:tabular-nums;margin-top:-20px}.temperature .unit{font-size:.53em;letter-spacing:-.03em;margin-left:2px}
-header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:color-mix(in srgb,var(--tone) 88%,#fff);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
-.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:drop-shadow(0 8px 14px color-mix(in srgb,var(--tone) 25%,transparent))}
+header{text-align:right;min-width:0;padding-top:17px;margin-top:-20px;z-index:1}h2{font-size:18px;font-weight:650;line-height:1.25;margin:0;color:var(--primary-text-color,#20252b);overflow-wrap:anywhere}.feels{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin-top:2px}.feels strong{font-weight:600;color:var(--primary-text-color)}
+.art{position:absolute;inset:46px 0 0;display:grid;place-items:center;pointer-events:none;color:var(--secondary-text-color)}.art svg{height:116px;width:150px;filter:none}
 button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(--secondary-background-color,#eee);border-radius:7px;padding:12px}.status{display:flex;gap:12px;align-items:center;width:100%;text-align:left;border:0;min-height:0;margin:16px 0 0}.status-icon{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:10px;color:var(--tone);background:color-mix(in srgb,var(--tone) 13%,transparent)}.status-icon svg{width:30px;height:30px}.status strong{font-size:13px;line-height:1.4;font-weight:600}.status small{display:block;font-size:11px;color:var(--secondary-text-color,#666);margin-top:2px}
 .metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0}.metrics:has(.metric:only-child){grid-template-columns:minmax(0,1fr)}.metric{min-width:0;display:grid;grid-template-rows:auto auto;gap:2px;align-content:start}.metric dt{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);margin:0;overflow-wrap:anywhere}.metric dd{font-size:24px;line-height:1.25;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:0;overflow-wrap:anywhere}
-.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--tone)}
-.notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.retry{background:transparent;color:var(--primary-color,#2196f3);border:0;min-height:32px;padding:4px 0}.status:focus-visible,.retry:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
+.forecast{margin-top:16px}.forecast h3{font-size:11px;font-weight:400;line-height:1.4;color:var(--secondary-text-color,#666);margin:0 0 10px}.forecast-list{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:6px;overflow-x:auto;scrollbar-width:thin;padding:0 0 3px;list-style:none;margin:0}.forecast-list li{text-align:center;min-width:0}.forecast-list time{font-size:11px;color:var(--secondary-text-color,#666)}.forecast-list svg{display:block;width:38px;height:36px;margin:4px auto}.forecast-value{font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums}.forecast-low,.rain-chance{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);min-height:16px;margin-top:3px}.rain-chance{color:var(--weather-text-tone)}
+.notice{font-size:12px;line-height:1.5;color:var(--secondary-text-color,#666);margin:10px 0}.status:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px}.status:hover{filter:brightness(1.05)}
 @container(max-width:320px){.hero{min-height:150px}.temperature{font-size:65px;margin-top:-17px}header{margin-top:-17px;padding-top:14px}.art svg{height:100px}.forecast-list{grid-auto-columns:minmax(46px,1fr)}}
 @supports(grid-template-rows:subgrid){.metrics{grid-template-rows:auto auto;row-gap:2px}.metric{grid-row:span 2;grid-template-rows:subgrid}}
 .forecast-panel{padding-top:16px}.forecast-panel[hidden]{display:none!important}
@@ -1111,7 +1198,7 @@ button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(
 .content[data-compact=true] .temperature{font-size:64px;margin-top:-16px}
 .content[data-compact=true] header{padding-top:14px;margin-top:-16px}
 .content[data-compact=true] .art{inset:38px 0 0}
-.content[data-compact=true] .art svg{height:74px;width:100px;filter:drop-shadow(0 5px 10px color-mix(in srgb,var(--tone) 20%,transparent))}
+.content[data-compact=true] .art svg{height:74px;width:100px}
 .content[data-compact=true] .scene{padding-bottom:12px}
 .content:not(:has(.weather-metrics)) .scene{padding-bottom:0}
 .content[data-compact=true] .status{padding:10px;gap:10px;margin-top:12px}
@@ -1128,10 +1215,10 @@ button{font:inherit;color:inherit;cursor:pointer}.status,.metric{background:var(
 .forecast-extra{font-size:11px;line-height:1.4;margin-top:5px;color:var(--primary-text-color)}.forecast-label{display:block;overflow-wrap:anywhere;font-size:10px;color:var(--secondary-text-color)}
 ${weatherBackgroundStyles}
 
-.wx-rays{transform-origin:70px 55px}.wx-corona{transform-origin:70px 55px}
+.wx-rays{transform-origin:70px 55px}
 @media(prefers-reduced-motion:no-preference){
  .content[data-animated=true] .wx-rays{animation:wx-rotate 24s linear infinite}
- .content[data-animated=true] .wx-corona{animation:wx-glow 5s ease-in-out infinite}
+
  .content[data-animated=true] .wx-cloud{animation:wx-float 6s ease-in-out infinite}
  .content[data-animated=true] .wx-drop{animation:wx-rain 1.5s linear infinite}
  .content[data-animated=true] .wx-flake{animation:wx-snow 4s ease-in-out infinite}
@@ -1148,7 +1235,7 @@ ${weatherBackgroundStyles}
  .content[data-animated=true] .wx-lightning{animation:wx-lightning 5s ease-in-out infinite}
 }
 @keyframes wx-rotate{to{transform:rotate(360deg)}}
-@keyframes wx-glow{50%{transform:scale(1.12);opacity:.6}}
+
 @keyframes wx-float{50%{transform:translate(3px,-2px)}}
 @keyframes wx-rain{0%{transform:translate(2px,-3px);opacity:0}15%,75%{opacity:1}100%{transform:translate(-4px,12px);opacity:0}}
 @keyframes wx-snow{0%{transform:translate(-2px,-2px);opacity:0}20%,70%{opacity:1}100%{transform:translate(4px,9px);opacity:0}}
@@ -1159,6 +1246,34 @@ ${weatherBackgroundStyles}
 ${weatherAtmosphereStyles}
 ${weatherStyledIconStyles}
 ${headerSceneStyles}
+`;
+
+// Weather-specific anatomy and neutral role mapping; theme paint stays owned upstream.
+const weatherCalmStyles=`
+/* Theme-owned readings; condition color belongs to icons, not a decorative wash. */
+[data-ui-metric]{background:var(--secondary-background-color,transparent)}
+.content .hero{min-height:124px}
+.content[data-compact=true] .hero{min-height:100px}
+.content .hero[data-wide-reading=true]{padding-bottom:116px;min-height:0}
+.content .hero[data-wide-reading=true] .temperature{max-width:100%}
+.content[data-icon-style] .hero[data-wide-reading=true]>.art{top:auto;bottom:0;height:110px}
+.content[data-compact=true] .hero[data-wide-reading=true]{padding-bottom:86px}
+.content[data-compact=true][data-icon-style] .hero[data-wide-reading=true]>.art{height:80px}
+.weather-metrics{grid-template-columns:repeat(var(--weather-reading-columns,1),minmax(0,1fr));column-gap:12px;row-gap:12px}
+.weather-metrics>[data-ui-metric]{padding:12px;min-height:44px}
+[data-ui-metric] .ui-metric-title,[data-ui-metric] .ui-metric-info{font-size:12px;overflow-wrap:normal;word-break:normal}
+[data-ui-metric] .ui-metric-icon{transform:none;width:20px;height:20px}
+[data-ui-metric] .ui-metric-value{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.weather-status{min-height:44px}
+.ui-metric-unit{font-size:12px;white-space:nowrap}
+[data-ui-tabs] [role=tab]:focus-visible,button[data-ui-metric]:focus-visible,.forecast-list:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.forecast-list{grid-auto-columns:minmax(max-content,1fr);gap:8px;padding-bottom:4px}
+.forecast-list li{min-width:max-content}
+.forecast-list time{font-size:12px;white-space:nowrap}
+.forecast-atomic{display:inline-block;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.forecast-label{font-size:11px;white-space:normal;overflow-wrap:normal;word-break:normal}
+.forecast-low,.rain-chance,.forecast-extra{font-size:12px}
+
 `;
 
 // Retain live nodes, focus, scroll offsets and running SVG animations on telemetry updates.
@@ -1316,6 +1431,8 @@ class WeatherEditor extends HTMLElement{
 
 
 
+
+
 class WeatherCard extends HTMLElement {
  constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._forecast=[];this._iconCache=new Map();}
  static async getConfigElement(){if(!customElements.get('eleven-weather-editor-test'))customElements.define('eleven-weather-editor-test',WeatherEditor);return document.createElement('eleven-weather-editor-test');}
@@ -1328,7 +1445,7 @@ class WeatherCard extends HTMLElement {
  set hass(hass){this._hass=hass;this._syncForecast();this._render();}
  get hass(){return this._hass;}
  connectedCallback(){this._attached=true;this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>{this._ensureForecastClock();this._render();});this._syncForecast();this._ensureForecastClock();this._render();}
- disconnectedCallback(){this._attached=false;this._motionCleanup?.();this._motionCleanup=null;clearInterval(this._forecastClock);this._forecastClock=null;this._stopForecast();this._tabs?.disconnect();this._key=null;}
+ disconnectedCallback(){this._attached=false;this._readingObserver?.disconnect();if(this._readingFrame!=null)globalThis.cancelAnimationFrame?.(this._readingFrame);this._motionCleanup?.();this._motionCleanup=null;clearInterval(this._forecastClock);this._forecastClock=null;this._stopForecast();this._tabs?.disconnect();this._key=null;}
  _ensureForecastClock(){
   const active=this._attached&&!!this._config?.entity&&this._forecastEnabled()&&(typeof document==='undefined'||!document.hidden);
   if(!active){clearInterval(this._forecastClock);this._forecastClock=null;return;}
@@ -1337,7 +1454,7 @@ class WeatherCard extends HTMLElement {
  _weatherArt(kind,style,iconKind,slot){
   const signature=kind+'|'+style+'|'+iconKind,cached=this._iconCache.get(slot);
   if(cached?.signature===signature)return cached.markup;
-  const markup=weatherArt(kind,style,iconKind);this._iconCache.set(slot,{signature,markup});
+  const markup=weatherArt(kind,style,iconKind,slot==='hero');this._iconCache.set(slot,{signature,markup});
   if(this._iconCache.size>32)this._iconCache.delete(this._iconCache.keys().next().value);
   return markup;
  }
@@ -1353,7 +1470,7 @@ class WeatherCard extends HTMLElement {
   const plain=weatherField({...this._config,metric_status_show_unit:false},'metric_status',attributes,this._hass,available),split=metric.value.startsWith(plain.value);
   const value=plain.value==='\u2014'?null:split?plain.value:metric.value,unit=split?metric.value.slice(plain.value.length).trim():'';
   const icon=this._config.metric_status_icon?`<ha-icon icon="${uiEscape(this._config.metric_status_icon)}"></ha-icon>`:this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'status');
-  return uiMetric({title:label||metric.label,value,unit,iconContent:icon,compact:this._config.compact,action:!!id,info:this._offline()?(nl?'Geen verbinding · laatst ontvangen gegevens':'Offline · last received readings'):'',attrs:{class:'weather-status', 'data-status-entity':id||'', 'aria-label':(label?label+': ':'')+metric.value}});
+  return uiMetric({title:label||metric.label,value,unit,iconContent:icon,compact:this._config.compact,action:!!id,info:this._offline()?(nl?'Geen verbinding · laatst ontvangen gegevens':'Offline · last received readings'):'',attrs:{class:'weather-status','data-value-kind':condition?'text':'number','data-condition':String(condition), 'data-status-entity':id||'', 'aria-label':(label?label+': ':'')+metric.value}});
  }
  _metricsMarkup(attributes,available){
   const icons={wind_speed:'mdi:weather-windy',humidity:'mdi:water-percent',pressure:'mdi:gauge',visibility:'mdi:eye-outline',uv_index:'mdi:sun-wireless-outline',cloud_coverage:'mdi:weather-cloudy',wind_gust_speed:'mdi:weather-windy',dew_point:'mdi:thermometer-water',temperature:'mdi:thermometer'};
@@ -1392,7 +1509,7 @@ class WeatherCard extends HTMLElement {
   const rows=weatherForecastRows(this._forecast,this._config.forecast_count,Date.now(),this._forecastType,this._hass);
   let body;
   if(this._offline())body=`<p class="notice">${nl?'Verwachting niet beschikbaar zonder verbinding.':'Forecast unavailable while offline.'}</p>`;
-  else if(this._forecastStatus==='error')body=`<p class="notice" role="status">${nl?'Verwachting niet beschikbaar.':'Forecast unavailable.'}</p><button class="retry">${nl?'Opnieuw proberen':'Retry'}</button>`;
+  else if(this._forecastStatus==='error')body=`<p class="notice" role="status">${nl?'Verwachting niet beschikbaar.':'Forecast unavailable.'}</p>${uiButton({variant:'action',className:'retry',text:nl?'Opnieuw proberen':'Retry'})}`;
   else if(this._forecastStatus==='loading')body=`<p class="notice" role="status">${nl?'Verwachting laden…':'Loading forecast…'}</p>`;
   else if(!rows.length)body=`<p class="notice">${nl?'Geen verwachting beschikbaar.':'No forecast available.'}</p>`;
   else body=`<ol class="forecast-list" tabindex="0" aria-label="${heading}">${rows.map(row=>{
@@ -1404,13 +1521,43 @@ class WeatherCard extends HTMLElement {
     const units={temperature:attributes.temperature_unit||'°C',templow:attributes.temperature_unit||'°C',precipitation_probability:'%',precipitation:attributes.precipitation_unit||'',wind_speed:attributes.wind_speed_unit||'',wind_gust_speed:attributes.wind_speed_unit||'',humidity:'%',uv_index:''};
     const label=WEATHER_FORECAST_FIELDS[key][nl?0:1],value=weatherNumber(row[key],this._hass,units[key],this._config['forecast_'+this._forecastType+'_'+key+'_decimals']??(['precipitation','wind_speed','wind_gust_speed','uv_index'].includes(key)?1:0));
     const className=key==='temperature'?'forecast-value':key==='templow'?'forecast-low':key==='precipitation_probability'?'rain-chance':'forecast-extra';
-    return '<div class="'+className+'" data-forecast-field="'+key+'" aria-label="'+uiEscape(label)+'" title="'+uiEscape(label)+'">'+(!['temperature','templow','precipitation_probability'].includes(key)?'<span class="forecast-label">'+uiEscape(label)+'</span>':'')+uiEscape(value)+'</div>';
+    return '<div class="'+className+'" data-forecast-field="'+key+'" aria-label="'+uiEscape(label)+'" title="'+uiEscape(label)+'">'+(!['temperature','templow','precipitation_probability'].includes(key)?'<span class="forecast-label">'+uiEscape(label)+'</span>':'')+ '<span class="forecast-atomic">'+uiEscape(value)+'</span></div>';
    }).join('');
    return '<li data-weather-key="'+uiEscape(row.datetime)+'"><time datetime="'+uiEscape(row.datetime)+'">'+uiEscape(when)+'</time>'+fields+'</li>';
   }).join('')}</ol>`;
   if(weatherVisibleTabs(this._config).length===1)return `<section class="forecast" aria-label="${heading}">${body}</section>`;
   const items=[{value:'hourly',label:nl?'Per uur':'Hourly'},{value:'daily',label:nl?'Per dag':'Daily'}].filter(item=>weatherVisibleTabs(this._config).includes(item.value)).map(item=>({...item,content:item.value===this._forecastType?body:''}));
   return `<section class="forecast" aria-label="${nl?'Weersverwachting':'Weather forecast'}">${uiTabs({id:'weather-forecast',label:nl?'Weersverwachting':'Weather forecast',items,selected:this._forecastType,panelClassName:'forecast-panel'})}</section>`;
+ }
+ _fitReadings(){
+  const root=this.shadowRoot,grid=root.querySelector('.weather-metrics'),hero=root.querySelector('.hero');
+  if(!hero||!hero.clientWidth)return;
+  const inkWidth=node=>{const range=document.createRange();range.selectNodeContents(node);return range.getBoundingClientRect().width;};
+  // Measure with unscaled atomic text. Reflow before fitting a genuinely extreme value.
+  const primary=root.querySelector('.primary-value');
+  for(const node of root.querySelectorAll('.ui-metric-value,.primary-value'))node.style.removeProperty('zoom');
+  if(grid){
+   grid.style.setProperty('--weather-reading-columns','1');
+   const readings=[...grid.querySelectorAll('[data-weather-field]')];
+   const available=(grid.clientWidth-12)/2;
+   const natural=readings.map(node=>{
+    const value=node.querySelector('.ui-metric-value'),title=node.querySelector('.ui-metric-title'),font=getComputedStyle(title),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+    ctx.font=`${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;ctx.letterSpacing=font.letterSpacing;
+    const word=Math.max(0,...title.textContent.split(/\s+/).map(text=>ctx.measureText(text).width));
+    return Math.max(inkWidth(value)+24,word+24+28);
+   });
+   if(readings.length>1&&natural.every(width=>width<=available))grid.style.setProperty('--weather-reading-columns','2');
+  }
+  const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+  const textWidth=(node,text=node.textContent)=>{const font=getComputedStyle(node);ctx.font=`${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;ctx.letterSpacing=font.letterSpacing;return ctx.measureText(text).width;};
+  const primaryWidth=()=>[...primary.children].reduce((width,node)=>width+textWidth(node),0)+parseFloat(getComputedStyle(primary).gap||0);
+  hero.dataset.wideReading=String(primaryWidth()>hero.clientWidth/2);
+  // Values remain complete: only full-card extremes scale, never break or round digits.
+  for(const node of root.querySelectorAll('.ui-metric-value,.primary-value')){
+   const condition=node.closest('.weather-status')&&this._config.metric_status==='condition';
+   const width=condition?Math.max(...node.textContent.split(/\s+/).map(word=>textWidth(node,word))):node===primary?primaryWidth():inkWidth(node),available=node.clientWidth;
+   if(width>available&&available>0)node.style.zoom=String(Math.max(.1,available/width));
+  }
  }
  _render(){
   if(!this._config)return;
@@ -1422,9 +1569,24 @@ class WeatherCard extends HTMLElement {
   const focusedEntity=this.shadowRoot.activeElement?.dataset?.entity,focusedStatus=this.shadowRoot.activeElement?.classList.contains('weather-status');
   const number=(value,unit='',digits=0)=>weatherNumber(available?value:null,hass,unit,digits);
   const unit=attributes.temperature_unit||'°C';
-  patchWeatherDOM(this.shadowRoot,`<style>${uiButtonStyles()}${uiTabsStyles()}${weatherStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}
-.weather-status{margin-top:16px}.weather-metrics{margin:0}.header-region{--ui-metric-tone:var(--tone)}.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}.content[data-compact=true] .weather-status{margin-top:12px}.hero{padding-top:0;grid-template-columns:minmax(0,1fr)}.hero .temperature{max-width:50%;position:relative;z-index:1}.content[data-icon-style] .hero>.art{inset:0 auto 0 50%;width:50%;transform:translate(calc(-50% + var(--weather-icon-x,0px)),var(--weather-icon-y,0px)) scale(var(--weather-icon-scale,1));transform-origin:center;min-width:0}.hero .art svg{max-width:100%}.hero .temperature{margin-top:0;font-size:inherit;letter-spacing:inherit}.content[data-compact=true] .hero .temperature{margin-top:0}
-</style><ha-card aria-label="${uiEscape(this._config.title||(nl?'Het weer':'Weather'))}"><div class="content" style="--header-background-opacity:${this._config.background_strength/100};--weather-icon-scale:${this._config.icon_scale/100};--weather-icon-x:${this._config.icon_offset_x}px;--weather-icon-y:${this._config.icon_offset_y}px" data-background="${this._config.background}" data-icon-style="${this._config.icon_style}" data-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_icons&&!this._offline()}" data-background-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_background&&!this._offline()}" data-compact="${this._config.compact}" data-kind="${state.kind}" data-dark="${!!hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${weatherAtmosphere(this._config.background)}</div><div class="scene"><div class="hero">${uiPrimaryValue({value:available?number(attributes.temperature):null,unit,subtitle:attributes.apparent_temperature!=null&&available?(nl?'Voelt als ':'Feels like ')+number(attributes.apparent_temperature,unit):'',compact:this._config.compact,attrs:{class:'temperature'}})}<div class="art">${this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'hero')}</div></div>${this._statusMarkup(attributes,available,state,nl)}</div>${this._metricsMarkup(attributes,available)}</div>${!this._config.entity?`<p class="notice">${nl?'Kies een weerentiteit in de configuratie.':'Choose a weather entity in the editor.'}</p>`:`${this._forecastMarkup(nl,attributes)}`}</div></ha-card>`);
+  patchWeatherDOM(this.shadowRoot,`<style>${uiActionButtonStyles()}${uiTabsStyles()}${weatherStyles}${uiPrimaryValueStyles()}${uiMetricStyles()}
+.weather-status{margin-top:16px}.weather-metrics{margin:0}.header-region{--ui-metric-tone:var(--weather-icon-tone)}.content:not(:has(.weather-metrics)) .scene{padding-bottom:0}.content[data-compact=true] .weather-status{margin-top:12px}.hero{padding-top:0;grid-template-columns:minmax(0,1fr)}.hero .temperature{max-width:50%;position:relative;z-index:1}.content[data-icon-style] .hero>.art{inset:0 auto 0 50%;width:50%;transform:translate(calc(-50% + var(--weather-icon-x,0px)),var(--weather-icon-y,0px)) scale(var(--weather-icon-scale,1));transform-origin:center;min-width:0}.hero .art svg{max-width:100%}.hero .temperature{margin-top:0;font-size:inherit;letter-spacing:inherit}.content[data-compact=true] .hero .temperature{margin-top:0}
+/* Reserve the icon for the label row; keep readings and their units together. */
+[data-ui-metric] .ui-metric-icon{grid-row:1}
+[data-ui-metric] .ui-metric-value{grid-column:1/-1;overflow-wrap:normal;word-break:normal}
+.weather-metrics .ui-metric-value{white-space:nowrap}
+[data-ui-metric] .ui-metric-title{overflow-wrap:normal;word-break:normal}
+@container(max-width:340px){.weather-metrics{grid-template-columns:minmax(0,1fr);row-gap:12px}}
+[data-ui-tabs]{border-bottom:0}
+[data-ui-tabs] [role=tab]{min-height:44px;border-bottom:0;text-decoration:none}
+[data-ui-tabs] [role=tab][aria-selected=true]{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
+${cardThemeStyles({wells:'[data-ui-metric],.status',controls:'[data-ui-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}${weatherCalmStyles}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(this._config.title||(nl?'Het weer':'Weather'))}"><div class="content" style="--header-background-opacity:${this._config.background_strength/100};--weather-icon-scale:${this._config.icon_scale/100};--weather-icon-x:${this._config.icon_offset_x}px;--weather-icon-y:${this._config.icon_offset_y}px" data-background="${this._config.background}" data-icon-style="${this._config.icon_style}" data-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_icons&&!this._offline()}" data-background-animated="${!!available&&state.kind!=='unknown'&&this._config.animate_background&&!this._offline()}" data-compact="${this._config.compact}" data-kind="${state.kind}" data-dark="${!!hass?.themes?.darkMode}"><div class="header-region"><div class="scene-background" aria-hidden="true">${weatherAtmosphere(this._config.background)}</div><div class="scene"><div class="hero">${uiPrimaryValue({layout:'uniform',value:available?number(attributes.temperature):null,unit,subtitle:attributes.apparent_temperature!=null&&available?(nl?'Voelt als ':'Feels like ')+number(attributes.apparent_temperature,unit):'',compact:this._config.compact,attrs:{class:'temperature'}})}<div class="art">${this._weatherArt(state.kind,this._config.icon_style,state.iconKind,'hero')}</div></div>${this._statusMarkup(attributes,available,state,nl)}</div>${this._metricsMarkup(attributes,available)}</div>${!this._config.entity?`<p class="notice">${nl?'Kies een weerentiteit in de configuratie.':'Choose a weather entity in the editor.'}</p>`:`${this._forecastMarkup(nl,attributes)}`}</div></ha-card>`);
+  this._fitReadings();
+  if(this._attached&&typeof ResizeObserver!=='undefined'){
+   this._readingObserver??=new ResizeObserver(()=>{cancelAnimationFrame(this._readingFrame);this._readingFrame=requestAnimationFrame(()=>this._fitReadings());});
+   this._readingObserver.disconnect();
+   for(const node of this.shadowRoot.querySelectorAll('.content,.ui-metric-title,.ui-metric-value,.primary-value'))this._readingObserver.observe(node);
+  }
   this._tabs?.disconnect();
   this._tabs=bindUITabs({tabs:this.shadowRoot.querySelectorAll('[data-ui-tab]'),panels:this.shadowRoot.querySelectorAll('[data-ui-tab-panel]'),onSelect:value=>{
    this._forecastSelection=value;this._syncForecast();this._render();
@@ -1445,7 +1607,7 @@ class WeatherCard extends HTMLElement {
  }
 }
 
-if(!customElements.get('eleven-weather-card-test'))customElements.define('eleven-weather-card-test',withSharedCardBackground(WeatherCard));
+if(!customElements.get('eleven-weather-card-test'))customElements.define('eleven-weather-card-test',withCardBackground(WeatherCard));
 window.customCards=window.customCards||[];
 if(!window.customCards.some(card=>card.type==='eleven-weather-card-test'))window.customCards.push({type:'eleven-weather-card-test',name:'Eleven Weather (beta)',description:'Compact current weather and forecast with state-aware illustrations.',preview:true});
 })();

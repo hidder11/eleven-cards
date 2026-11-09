@@ -1,5 +1,5 @@
 import asyncio,json,pathlib
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright,expect
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 OUT=ROOT/'qa-evidence/bar-chart'
 EXE='/opt/hermes/.playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell'
@@ -32,11 +32,12 @@ async def main():
     shot=OUT/f'synthetic-{width}-{"dark" if dark else "light"}.png';await page.screenshot(path=str(shot),full_page=True)
     views.append({'width':width,'dark':dark,'path':str(shot),'bars':fit['bars'],'fit':True})
   await page.locator('eleven-bar-chart .legend-item').nth(1).click()
-  assert await page.locator('eleven-bar-chart .series-bar').count()==1
+  await expect(page.locator('eleven-bar-chart .series-bar')).to_have_count(1)
   await page.locator('eleven-bar-chart .legend-item').first.click()
-  assert await page.locator('eleven-bar-chart .series-bar').count()==0
+  await expect(page.locator('eleven-bar-chart .series-bar')).to_have_count(0)
   assert await page.locator('eleven-bar-chart .empty-visibility').is_visible()
   await page.locator('eleven-bar-chart .legend-item').first.click()
+  await expect(page.locator('eleven-bar-chart .series-bar')).to_have_count(1)
   await page.locator('eleven-bar-chart .chart').focus();await page.keyboard.press('Home')
   assert await page.locator('eleven-bar-chart .tooltip').is_visible()
   await page.keyboard.press('Escape');assert not await page.locator('eleven-bar-chart .tooltip').is_visible()

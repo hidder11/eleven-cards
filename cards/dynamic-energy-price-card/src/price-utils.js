@@ -221,7 +221,19 @@ export function createPriceTicks(minimum, maximum, count = 5) {
 }
 
 // get_price returns unscaled base-currency totals, not chartdata metadata.
-export function tibberPriceData(response) {
+export function tibberPriceData(response, source = 'tibber_prices', home) {
+  if(source==='tibber') {
+    const prices=response?.prices;
+    if(!prices || typeof prices!=='object' || Array.isArray(prices))throw Error('format');
+    const homes=Object.keys(prices);
+    if(!home && homes.length!==1)throw Error('home');
+    const selected=home || homes[0];
+    if(!Object.hasOwn(prices,selected) || !Array.isArray(prices[selected]))throw Error('home');
+    return prices[selected].flatMap(row=>{
+      if(typeof row?.price!=='number' || !Number.isFinite(row.price) || typeof row.start_time!=='string' || !Number.isFinite(Date.parse(row.start_time)))return [];
+      return [{start_time:row.start_time,price_per_kwh:row.price}];
+    });
+  }
   if(response?.success===false)throw Error('unavailable');
   if(!Array.isArray(response?.price_info))throw Error('format');
   return response.price_info.flatMap(row=>{

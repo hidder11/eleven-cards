@@ -55,6 +55,6 @@ try {
  const checks=await evaluate('('+(await readFile(resolve(root,'tests/car-browser-checks.js'),'utf8'))+')()');
  assert.deepEqual(exceptions,[],'no runtime errors');console.log('PASS: '+checks.length+' rendered Car checks, including EVCC alignment, editor, live values and image scaling.');
  await evaluate("new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/.cache/home-assistant-test/eleven-cards-test.js';script.onload=resolve;script.onerror=reject;document.head.append(script);})");
- assert.equal(await evaluate("!!customElements.get('eleven-car-card-test')&&!!customElements.get('eleven-car-card')&&window.customCards.filter(c=>c.type.endsWith('-test')).length===11"),true,'normal and test collection coexist');
+ assert.equal(await evaluate("!!customElements.get('eleven-car-card-test')&&!!customElements.get('eleven-car-card')&&window.customCards.filter(c=>c.type.endsWith('-test')).length===10"),true,'normal and test collection coexist');
  await send('Browser.close').catch(()=>{});
 }finally{clearTimeout(watchdog);socket?.close();browser.kill();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

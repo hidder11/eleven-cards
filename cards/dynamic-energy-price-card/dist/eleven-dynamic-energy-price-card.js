@@ -1,7 +1,73 @@
 // Eleven Dynamic Energy Price Card — standalone dashboard bundle
 (()=>{
 "use strict";
-const withSharedCardBackground=(()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false,periodUI=chartUI}={}) {
+ // Segmented groups own their paint; descendants pressing must not press the group.
+ if(chartUI)controls=controls.split(',').filter(selector=>!['.zoom-controls','.chart-links'].includes(selector.trim())).join(',');
+ if(periodUI)controls=[controls,'.period-default [data-ui-button=surface]'].filter(Boolean).join(',');
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${wells?`:is(${wells}):is([data-ui-detail-surface]){background:var(--secondary-background-color,#eee)}`:''}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,var(--eleven-material-inset,transparent))}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${periodUI?`
+.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>[data-period]{position:relative;flex:none}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:4px 6px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+${segmentedControlStyles('.chart-controls','.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period]',{first:'.chart-controls>.period-controls>.period-trigger'})}
+${segmentedControlStyles('.zoom-controls','.zoom-controls>[data-zoom]')}
+${segmentedControlStyles('.chart-links','.chart-links>.history-link,.chart-links>.insight-control>.insight-trigger',{last:'.chart-links>.insight-control>.insight-trigger'})}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
+// A single raised group with separate native button press states; no parent :active.
+function segmentedControlStyles(group,buttons,{first=`:is(${group})>:is(button,a):first-child`,last=`:is(${group})>:is(button,a):last-child`,dividers=`:is(${group})>:not(:first-child)`}={}){return `
+${group}{gap:0;align-items:stretch;background:var(--eleven-material-control-background,var(--secondary-background-color,#eee));box-shadow:var(--eleven-material-control-shadow,var(--eleven-surface-shadow,none));border-radius:var(--eleven-material-radius-button,9px)}
+:is(${buttons}){position:relative;align-self:stretch;height:auto;padding:2px 6px;background:transparent;box-shadow:none;border:0;border-radius:0;min-height:36px;min-width:36px;font-size:12px;box-sizing:border-box}
+:is(${buttons}) svg{width:14px;height:14px}
+${first?`:is(${buttons}):is(${first}){border-start-start-radius:var(--eleven-material-radius-button,9px);border-end-start-radius:var(--eleven-material-radius-button,9px)}`:''}
+${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-material-radius-button,9px);border-end-end-radius:var(--eleven-material-radius-button,9px)}`:''}
+:is(${dividers}){position:relative}
+:is(${dividers})::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--divider-color,#ddd) 55%,transparent);pointer-events:none;z-index:1}
+:is(${buttons}):disabled{opacity:1;color:color-mix(in srgb,var(--primary-text-color,#20252b) 35%,transparent);cursor:default}
+:is(${buttons}):not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none}
+:is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
+:is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+@media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -9,6 +75,1003 @@ function uiSurfaceStyles(selector){return `
 ${selector}{box-shadow:var(--eleven-surface-shadow)}
 @media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
 `;}
+
+
+// Domain-neutral SVG renderer. Adapters own data, geometry, colors and annotations.
+function graphLineStyle(style, width = 3.5) {
+  return {style, width, dash: style === 'dashed' ? '8 7' : style === 'dotted' ? '1 7' : 'none', cap: style === 'dashed' ? 'butt' : 'round'};
+}
+const graphAttribute = value => String(value).replace(/[&"<>]/g, c => ({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[c]));
+class SharedGraph {
+  static hoverGroup(host) {
+    return host._config?.sync_hover === false ? null : (host._config?.hover_sync_group?.trim() || 'default');
+  }
+  static hoverState() {
+    const key = Symbol.for('eleven-cards.hover-sync.v1');
+    const target = globalThis.window ?? globalThis;
+    return target[key] ??= new Map();
+  }
+  static connectHover(host, receive) {
+    this.disconnectHover(host);
+    host._receiveSharedHover = receive;
+    host._sharedHoverListener = event => {
+      const {source, group, timestamp} = event.detail;
+      if (source !== host && host.isConnected && group === this.hoverGroup(host)) receive(timestamp);
+    };
+    window.addEventListener('eleven-cards:hover-sync', host._sharedHoverListener);
+    // Scroll does not cross shadow roots: listen in every enclosing tree.
+    host._sharedScrollTargets = [window];
+    for (let root = host.getRootNode?.(); root && root !== window; root = root.host?.getRootNode()) {
+      host._sharedScrollTargets.push(root);
+    }
+    host._sharedScrollListener = event => {
+      if (event?.composedPath?.().some(node => node?.classList?.contains('tooltip'))) return;
+      host._hideTooltip();
+    };
+    for (const target of host._sharedScrollTargets) target.addEventListener('scroll', host._sharedScrollListener, true);
+    window.addEventListener('resize', host._sharedScrollListener);
+  }
+  static tooltipInView(host) {
+    const chart = host.shadowRoot?.querySelector('.chart');
+    const box = chart?.getBoundingClientRect?.();
+    if (!box) return true;
+    const bottom = box.bottom ?? box.top + box.height, right = box.right ?? box.left + box.width;
+    if (bottom <= 0 || right <= 0 || box.top >= (window.innerHeight ?? Infinity) || box.left >= (window.innerWidth ?? Infinity)) return false;
+    // Respect nested scrolling/clipping containers, including HA's shadow trees.
+    for (let node = host; node; node = node.parentElement ?? node.getRootNode?.().host) {
+      if (!node.getBoundingClientRect || !globalThis.getComputedStyle) continue;
+      const style = getComputedStyle(node), clipX = /auto|scroll|hidden|clip/.test(style.overflowX), clipY = /auto|scroll|hidden|clip/.test(style.overflowY);
+      if (!clipX && !clipY) continue;
+      const bounds = node.getBoundingClientRect();
+      if ((clipY && (bottom <= bounds.top || box.top >= bounds.bottom)) || (clipX && (right <= bounds.left || box.left >= bounds.right))) return false;
+    }
+    return true;
+  }
+  static tooltipStyles() {
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
+  }
+  static publishHover(host, timestamp) {
+    const group = this.hoverGroup(host);
+    if (!group || !host.isConnected || !Number.isFinite(timestamp)) return;
+    this.hoverState().set(group, {source: host, timestamp});
+    window.dispatchEvent(new CustomEvent('eleven-cards:hover-sync', {detail: {source: host, group, timestamp}}));
+  }
+  static clearHover(host) {
+    for (const [group, active] of this.hoverState()) {
+      if (active.source !== host) continue;
+      this.hoverState().delete(group);
+      window.dispatchEvent(new CustomEvent('eleven-cards:hover-sync', {detail: {source: host, group, timestamp: null}}));
+    }
+  }
+  static hoverSourceInEvent(host, event) {
+    const active = this.hoverState().get(this.hoverGroup(host));
+    return Boolean(active && event.composedPath().includes(active.source));
+  }
+  static restoreHover(host) {
+    if (!host.isConnected) return;
+    const active = this.hoverState().get(this.hoverGroup(host));
+    if (active && host.isConnected) host._receiveSharedHover?.(active.timestamp);
+  }
+  static disconnectHover(host) {
+    this.clearHover(host);
+    if (host._sharedHoverListener) globalThis.window?.removeEventListener('eleven-cards:hover-sync', host._sharedHoverListener);
+    for (const target of host._sharedScrollTargets ?? []) target.removeEventListener('scroll', host._sharedScrollListener, true);
+    globalThis.window?.removeEventListener('resize', host._sharedScrollListener);
+    host._sharedScrollTargets = [];
+    host._sharedScrollListener = null;
+    host._sharedHoverListener = null;
+    host._receiveSharedHover = null;
+  }
+  static interpolation(value, fallback = 'smooth') {
+    const mode = value == null || value === '' ? fallback : value;
+    if (!['smooth', 'linear', 'step'].includes(mode)) throw new Error('line_interpolation');
+    return mode;
+  }
+  static path(points, mode = 'smooth', end) {
+    mode = this.interpolation(mode);
+    let path = '', previous = null;
+    for (const [x, y] of points) {
+      if (!Number.isFinite(y)) {
+        if (previous && end !== undefined) path += ` H ${x}`;
+        previous = null;
+        continue;
+      }
+      if (!previous) path += `${path ? ' ' : ''}M ${x} ${y}`;
+      else if (mode === 'linear') path += ` L ${x} ${y}`;
+      else if (mode === 'step') path += ` H ${x} V ${y}`;
+      else {
+        const middle = (previous[0] + x) / 2;
+        path += ` C ${middle} ${previous[1]}, ${middle} ${y}, ${x} ${y}`;
+      }
+      previous = [x, y];
+    }
+    if (previous && end !== undefined) path += ` H ${end}`;
+    return path;
+  }
+  render(host, {viewBox, defs = '', before = '', after = '', fills = [], lines = []}) {
+    const previous = host.shadowRoot.querySelector('.chart-enter')?.getAnimations?.().find(a => a.animationName === 'chart-reveal' && a.playState !== 'finished' && Number(a.currentTime ?? 0) < 650);
+    this.progress = Number(previous?.currentTime ?? 0);
+    this.entering = Boolean(host.isConnected && (!this.loaded || previous) && lines.some(p => p.d));
+    if (host.isConnected && lines.some(p => p.d)) this.loaded = true;
+    const areas = fills.filter(p => p.d).map(p => `<path d="${graphAttribute(p.d)}" class="${graphAttribute(p.className)}"${p.fill ? ` fill="${graphAttribute(p.fill)}"` : ''}${p.opacity != null ? ` fill-opacity="${p.opacity}"` : ''}${p.mask ? ` mask="${graphAttribute(p.mask)}"` : ''}/>`).join('');
+    const paths = lines.filter(p => p.d).map(p => {
+      const a = p.appearance;
+      const stroke = p.inlineStyle ? `style="stroke:${graphAttribute(a.stroke)};stroke-width:${a.width};stroke-dasharray:${a.dash};stroke-linecap:${a.cap}"` : `stroke="${graphAttribute(a.stroke)}" stroke-width="${a.width}" stroke-dasharray="${a.dash}" stroke-linecap="${a.cap}"`;
+      return `<path d="${graphAttribute(p.d)}" class="${graphAttribute(p.className)}"${p.entity ? ` data-entity="${graphAttribute(p.entity)}"` : ''} ${stroke}/>`;
+    }).join('');
+    return `<svg viewBox="${viewBox}" preserveAspectRatio="none" aria-hidden="true">${defs}${before}<g class="chart-series${this.entering ? ' chart-enter' : ''}">${areas}${paths}</g>${after}</svg>`;
+  }
+  restore(host) {
+    if (this.entering && this.progress > 0) {
+      const animation = host.shadowRoot.querySelector('.chart-enter')?.getAnimations?.().find(a => a.animationName === 'chart-reveal');
+      if (animation) animation.currentTime = this.progress;
+    }
+  }
+}
+function graphStyles() {
+  return `
+      .price-line, .series-line { fill: none; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+      .chart-enter { animation: chart-reveal 650ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+      @keyframes chart-reveal {
+        from { clip-path: inset(0 100% 0 0); }
+        to { clip-path: inset(0 0 0 0); }
+      }
+      .hover-dot { position: absolute; z-index: 2; width: 12px; height: 12px; box-sizing: border-box; border: 3px solid; border-radius: 50%; transform: translate(-50%, -50%); background: var(--card-background-color); pointer-events: none; }
+      @media (prefers-reduced-motion: reduce) { .chart-enter { animation: none; } }
+  `;
+}
+
+// Calendar periods use the Home Assistant timezone, including DST boundaries.
+const periodZoneFormats=new Map();
+function periodLocalParts(t,zone){
+ let format=periodZoneFormats.get(zone);
+ if(!format){format=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});periodZoneFormats.set(zone,format);}
+ return Object.fromEntries(format.formatToParts(t).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
+}
+function periodLocalEpoch(t,zone){const p=periodLocalParts(t,zone);return Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second);}
+function periodMidnight(nominal,zone){
+ let t=nominal;for(let i=0;i<6;i++){const next=nominal-(periodLocalEpoch(t,zone)-t);if(next===t)return t;t=next;}
+ // Midnight can be skipped by a timezone transition. Use the first valid
+ // instant of that local date rather than oscillating across the transition.
+ let low=nominal-36*3600000,high=nominal+36*3600000;
+ while(high-low>1000){const mid=Math.floor((low+high)/2000)*1000,p=periodLocalParts(mid,zone);if(Date.UTC(p.year,p.month-1,p.day)>=nominal)high=mid;else low=mid;}
+ return high;
+}
+function calendarDayStart(key,zone='UTC'){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(key))return NaN;
+ const nominal=Date.parse(`${key}T00:00:00Z`);
+ return Number.isFinite(nominal)&&new Date(nominal).toISOString().slice(0,10)===key?periodMidnight(nominal,zone||'UTC'):NaN;
+}
+function graphPeriodBounds(t,period,zone='UTC'){
+ zone ||= 'UTC';const p=periodLocalParts(t,zone),size={minute:60000,quarter_hour:900000,hour:3600000}[period];
+ if(size){const local=Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second),a=t-(local%size)-(t%1000);return [a,a+size];}
+ let nominal=Date.UTC(p.year,p.month-1,period==='month'?1:p.day);let next;
+ if(period==='week'){const day=new Date(nominal).getUTCDay();nominal-=((day+6)%7)*86400000;next=nominal+7*86400000;}
+ else if(period==='month')next=Date.UTC(p.year,p.month,1);
+ else next=nominal+86400000;
+ return [periodMidnight(nominal,zone),periodMidnight(next,zone)];
+}
+const periodCalendarModes=['today','week','month','quarter','year'];
+const periodPresetHours={'1h':1,'6h':6,'12h':12,'24h':24,'48h':48,'7d':168,'14d':336,'30d':720,'90d':2160,'365d':8760};
+function periodDateTime(t,zone='UTC'){
+ const p=periodLocalParts(t,zone),pad=n=>String(n).padStart(2,'0');
+ return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+function parsePeriodDateTime(value,zone='UTC',edge='start',previous){
+ if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))return NaN;
+ if(Number.isFinite(previous)&&periodDateTime(previous,zone)===value)return previous;
+ const nominal=Date.parse(value+'Z');if(!Number.isFinite(nominal)||periodDateTime(nominal,'UTC')!==value)return NaN;
+ // Collect the offsets on both sides of a transition. Reject skipped local
+ // times; repeated times include both occurrences unless editing an existing bound.
+ const candidates=new Set();
+ for(let h=-48;h<=48;h+=6){const sample=nominal+h*3600000,offset=periodLocalEpoch(sample,zone)-sample,candidate=nominal-offset;if(periodDateTime(candidate,zone)===value)candidates.add(candidate);}
+ const times=[...candidates].sort((a,b)=>a-b);return times.length?(edge==='end'?times.at(-1):times[0]):NaN;
+}
+function chooseCustomGraphPeriod(host,start,end){
+ if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start||end-start>366*86400000)return false;
+ resetGraphPeriod(host);host._periodMode='custom';host._periodHours=(end-start)/3600000;host._periodEnd=end;
+ publishTimeframe(host);host._reloadPeriod();return true;
+}
+function timeframeSyncConfig(config,{draft=false}={}){
+ if(!draft){
+  if(config.sync_timeframe!==undefined&&typeof config.sync_timeframe!=='boolean')throw Error('sync_timeframe must be a boolean. / Tijdvak synchroniseren moet aan of uit zijn.');
+  for(const key of ['hover_sync_group','timeframe_sync_group'])if(config[key]!=null&&typeof config[key]!=='string')throw Error(`${key} must be text. / De synchronisatiegroep moet tekst zijn.`);
+ }
+ return {sync_timeframe:config.sync_timeframe??false,hover_sync_group:config.hover_sync_group??config.timeframe_sync_group??''};
+}
+function timeframeGroup(host){return host._config?.sync_timeframe===true?((host._config.hover_sync_group??host._config.timeframe_sync_group)?.trim()||'default'):null;}
+function timeframeGroups(){
+ const root=globalThis.window??globalThis,key=Symbol.for('eleven-cards.timeframe-sync.v1');
+ return root[key]??=new Map();
+}
+function applyTimeframe(host,selection){
+ // Default is a group-wide reset to each card's own configured range (or
+ // native price window), rather than a copy of the sender's hours.
+ if(selection.mode==='configured'&&selection.offset===0){resetGraphPeriod(host);return;}
+ host._sharedTimeframe=selection;
+ Object.assign(host,{_periodMode:selection.mode,_periodHours:selection.hours,_periodEnd:selection.end,_periodOffset:selection.offset,_periodAnchor:selection.anchor});
+}
+function disconnectTimeframeSync(host){
+ host._disconnectTimeframeSync?.();host._disconnectTimeframeSync=null;
+}
+function connectTimeframeSync(host){
+ disconnectTimeframeSync(host);
+ const group=timeframeGroup(host);if(group===null||!host._connected)return;
+ const groups=timeframeGroups();let entry=groups.get(group);
+ if(!entry){entry={selection:null,listeners:new Set()};groups.set(group,entry);}
+ const receive=(selection,source)=>{
+  if(source===host||host._sharedTimeframe===selection)return;
+  applyTimeframe(host,selection);host._reloadPeriod();
+ };
+ entry.listeners.add(receive);
+ host._disconnectTimeframeSync=()=>entry.listeners.delete(receive);
+ // Joining never publishes this card's default over an existing selection.
+ if(entry.selection)applyTimeframe(host,entry.selection);
+}
+function publishTimeframe(host){
+ const group=timeframeGroup(host);if(group===null||!host._connected)return;
+ const entry=timeframeGroups().get(group);if(!entry)return;
+ const selection={group,mode:host._periodMode,hours:host._periodHours??host._config.hours_to_show,
+  end:host._periodEnd,offset:host._periodOffset,anchor:host._periodAnchor,zone:host._hass?.config?.time_zone||'UTC',at:Date.now()};
+ selection.range=localGraphPeriodRange(host,selection.at);
+ entry.selection=selection;applyTimeframe(host,selection);
+ for(const receive of entry.listeners)receive(selection,host);
+}
+function resetGraphPeriod(host){host._sharedTimeframe=null;host._periodMode='configured';host._periodHours=null;host._periodEnd=null;host._periodOffset=0;host._periodAnchor=null;host._periodMenuOpen=false;host._periodMenuPending=false;host._periodCustomDraft=null;host._periodTab=null;host._insightPending=null;}
+function graphPeriodRange(host,now=Date.now()){
+ const shared=host._sharedTimeframe;
+ if(shared&&timeframeGroup(host)===shared.group){
+  // One clock and timezone for the whole group, including separate bundles.
+  // Live selections advance together on the minute; historical ranges stay fixed.
+  if(shared.offset===0&&shared.end==null&&(Math.floor(now/60000)!==Math.floor(shared.at/60000))){
+   shared.at=now;shared.range=localGraphPeriodRange({_periodMode:shared.mode,_periodHours:shared.hours,_periodOffset:0,_hass:{config:{time_zone:shared.zone}}},now);
+  }
+  return {...shared.range};
+ }
+ return localGraphPeriodRange(host,now);
+}
+function localGraphPeriodRange(host,now){
+ const mode=host._periodMode,offset=host._periodOffset??0;
+ if(periodCalendarModes.includes(mode)){
+  const zone=host._hass?.config?.time_zone||'UTC',p=periodLocalParts(host._periodAnchor??now,zone);
+  let nominal,finishNominal;
+  if(mode==='week'){
+   nominal=Date.UTC(p.year,p.month-1,p.day);nominal+=(offset*7-(new Date(nominal).getUTCDay()+6)%7)*86400000;finishNominal=nominal+7*86400000;
+  }else if(mode==='month'||mode==='quarter'){
+   const size=mode==='quarter'?3:1,month=(mode==='quarter'?Math.floor((p.month-1)/3)*3:p.month-1)+offset*size;
+   nominal=Date.UTC(p.year,month,1);finishNominal=Date.UTC(p.year,month+size,1);
+  }else if(mode==='year'){nominal=Date.UTC(p.year+offset,0,1);finishNominal=Date.UTC(p.year+offset+1,0,1);}
+  else{nominal=Date.UTC(p.year,p.month-1,p.day+offset);finishNominal=nominal+86400000;}
+  const start=periodMidnight(nominal,zone),finish=periodMidnight(finishNominal,zone);
+  return {start,end:Math.max(start+1,Math.min(now,finish))};
+ }
+ const end=host._periodEnd??now;
+ return {start:end-(host._periodHours??host._config.hours_to_show)*3600000,end};
+}
+function chooseGraphPeriod(host,value){
+ const calendar=value==='configured'||periodCalendarModes.includes(value),hours=periodPresetHours[value]??Number(value);
+ if(!calendar&&(!Number.isFinite(hours)||hours<1||hours>8760))return;
+ resetGraphPeriod(host);
+ host._periodMode=calendar?value:Object.entries(periodPresetHours).find(([,h])=>h===hours)?.[0]??String(value);
+ if(!calendar)host._periodHours=hours;
+ publishTimeframe(host);
+ return host._reloadPeriod();
+}
+function moveGraphPeriod(host,direction){
+ if(![-1,0,1].includes(direction))return;
+ if(host._periodMode==='custom'){
+  if(direction===0){host._periodEnd=null;host._periodOffset=0;}
+  else{const end=(host._periodEnd??Date.now())+direction*host._periodHours*3600000;host._periodEnd=direction>0?Math.min(Date.now(),end):end;host._periodOffset=(host._periodOffset??0)+direction;}
+  host._periodCustomDraft=null;host._periodTab=null;host._sharedTimeframe=null;publishTimeframe(host);return host._reloadPeriod();
+ }
+ if(direction===0){host._periodOffset=0;host._periodEnd=null;host._periodAnchor=null;}
+ else{
+  const previous=host._periodOffset??0;
+  const calendar=periodCalendarModes.includes(host._periodMode);
+  if(previous===0)host._periodAnchor=calendar?Date.now():host._status==='ready'?(host._end??Date.now()):Date.now();
+  host._periodOffset=Math.min(0,previous+direction);
+  if(host._periodOffset===0)host._periodAnchor=null;
+  if(!calendar){
+   host._periodEnd=host._periodOffset===0?null:host._periodAnchor+host._periodOffset*(host._periodHours??host._config.hours_to_show)*3600000;
+  }
+ }
+ host._sharedTimeframe=null;
+ publishTimeframe(host);
+ return host._reloadPeriod();
+}
+
+// Observed boundary deltas only: never interpolate a meter or split hourly energy.
+function consumptionFromHistory(history, start, end, intervalMinutes, now = Date.now()) {
+  const step = intervalMinutes * 60000;
+  if (![15, 60].includes(intervalMinutes) || !Array.isArray(history)) return [];
+  const samples = history.map(row => ({
+    timestamp: Date.parse(row.last_updated ?? row.last_changed),
+    value: row.state === null || row.state === '' ? NaN : Number(row.state),
+  })).filter(row => Number.isFinite(row.timestamp)).sort((a, b) => a.timestamp - b.timestamp);
+  const points = [];
+  let cursor = -1;
+  for (let timestamp = start; timestamp + step <= Math.min(end, now); timestamp += step) {
+    while (cursor + 1 < samples.length && samples[cursor + 1].timestamp <= timestamp) cursor++;
+    const first = cursor;
+    while (cursor + 1 < samples.length && samples[cursor + 1].timestamp <= timestamp + step) cursor++;
+    const last = cursor;
+    const a = samples[first];
+    const b = samples[last];
+    let valid = a && b && timestamp - a.timestamp <= 300000 && timestamp + step - b.timestamp <= 300000;
+    for (let i = first; valid && i <= last; i++) {
+      const sample = samples[i];
+      valid = Number.isFinite(sample.value) && sample.value >= 0
+        && (i === first || (sample.value >= samples[i - 1].value && sample.timestamp - samples[i - 1].timestamp <= 300000));
+    }
+    points.push({ timestamp, endTimestamp: timestamp + step, energy: valid ? b.value - a.value : null });
+  }
+  return points;
+}
+
+// HA recorder change is already reset-normalized and expressed in requested kWh.
+function consumptionFromStatistics(rows, start, end, now = Date.now()) {
+  if (!Array.isArray(rows)) return [];
+  const byStart = new Map(rows.map(row => [row.start, row]));
+  const points = [];
+  // Hour boundaries in absolute time; do not turn these into quarter-hour samples.
+  for (let timestamp = Math.ceil(start / 3600000) * 3600000; timestamp + 3600000 <= Math.min(end, now); timestamp += 3600000) {
+    const row = byStart.get(timestamp);
+    const valid = row?.end === timestamp + 3600000 && typeof row.change === 'number' && Number.isFinite(row.change) && row.change >= 0;
+    points.push({ timestamp, endTimestamp: timestamp + 3600000, energy: valid ? row.change : null });
+  }
+  return points;
+}
+
+// Overlay-only placement: preserve the established price-only tooltip geometry.
+function placeEnergyTooltip(width, height, boxWidth, boxHeight, anchorX, anchorY, markers) {
+  const edge = 4;
+  const gap = 12;
+  const clamp = (value, max) => Math.max(edge, Math.min(max - edge, value));
+  const xs = [anchorX + gap, anchorX - boxWidth - gap, clamp(anchorX - boxWidth / 2, width - boxWidth), edge, width - boxWidth - edge];
+  const ys = [anchorY + gap, anchorY - boxHeight - gap, ...markers.flatMap(m => [m.bottom + gap, m.top - boxHeight - gap]), edge, height - boxHeight - edge];
+  for (const left of xs) {
+    for (const top of ys) {
+      if (left < edge || top < edge || left + boxWidth > width - edge || top + boxHeight > height - edge) continue;
+      if (markers.every(m => left + boxWidth <= m.left - 4 || left >= m.right + 4 || top + boxHeight <= m.top - 4 || top >= m.bottom + 4)) return { left, top };
+    }
+  }
+  return { left: clamp(anchorX - boxWidth / 2, width - boxWidth), top: clamp(anchorY - boxHeight / 2, height - boxHeight) };
+}
+
+function zonedParts(value, timeZone) {
+  const date = value instanceof Date ? value : new Date(value);
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  return Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+}
+
+function localDayKey(value, timeZone) {
+  const parts = zonedParts(value, timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function localHour(value, timeZone) {
+  return Number(zonedParts(value, timeZone).hour);
+}
+
+function addDaysToKey(dayKey, days) {
+  const date = new Date(`${dayKey}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function calculateAveragePrice(points) {
+  if (!points.length) return null;
+  return points.reduce((total, point) => total + Number(point.price), 0) / points.length;
+}
+
+function offsetPriceData(data, offset) {
+  const amount = Number(offset);
+  if (!Array.isArray(data) || !Number.isFinite(amount)) return [];
+  return data.map((entry) => ({
+    ...entry,
+    price_per_kwh: Number((Number(entry?.price_per_kwh) + amount).toFixed(10)),
+  }));
+}
+
+function mergePriceSeries(importPoints = [], exportPoints = []) {
+  const merged = new Map();
+  for (const point of importPoints) {
+    merged.set(point.timestamp, {
+      timestamp: point.timestamp,
+      startTime: point.startTime,
+      dayKey: point.dayKey,
+      importPrice: point.price,
+    });
+  }
+  for (const point of exportPoints) {
+    const existing = merged.get(point.timestamp) ?? {
+      timestamp: point.timestamp,
+      startTime: point.startTime,
+      dayKey: point.dayKey,
+    };
+    existing.exportPrice = point.price;
+    merged.set(point.timestamp, existing);
+  }
+  return [...merged.values()].sort((left, right) => left.timestamp - right.timestamp);
+}
+
+function classifyPrice(price, threshold = 0.25) {
+  return Number(price) < Number(threshold) ? 'cheap' : 'expensive';
+}
+
+function classifyPriceLevel(price, cheapPrice = 0.15, normalPrice = 0.25, expensivePrice = 0.40) {
+  const value = Number(price);
+  if (value < 0) return 'negative';
+  if (value <= Number(cheapPrice)) return 'cheap';
+  if (value <= Number(expensivePrice)) return 'normal';
+  return 'expensive';
+}
+
+function isCheapestHoursEnabled(value) {
+  return Number.isFinite(Number(value)) && Number(value) > 0;
+}
+
+function normalizeLineStyle(value, fallback = 'solid') {
+  const allowed = new Set(['solid', 'dashed', 'dotted']);
+  return allowed.has(value) ? value : allowed.has(fallback) ? fallback : 'solid';
+}
+
+function normalizeSelectionMode(value) {
+  return ['individual', 'contiguous', 'minimum_blocks'].includes(value) ? value : 'individual';
+}
+
+function normalizeLineWidth(value, fallback = 3.5) {
+  const parsed = Number(value);
+  const fallbackValue = Number(fallback);
+  const width = Number.isFinite(parsed) ? parsed : Number.isFinite(fallbackValue) ? fallbackValue : 3.5;
+  return Math.round(Math.min(8, Math.max(1, width)) * 2) / 2;
+}
+
+function rgbColorToCss(value) {
+  if (!Array.isArray(value) || value.length !== 3) return null;
+  const channels = value.map(Number);
+  if (!channels.every((channel) => Number.isInteger(channel) && channel >= 0 && channel <= 255)) return null;
+  return `rgb(${channels.join(', ')})`;
+}
+
+function countMissingIntervals(points, intervalMinutes = inferIntervalMinutes(points)) {
+  const intervalMs = Number(intervalMinutes) * 60000;
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0 || points.length < 2) return 0;
+  const timestamps = [...new Set(points.map((point) => Number(point.timestamp)).filter(Number.isFinite))]
+    .sort((left, right) => left - right);
+  let missing = 0;
+  for (let index = 1; index < timestamps.length; index += 1) {
+    const steps = Math.round((timestamps[index] - timestamps[index - 1]) / intervalMs);
+    if (steps > 1) missing += steps - 1;
+  }
+  return missing;
+}
+
+function relativeAgeLabel(value, now = new Date()) {
+  const timestamp = new Date(value).getTime();
+  const nowTimestamp = new Date(now).getTime();
+  if (!Number.isFinite(timestamp) || !Number.isFinite(nowTimestamp)) return 'onbekend';
+  const minutes = Math.max(0, Math.floor((nowTimestamp - timestamp) / 60000));
+  if (minutes < 1) return 'zojuist';
+  if (minutes < 60) return `${minutes} min geleden`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} uur geleden`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${days === 1 ? 'dag' : 'dagen'} geleden`;
+}
+
+function groupSelectedPeriods(points, selected, intervalMinutes) {
+  const intervalMs = Number(intervalMinutes) * 60000;
+  const periods = [];
+  const chosen = points
+    .filter((point) => selected.has(point.timestamp))
+    .sort((left, right) => left.timestamp - right.timestamp);
+
+  for (const point of chosen) {
+    const last = periods.at(-1);
+    const endTimestamp = point.timestamp + intervalMs;
+    if (last && last.dayKey === point.dayKey && last.endTimestamp === point.timestamp) {
+      last.averagePrice = (last.averagePrice * last.durationMinutes + point.price * Number(intervalMinutes))
+        / (last.durationMinutes + Number(intervalMinutes));
+      last.endTimestamp = endTimestamp;
+      last.durationMinutes += Number(intervalMinutes);
+    } else {
+      periods.push({
+        dayKey: point.dayKey,
+        startTimestamp: point.timestamp,
+        endTimestamp,
+        durationMinutes: Number(intervalMinutes),
+        averagePrice: point.price,
+      });
+    }
+  }
+  return periods;
+}
+
+function createPriceTicks(minimum, maximum, count = 5) {
+  const size = Math.max(2, Math.trunc(count));
+  const step = (Number(maximum) - Number(minimum)) / (size - 1);
+  return Array.from({ length: size }, (_, index) => Number((Number(maximum) - step * index).toFixed(10)));
+}
+
+// get_price returns unscaled base-currency totals, not chartdata metadata.
+function tibberPriceData(response, source = 'tibber_prices', home) {
+  if(source==='tibber') {
+    const prices=response?.prices;
+    if(!prices || typeof prices!=='object' || Array.isArray(prices))throw Error('format');
+    const homes=Object.keys(prices);
+    if(!home && homes.length!==1)throw Error('home');
+    const selected=home || homes[0];
+    if(!Object.hasOwn(prices,selected) || !Array.isArray(prices[selected]))throw Error('home');
+    return prices[selected].flatMap(row=>{
+      if(typeof row?.price!=='number' || !Number.isFinite(row.price) || typeof row.start_time!=='string' || !Number.isFinite(Date.parse(row.start_time)))return [];
+      return [{start_time:row.start_time,price_per_kwh:row.price}];
+    });
+  }
+  if(response?.success===false)throw Error('unavailable');
+  if(!Array.isArray(response?.price_info))throw Error('format');
+  return response.price_info.flatMap(row=>{
+    if(typeof row?.total!=='number' || !Number.isFinite(row.total) || typeof row.startsAt!=='string' || !Number.isFinite(Date.parse(row.startsAt)))return [];
+    return [{start_time:row.startsAt,price_per_kwh:row.total}];
+  });
+}
+
+function tibberPriceRange(now, timeZone) {
+  const day=localDayKey(now,timeZone);
+  const midnight=key=>{
+    const target=Date.parse(`${key}T00:00:00Z`);
+    let instant=target;
+    // Resolve each midnight independently: a two-day range can span 47/49 hours.
+    for(let i=0;i<4;i++) {
+      const p=zonedParts(instant,timeZone);
+      const local=Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`);
+      if(local===target)return new Date(instant).toISOString();
+      instant+=target-local;
+    }
+    throw Error('timezone');
+  };
+  return {start_time:midnight(day),end_time:midnight(addDaysToKey(day,2))};
+}
+
+// Zonneplan One exposes raw fixed-point amounts in forecast, not its scaled sensor state.
+function zonneplanPriceData(forecast) {
+  if(!Array.isArray(forecast))return [];
+  return forecast.flatMap(row=>{
+    const start_time=row?.start_date ?? row?.datetime;
+    const amount=row?.price_tax_included?.amount ?? row?.electricity_price;
+    if(typeof amount!=='number' || !Number.isFinite(amount) || !Number.isFinite(Date.parse(start_time)))return [];
+    return [{start_time,price_per_kwh:amount/10000000}];
+  });
+}
+
+function normalizePoints(data, timeZone) {
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((entry) => {
+      const timestamp = new Date(entry?.start_time).getTime();
+      const price = Number(entry?.price_per_kwh);
+      if (!Number.isFinite(timestamp) || !Number.isFinite(price)) return null;
+      return {
+        startTime: entry.start_time,
+        timestamp,
+        price,
+        dayKey: localDayKey(timestamp, timeZone),
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.timestamp - right.timestamp);
+}
+
+function getVisiblePoints(data, now = new Date(), timeZone = 'Europe/Amsterdam', tomorrowAfterHour = 14) {
+  const today = localDayKey(now, timeZone);
+  const tomorrow = addDaysToKey(today, 1);
+  const showTomorrow = localHour(now, timeZone) >= Number(tomorrowAfterHour);
+  return normalizePoints(data, timeZone).filter(
+    (point) => point.dayKey === today || (showTomorrow && point.dayKey === tomorrow),
+  );
+}
+
+function splitByLocalDay(points) {
+  const groups = new Map();
+  for (const point of points) {
+    if (!groups.has(point.dayKey)) groups.set(point.dayKey, []);
+    groups.get(point.dayKey).push(point);
+  }
+  return groups;
+}
+
+function inferIntervalMinutes(points) {
+  const differences = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const minutes = (points[index].timestamp - points[index - 1].timestamp) / 60000;
+    if (minutes > 0 && minutes <= 180) differences.push(minutes);
+  }
+  if (!differences.length) return 60;
+  differences.sort((a, b) => a - b);
+  return differences[Math.floor(differences.length / 2)];
+}
+
+function findCurrentPoint(points, now = new Date()) {
+  if (!points.length) return null;
+  const timestamp = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  const intervalMs = inferIntervalMinutes(points) * 60000;
+  return points.find((point) => point.timestamp <= timestamp && timestamp < point.timestamp + intervalMs) ?? null;
+}
+
+// The graph and Energy grid details must select the same active interval.
+function currentPricePoint(data, now = new Date(), timeZone = 'Europe/Amsterdam', tomorrowAfter = 14, offset = 0) {
+  return findCurrentPoint(getVisiblePoints(offsetPriceData(data, offset), now, timeZone, tomorrowAfter), now);
+}
+
+function selectCheapestDuration(points, totalMinutes = 240, options = {}) {
+  return selectDurationByPrice(points, totalMinutes, 'lowest', options);
+}
+
+function selectHighestDuration(points, totalMinutes = 240, options = {}) {
+  return selectDurationByPrice(points, totalMinutes, 'highest', options);
+}
+
+function compareScore(candidate, current, direction) {
+  if (!current) return true;
+  return direction === 'highest' ? candidate > current.score : candidate < current.score;
+}
+
+function selectContiguousDuration(points, count, intervalMinutes, direction) {
+  let best = null;
+  for (let start = 0; start + count <= points.length; start += 1) {
+    const window = points.slice(start, start + count);
+    const contiguous = window.every((point, index) => (
+      index === 0 || point.timestamp - window[index - 1].timestamp === intervalMinutes * 60000
+    ));
+    if (!contiguous) continue;
+    const score = window.reduce((total, point) => total + point.price, 0);
+    if (compareScore(score, best, direction)) best = { score, window };
+  }
+  return new Set((best?.window ?? []).map((point) => point.timestamp));
+}
+
+function selectMinimumBlocks(points, count, intervalMinutes, minimumBlockMinutes, direction) {
+  const requestedMinimum = Number(minimumBlockMinutes);
+  const minimumCount = Math.max(1, Math.min(
+    count,
+    Number.isFinite(requestedMinimum) ? Math.ceil(requestedMinimum / intervalMinutes) : 2,
+  ));
+  let states = new Map([['0|0', { selected: 0, run: 0, score: 0, indices: [] }]]);
+  for (let index = 0; index < points.length; index += 1) {
+    const contiguous = index === 0 || points[index].timestamp - points[index - 1].timestamp === intervalMinutes * 60000;
+    const next = new Map();
+    const save = (state) => {
+      const key = `${state.selected}|${state.run}`;
+      if (compareScore(state.score, next.get(key), direction)) next.set(key, state);
+    };
+    for (const original of states.values()) {
+      if (!contiguous && original.run > 0 && original.run < minimumCount) continue;
+      const state = !contiguous && original.run >= minimumCount ? { ...original, run: 0 } : original;
+      if (state.run === 0 || state.run >= minimumCount) save({ ...state, run: 0 });
+      if (state.selected < count) {
+        const run = state.run === 0 ? 1 : Math.min(minimumCount, state.run + 1);
+        save({
+          selected: state.selected + 1,
+          run,
+          score: state.score + points[index].price,
+          indices: [...state.indices, index],
+        });
+      }
+    }
+    states = next;
+  }
+  const candidates = [...states.values()].filter((state) => (
+    state.selected === count && (state.run === 0 || state.run >= minimumCount)
+  ));
+  const best = candidates.reduce((current, candidate) => (
+    compareScore(candidate.score, current, direction) ? candidate : current
+  ), null);
+  return new Set((best?.indices ?? []).map((index) => points[index].timestamp));
+}
+
+function selectDurationByPrice(points, totalMinutes, direction, options = {}) {
+  const selected = new Set();
+  if (!points.length || totalMinutes <= 0) return selected;
+  const intervalMinutes = inferIntervalMinutes(points);
+  const count = Math.min(points.length, Math.ceil(totalMinutes / intervalMinutes));
+  const mode = normalizeSelectionMode(options.mode);
+  if (mode === 'contiguous') return selectContiguousDuration(points, count, intervalMinutes, direction);
+  if (mode === 'minimum_blocks') {
+    return selectMinimumBlocks(points, count, intervalMinutes, options.minimumBlockMinutes, direction);
+  }
+  const ordered = [...points].sort(
+    direction === 'highest'
+      ? (left, right) => right.price - left.price || left.timestamp - right.timestamp
+      : (left, right) => left.price - right.price || left.timestamp - right.timestamp,
+  );
+  for (const point of ordered.slice(0, count).sort((left, right) => left.timestamp - right.timestamp)) {
+    selected.add(point.timestamp);
+  }
+  return selected;
+}
+
+// Dutch source strings are translation keys; no user-provided text is translated.
+const ENGLISH = Object.freeze({
+ "Tijdvak synchroniseren":"Synchronize timeframe","Tijdvakgroep":"Timeframe group",
+ "Volgt het gekozen tijdvak van ingeschakelde kaarten in dezelfde groep. Alleen beschikbare bronprijzen worden getoond.":"Follows the selected timeframe of enabled cards in the same group. Only available source prices are shown.",
+ "Dezelfde sleutel koppelt kaarten op deze pagina. Leeg gebruikt de standaardgroep.":"The same key links cards on this page. Empty uses the default group.",
+ "De prijsbron bevat geen prijsintervallen voor het gekozen tijdvak.":"The price source has no price intervals for the selected timeframe.",
+  "Horizontaal Y-raster": "Horizontal Y grid",
+  "Toont een horizontale rasterlijn bij elk zichtbaar Y-aslabel.": "Shows a horizontal grid line at each displayed Y-axis tick.",
+  "Prijsbron":"Price source",
+  "Tibber (get_prices)":"Tibber (get_prices)",
+  "Tibber-woning":"Tibber home",
+  "Kies een prijs-/templatesensor, standaard Tibber get_prices, Tibber Prices get_price of Zonneplan One forecast.":"Choose a price/template sensor, built-in Tibber get_prices, Tibber Prices get_price or Zonneplan One forecast.",
+  "Leeg kiest automatisch de enige woning. Bij meerdere woningen: vul de exacte Tibber-woningnaam in. Geen entiteit nodig. Alleen EUR/kWh.":"Leave blank to select the only home automatically. For multiple homes, enter the exact Tibber home name. No entity required. EUR/kWh only.",
+  "Vul de exacte Tibber-woningnaam in bij meerdere woningen.":"Enter the exact Tibber home name when multiple homes exist.",
+  "Controleer de standaard Tibber-integratie, get_prices en de woningnaam.":"Check the built-in Tibber integration, get_prices and the home name.",
+  "Tibber-aansluiting":"Tibber connection",
+  "Prijs-/templatesensor":"Price/template sensor",
+  "Tibber Prices (get_price)":"Tibber Prices (get_price)",
+  "Kies een prijs-/templatesensor, Tibber Prices get_price of Zonneplan One forecast.":"Choose a price/template sensor, Tibber Prices get_price or Zonneplan One forecast.",
+  "Selecteer de Zonneplan One-tariefsensor met forecast. Uur- en kwartierprijzen worden omgerekend naar EUR/kWh.":"Select the Zonneplan One tariff sensor with forecast. Hourly and quarter-hour prices are converted to EUR/kWh.",
+  "Optioneel bij één aansluiting. Kies de aansluiting bij meerdere Tibber Prices-configuraties. Alleen EUR/kWh.":"Optional with one connection. Select the connection when multiple Tibber Prices configurations exist. EUR/kWh only.",
+  "Tibber-prijzen laden…":"Loading Tibber prices…",
+  "Tibber-prijzen niet beschikbaar":"Tibber prices unavailable",
+  "Alleen EUR/kWh wordt ondersteund.":"Only EUR/kWh is supported.",
+  "Prijsgegevens worden opgehaald.":"Fetching price data.",
+  "Controleer de Tibber Prices-integratie, get_price en de gekozen aansluiting.":"Check the Tibber Prices integration, get_price and the selected connection.",
+  "Kies een prijsbron":"Choose a price source",
+  "Selecteer een prijsbron bij Afname in de kaartinstellingen.":"Select a price source under Import in the card settings.",
+  "De tabel verschijnt niet omdat er 0 uur is geselecteerd. Stel Goedkoopste uren per dag in op meer dan 0.":"The table is not shown because 0 hours are selected. Set Cheapest hours per day to a value greater than 0.",
+  "De tabel verschijnt niet omdat er 0 uur is geselecteerd. Stel Beste terugleveruren per dag in op meer dan 0.":"The table is not shown because 0 hours are selected. Set Best export hours per day to a value greater than 0.",
+  "Prijsgrenzen en prijskleuren":"Price thresholds and colors",
+  "Tabelkolommen":"Table columns",
+  "Lijn":"Line",
+  "Vulling":"Fill",
+  "Vaste kleur":"Fixed color",
+  "Volg lijn":"Follow line",
+  "Eigen kleur":"Own color",
+  "Lijnkleur":"Line color",
+  "Vulkleurmodus":"Fill color mode",
+  "Dekking":"Opacity",
+  "Dezelfde grenzen gelden voor beide tarieven; lage afnameprijzen en hoge terugleverprijzen zijn gunstig.":"The same thresholds apply to both tariffs; low import prices and high export prices are favorable.",
+  "Leeg behoudt de bestaande themakleur. Volg lijn volgt ook de prijskleuren.":"Empty preserves the existing theme color. Follow line also follows price colors.",
+  "Prijskleuren volgen de prijsgrenzen. Vaste kleur geldt voor de hele lijn.":"Price colors follow the thresholds. Fixed color applies to the entire line.",
+  "Lijnverloop": "Line interpolation",
+  "Vloeiend": "Smooth",
+  "Recht": "Linear",
+  "Trapvormig": "Stepped",
+  "Netafname": "Grid import",
+  "Verbruiksbron ontbreekt": "Consumption source missing",
+  "Gebruik een cumulatieve netafnamemeter in kWh": "Use a cumulative grid-import meter in kWh",
+  "Verbruik laden…": "Loading consumption\u2026",
+  "Verbruikshistorie niet beschikbaar": "Consumption history unavailable",
+  "Geen voltooide verbruiksintervallen": "No completed consumption intervals",
+  "Verbruikshistorie is onvolledig": "Consumption history is incomplete",
+  "Netafname energie": "Grid-import energy",
+  "Verbruikslijn tonen": "Show consumption line",
+  "Energiemeter netafname": "Grid-import energy meter",
+  "Toont gemeten netafname in kWh per voltooid interval, op een aparte schaal.": "Shows measured grid import in kWh per completed interval, on a separate scale.",
+  "Cumulatieve netafnamemeter in kWh (energy, total_increasing). Geen vermogen of huishoudelijk verbruik inclusief zon.": "Cumulative grid-import meter in kWh (energy, total_increasing). Not power or household consumption including solar.",
+  "Optioneel. Leeg gebruikt de secundaire thematekstkleur.": "Optional. Empty uses the secondary theme text color.",
+  "Toont een transparante kleur onder de verbruikslijn.": "Shows a transparent fill below the consumption line.",
+  "Optioneel. Leeg gebruikt de verbruikslijnkleur.": "Optional. Empty uses the consumption line color.",
+  "Vdg.": "Today",
+  "Mrg.": "Tmr.",
+  "Af.": "Imp.",
+  "Ter.": "Exp.",
+  "Afname": "Import",
+  "Teruglevering": "Export",
+  "Afname en teruglevering": "Import and export",
+  "Geen": "None",
+  "Doorgetrokken": "Solid",
+  "Gestreept": "Dashed",
+  "Gestippeld": "Dotted",
+  "Losse kwartieren": "Individual intervals",
+  "Eén aaneengesloten blok": "One continuous block",
+  "Blokken met minimale duur": "Blocks with minimum duration",
+  "Prijsentity afname": "Import price entity",
+  "Prijsentity teruglevering": "Export price entity",
+  "Correctie op terugleverprijs": "Export price correction",
+  "Grafiek": "Graph",
+  "Actuele prijzen": "Current prices",
+  "Titel": "Title",
+  "Titel tonen": "Show title",
+  "Verticale hoverlijn": "Vertical hover line",
+  "Hover synchroniseren": "Synchronize hover",
+  "Synchronisatiegroep": "Synchronization group",
+  "Deelt het gekozen tijdstip met andere Eleven-grafieken op deze pagina.": "Shares the selected time with other Eleven graphs on this page.",
+  "Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.": "Cards with the same group share hover and timeframe when the corresponding synchronization is enabled. Empty uses the default group.",
+  "Gemiddelde prijslijn": "Average price line",
+  "Gemiddelde prijs in tabel": "Average price in table",
+  "Dag in tabel": "Day column in table",
+  "Tarief in tabel": "Tariff column in table",
+  "Starttijd in tabel": "Start time column in table",
+  "Eindtijd in tabel": "End time column in table",
+  "Duur in tabel": "Duration column in table",
+  "Gem. prijs": "Avg. price",
+  "Toont de gemiddelde prijs per periode in de afname- en teruglevertabel, in ct/kWh.": "Shows the average price per period in the import and export table, in ct/kWh.",
+  "Prijsgrenzen tonen": "Show price thresholds",
+  "Lijnstijl": "Line style",
+  "Lijndikte": "Line width",
+  "Vaste lijnkleur": "Fixed line color",
+  "Vulling onder lijn": "Fill below line",
+  "Vulkleur": "Fill color",
+  "Vulling vervagen": "Fade fill",
+  "Selectiemethode": "Selection method",
+  "Minimale blokduur": "Minimum block duration",
+  "Gunstige perioden": "Favorable periods",
+  "Lijn en vulling": "Line and fill",
+  "Prijskleuren": "Price colors",
+  "Goedkope prijs": "Cheap price",
+  "Normale prijs": "Normal price",
+  "Dure prijs": "Expensive price",
+  "Prijs rond nul": "Price around zero",
+  "Negatieve prijs": "Negative price",
+  "Kleur gunstige afnameperioden": "Favorable import period color",
+  "Kleur gunstige terugleverperioden": "Favorable export period color",
+  "Goedkoop": "Cheap",
+  "Normaal": "Normal",
+  "Duur": "Duration",
+  "Goedkoopste uren per dag": "Cheapest hours per day",
+  "Beste terugleveruren per dag": "Best export hours per day",
+  "Tabel goedkoopste momenten": "Cheapest periods table",
+  "Tabel beste teruglevermomenten": "Best export periods table",
+  "Morgenprijzen tonen vanaf": "Show tomorrow's prices from",
+  "Algemeen": "General",
+  "uur": "h",
+  "Een prijsentity voor afname is verplicht.": "An import price entity is required.",
+  "Prijsniveaus moeten oplopen: goedkoop < normaal < duur.": "Price thresholds must increase: cheap < normal < expensive.",
+  "Afname-entiteit niet gevonden": "Import entity not found",
+  "Terugleverbron ontbreekt": "Export source missing",
+  "Stel export_entity in, of kies alleen afname.": "Set export_entity, or select import only.",
+  "Teruglever-entiteit niet gevonden": "Export entity not found",
+  "Nog geen prijsgegevens": "No price data yet",
+  "De afname-entiteit bevat geen prijsintervallen voor vandaag.": "The import entity has no price intervals for today.",
+  "Nu": "Now",
+  "nu": "now",
+  "Gem. afname": "Avg. import",
+  "Gem. teruglevering": "Avg. export",
+  "Vandaag": "Today",
+  "Morgen": "Tomorrow",
+  "prijsinterval ontbreekt": "price interval missing",
+  "prijsintervallen ontbreken": "price intervals missing",
+  "Morgenprijzen ontbreken": "Tomorrow's prices are missing",
+  "Morgenprijzen zijn onvolledig": "Tomorrow's prices are incomplete",
+  "Legenda": "Legend",
+  "Elektriciteitsprijzen per interval. Gebruik de pijltjestoetsen om prijzen te bekijken.": "Electricity prices per interval. Use the arrow keys to inspect prices.",
+  "Goedkoopst": "Cheapest",
+  "Beste opbrengst": "Best return",
+  "onbekend": "unknown",
+  "Toon": "Show",
+  "Verberg": "Hide",
+  "Gunstige momenten": "Favorable periods",
+  "Dag": "Day",
+  "Moment": "Tariff",
+  "Start": "Start",
+  "Einde": "End",
+  "goedkoopste": "cheapest",
+  "beste": "best",
+  "afname": "import",
+  "teruglevering": "export",
+  "niet beschikbaar": "unavailable",
+  "cent per kilowattuur": "cents per kilowatt-hour",
+  "tot": "to",
+  "Dynamische energieprijzen": "Dynamic energy prices",
+  "Afname- en terugleverprijzen met gunstige momenten per dag.": "Import and export prices with favorable periods per day.",
+  "Kies welke tarieven in de gedeelde tijdgrafiek staan.": "Choose which tariffs appear in the shared time chart.",
+  "Staat los van de gekozen grafiekweergave.": "Independent of the selected graph mode.",
+  "Verberg de titel om actieve gunstige-urencontext op die plek te tonen.": "Hide the title to show active favorable-hours context in its place.",
+  "Toont een verticale hulplijn bij het actieve prijsinterval.": "Shows a vertical guide for the active price interval.",
+  "Toont per zichtbare tariefreeks een gelabeld gemiddelde.": "Shows a labeled average for each visible tariff series.",
+  "Toont de lijnen en prijslabels voor goedkoop, normaal en duur.": "Shows the cheap, normal and expensive threshold lines and price labels.",
+  "Kies doorgetrokken, gestreept of gestippeld.": "Choose solid, dashed or dotted.",
+  "Lijndikte van 1 tot 8 pixels.": "Line thickness from 1 to 8 pixels.",
+  "Optioneel. Leeg behoudt de automatische prijskleuren.": "Optional. Empty keeps automatic price colors.",
+  "Toont een transparante kleur onder de afnamelijn.": "Shows a transparent fill below the import line.",
+  "Optioneel. Leeg gebruikt de primaire Home Assistant-kleur.": "Optional. Empty uses the Home Assistant primary color.",
+  "Laat de vulling geleidelijk transparant worden naar de onderkant.": "Gradually fades the fill towards the bottom.",
+  "Kies losse kwartieren, één blok of meerdere blokken.": "Choose individual intervals, one block or multiple blocks.",
+  "Alleen gebruikt bij blokken met minimale duur.": "Only used for blocks with minimum duration.",
+  "Toont een transparante kleur onder de terugleverlijn.": "Shows a transparent fill below the export line.",
+  "Optioneel. Leeg gebruikt blauw.": "Optional. Empty uses blue.",
+  "Optioneel. Leeg behoudt de groene themakleur voor gunstige prijzen.": "Optional. Empty keeps the theme's green color for favorable prices.",
+  "Optioneel. Leeg behoudt de standaard oranje prijskleur.": "Optional. Empty keeps the default orange price color.",
+  "Optioneel. Leeg behoudt de rode themakleur voor ongunstige prijzen.": "Optional. Empty keeps the theme's red color for unfavorable prices.",
+  "Optioneel. Leeg behoudt de standaard kleur rond nul in de afnamegradiënt.": "Optional. Empty keeps the default zero-price color in the import gradient.",
+  "Optioneel. Leeg behoudt de standaard negatieve afnameprijskleur.": "Optional. Empty keeps the default negative import price color.",
+  "Optioneel, onafhankelijk van prijskleuren. Leeg behoudt de groene themakleur voor perioden, labels en tabel.": "Optional, independent of price colors. Empty keeps the theme's green color for periods, labels and table.",
+  "Optioneel, onafhankelijk van prijskleuren. Leeg behoudt blauw voor perioden, labels en tabel.": "Optional, independent of price colors. Empty keeps blue for periods, labels and table.",
+  "Onder deze prijs is afname goedkoop; voor teruglevering is laag juist ongunstig.": "Below this price import is cheap; for export low prices are unfavorable.",
+  "Middelste prijsgrens voor beide tarieven.": "Middle price threshold for both tariffs.",
+  "Boven deze prijs is afname duur en teruglevering gunstig.": "Above this price import is expensive and export is favorable.",
+  "0 schakelt de selectie van goedkope afname-uren uit.": "0 disables cheap import hour selection.",
+  "Toont aaneengesloten goedkope afnamemomenten onder de grafiek.": "Shows continuous cheap import periods below the chart.",
+  "Prijsbron voor teruglevering. Verplicht zodra teruglevering wordt getoond.": "Export price source. Required whenever export is shown.",
+  "Terugleverprijs = prijs uit terugleverentity + verschil. Negatieve waarden zijn toegestaan.": "Export price = export entity price + correction. Negative values are allowed.",
+  "0 schakelt de selectie van beste terugleveruren uit.": "0 disables best export hour selection.",
+  "Toont aaneengesloten beste teruglevermomenten onder de grafiek.": "Shows continuous best export periods below the chart.",
+  "Vanaf dit uur worden beschikbare morgenprijzen getoond.": "Available tomorrow prices are shown from this hour.",
+  "Controleer {entity} in de cardconfiguratie.": "Check {entity} in the card configuration.",
+  "Goedkoopste {hours} uur/dag": "Cheapest {hours} h/day",
+  "Beste teruglevering {hours} uur/dag": "Best export {hours} h/day",
+  "Huidige {tariff}prijs {price}": "Current {tariff} price {price}",
+  "{hours} u {minutes} min": "{hours} h {minutes} min",
+  "{hours} uur": "{hours} h"
+});
+
+function resolveLanguage(hass) {
+  const language = hass?.locale?.language ?? hass?.language;
+  return typeof language === 'string' && /^nl(?:[-_]|$)/i.test(language) ? 'nl' : 'en';
+}
+
+// getConfigForm has no hass argument in HA. Schema getters read the frontend root;
+// native computeLabel/computeHelper are invoked as methods of hui-form-editor.
+function frontendHass() {
+  return typeof document === 'undefined' ? undefined : document.querySelector('home-assistant')?.hass;
+}
+
+function translate(text, language = 'en', values = {}) {
+  const template = language === 'nl' ? text : ENGLISH[text] ?? text;
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? `{${key}}`));
+}
+
+function formatDuration(minutes, language = 'en') {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return hours && remainder ? translate('{hours} u {minutes} min', language, { hours, minutes: remainder })
+    : hours ? translate('{hours} uur', language, { hours }) : `${remainder} min`;
+}
 
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -599,948 +1662,6 @@ class ElevenCardBackgroundEditor extends HTMLElement{
  }
 }
 
-return Base=>withCardBackground(Base,{preserveNative:true});
-})();
-// One recipe for raised information surfaces across all cards.
-const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
-function uiSurfaceStyles(selector){return `
-:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
-${selector}{box-shadow:var(--eleven-surface-shadow)}
-@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
-`;}
-
-
-// Domain-neutral SVG renderer. Adapters own data, geometry, colors and annotations.
-function graphLineStyle(style, width = 3.5) {
-  return {style, width, dash: style === 'dashed' ? '8 7' : style === 'dotted' ? '1 7' : 'none', cap: style === 'dashed' ? 'butt' : 'round'};
-}
-const graphAttribute = value => String(value).replace(/[&"<>]/g, c => ({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[c]));
-class SharedGraph {
-  static hoverGroup(host) {
-    return host._config?.sync_hover === false ? null : (host._config?.hover_sync_group?.trim() || 'default');
-  }
-  static hoverState() {
-    const key = Symbol.for('eleven-cards.hover-sync.v1');
-    const target = globalThis.window ?? globalThis;
-    return target[key] ??= new Map();
-  }
-  static connectHover(host, receive) {
-    this.disconnectHover(host);
-    host._receiveSharedHover = receive;
-    host._sharedHoverListener = event => {
-      const {source, group, timestamp} = event.detail;
-      if (source !== host && host.isConnected && group === this.hoverGroup(host)) receive(timestamp);
-    };
-    window.addEventListener('eleven-cards:hover-sync', host._sharedHoverListener);
-    // Scroll does not cross shadow roots: listen in every enclosing tree.
-    host._sharedScrollTargets = [window];
-    for (let root = host.getRootNode?.(); root && root !== window; root = root.host?.getRootNode()) {
-      host._sharedScrollTargets.push(root);
-    }
-    host._sharedScrollListener = event => {
-      if (event?.composedPath?.().some(node => node?.classList?.contains('tooltip'))) return;
-      host._hideTooltip();
-    };
-    for (const target of host._sharedScrollTargets) target.addEventListener('scroll', host._sharedScrollListener, true);
-    window.addEventListener('resize', host._sharedScrollListener);
-  }
-  static tooltipInView(host) {
-    const chart = host.shadowRoot?.querySelector('.chart');
-    const box = chart?.getBoundingClientRect?.();
-    if (!box) return true;
-    const bottom = box.bottom ?? box.top + box.height, right = box.right ?? box.left + box.width;
-    if (bottom <= 0 || right <= 0 || box.top >= (window.innerHeight ?? Infinity) || box.left >= (window.innerWidth ?? Infinity)) return false;
-    // Respect nested scrolling/clipping containers, including HA's shadow trees.
-    for (let node = host; node; node = node.parentElement ?? node.getRootNode?.().host) {
-      if (!node.getBoundingClientRect || !globalThis.getComputedStyle) continue;
-      const style = getComputedStyle(node), clipX = /auto|scroll|hidden|clip/.test(style.overflowX), clipY = /auto|scroll|hidden|clip/.test(style.overflowY);
-      if (!clipX && !clipY) continue;
-      const bounds = node.getBoundingClientRect();
-      if ((clipY && (bottom <= bounds.top || box.top >= bounds.bottom)) || (clipX && (right <= bounds.left || box.left >= bounds.right))) return false;
-    }
-    return true;
-  }
-  static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
-  }
-  static publishHover(host, timestamp) {
-    const group = this.hoverGroup(host);
-    if (!group || !host.isConnected || !Number.isFinite(timestamp)) return;
-    this.hoverState().set(group, {source: host, timestamp});
-    window.dispatchEvent(new CustomEvent('eleven-cards:hover-sync', {detail: {source: host, group, timestamp}}));
-  }
-  static clearHover(host) {
-    for (const [group, active] of this.hoverState()) {
-      if (active.source !== host) continue;
-      this.hoverState().delete(group);
-      window.dispatchEvent(new CustomEvent('eleven-cards:hover-sync', {detail: {source: host, group, timestamp: null}}));
-    }
-  }
-  static hoverSourceInEvent(host, event) {
-    const active = this.hoverState().get(this.hoverGroup(host));
-    return Boolean(active && event.composedPath().includes(active.source));
-  }
-  static restoreHover(host) {
-    if (!host.isConnected) return;
-    const active = this.hoverState().get(this.hoverGroup(host));
-    if (active && host.isConnected) host._receiveSharedHover?.(active.timestamp);
-  }
-  static disconnectHover(host) {
-    this.clearHover(host);
-    if (host._sharedHoverListener) globalThis.window?.removeEventListener('eleven-cards:hover-sync', host._sharedHoverListener);
-    for (const target of host._sharedScrollTargets ?? []) target.removeEventListener('scroll', host._sharedScrollListener, true);
-    globalThis.window?.removeEventListener('resize', host._sharedScrollListener);
-    host._sharedScrollTargets = [];
-    host._sharedScrollListener = null;
-    host._sharedHoverListener = null;
-    host._receiveSharedHover = null;
-  }
-  static interpolation(value, fallback = 'smooth') {
-    const mode = value == null || value === '' ? fallback : value;
-    if (!['smooth', 'linear', 'step'].includes(mode)) throw new Error('line_interpolation');
-    return mode;
-  }
-  static path(points, mode = 'smooth', end) {
-    mode = this.interpolation(mode);
-    let path = '', previous = null;
-    for (const [x, y] of points) {
-      if (!Number.isFinite(y)) {
-        if (previous && end !== undefined) path += ` H ${x}`;
-        previous = null;
-        continue;
-      }
-      if (!previous) path += `${path ? ' ' : ''}M ${x} ${y}`;
-      else if (mode === 'linear') path += ` L ${x} ${y}`;
-      else if (mode === 'step') path += ` H ${x} V ${y}`;
-      else {
-        const middle = (previous[0] + x) / 2;
-        path += ` C ${middle} ${previous[1]}, ${middle} ${y}, ${x} ${y}`;
-      }
-      previous = [x, y];
-    }
-    if (previous && end !== undefined) path += ` H ${end}`;
-    return path;
-  }
-  render(host, {viewBox, defs = '', before = '', after = '', fills = [], lines = []}) {
-    const previous = host.shadowRoot.querySelector('.chart-enter')?.getAnimations?.().find(a => a.animationName === 'chart-reveal' && a.playState !== 'finished' && Number(a.currentTime ?? 0) < 650);
-    this.progress = Number(previous?.currentTime ?? 0);
-    this.entering = Boolean(host.isConnected && (!this.loaded || previous) && lines.some(p => p.d));
-    if (host.isConnected && lines.some(p => p.d)) this.loaded = true;
-    const areas = fills.filter(p => p.d).map(p => `<path d="${graphAttribute(p.d)}" class="${graphAttribute(p.className)}"${p.fill ? ` fill="${graphAttribute(p.fill)}"` : ''}${p.opacity != null ? ` fill-opacity="${p.opacity}"` : ''}${p.mask ? ` mask="${graphAttribute(p.mask)}"` : ''}/>`).join('');
-    const paths = lines.filter(p => p.d).map(p => {
-      const a = p.appearance;
-      const stroke = p.inlineStyle ? `style="stroke:${graphAttribute(a.stroke)};stroke-width:${a.width};stroke-dasharray:${a.dash};stroke-linecap:${a.cap}"` : `stroke="${graphAttribute(a.stroke)}" stroke-width="${a.width}" stroke-dasharray="${a.dash}" stroke-linecap="${a.cap}"`;
-      return `<path d="${graphAttribute(p.d)}" class="${graphAttribute(p.className)}"${p.entity ? ` data-entity="${graphAttribute(p.entity)}"` : ''} ${stroke}/>`;
-    }).join('');
-    return `<svg viewBox="${viewBox}" preserveAspectRatio="none" aria-hidden="true">${defs}${before}<g class="chart-series${this.entering ? ' chart-enter' : ''}">${areas}${paths}</g>${after}</svg>`;
-  }
-  restore(host) {
-    if (this.entering && this.progress > 0) {
-      const animation = host.shadowRoot.querySelector('.chart-enter')?.getAnimations?.().find(a => a.animationName === 'chart-reveal');
-      if (animation) animation.currentTime = this.progress;
-    }
-  }
-}
-function graphStyles() {
-  return `
-      .price-line, .series-line { fill: none; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-      .chart-enter { animation: chart-reveal 650ms cubic-bezier(0.22, 1, 0.36, 1) both; }
-      @keyframes chart-reveal {
-        from { clip-path: inset(0 100% 0 0); }
-        to { clip-path: inset(0 0 0 0); }
-      }
-      .hover-dot { position: absolute; z-index: 2; width: 12px; height: 12px; box-sizing: border-box; border: 3px solid; border-radius: 50%; transform: translate(-50%, -50%); background: var(--card-background-color); pointer-events: none; }
-      @media (prefers-reduced-motion: reduce) { .chart-enter { animation: none; } }
-  `;
-}
-
-// Calendar periods use the Home Assistant timezone, including DST boundaries.
-const periodZoneFormats=new Map();
-function periodLocalParts(t,zone){
- let format=periodZoneFormats.get(zone);
- if(!format){format=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});periodZoneFormats.set(zone,format);}
- return Object.fromEntries(format.formatToParts(t).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
-}
-function periodLocalEpoch(t,zone){const p=periodLocalParts(t,zone);return Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second);}
-function periodMidnight(nominal,zone){
- let t=nominal;for(let i=0;i<6;i++){const next=nominal-(periodLocalEpoch(t,zone)-t);if(next===t)return t;t=next;}
- // Midnight can be skipped by a timezone transition. Use the first valid
- // instant of that local date rather than oscillating across the transition.
- let low=nominal-36*3600000,high=nominal+36*3600000;
- while(high-low>1000){const mid=Math.floor((low+high)/2000)*1000,p=periodLocalParts(mid,zone);if(Date.UTC(p.year,p.month-1,p.day)>=nominal)high=mid;else low=mid;}
- return high;
-}
-function calendarDayStart(key,zone='UTC'){
- if(!/^\d{4}-\d{2}-\d{2}$/.test(key))return NaN;
- const nominal=Date.parse(`${key}T00:00:00Z`);
- return Number.isFinite(nominal)&&new Date(nominal).toISOString().slice(0,10)===key?periodMidnight(nominal,zone||'UTC'):NaN;
-}
-function graphPeriodBounds(t,period,zone='UTC'){
- zone ||= 'UTC';const p=periodLocalParts(t,zone),size={minute:60000,quarter_hour:900000,hour:3600000}[period];
- if(size){const local=Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second),a=t-(local%size)-(t%1000);return [a,a+size];}
- let nominal=Date.UTC(p.year,p.month-1,period==='month'?1:p.day);let next;
- if(period==='week'){const day=new Date(nominal).getUTCDay();nominal-=((day+6)%7)*86400000;next=nominal+7*86400000;}
- else if(period==='month')next=Date.UTC(p.year,p.month,1);
- else next=nominal+86400000;
- return [periodMidnight(nominal,zone),periodMidnight(next,zone)];
-}
-const periodCalendarModes=['today','week','month','quarter','year'];
-const periodPresetHours={'1h':1,'6h':6,'12h':12,'24h':24,'48h':48,'7d':168,'14d':336,'30d':720,'90d':2160,'365d':8760};
-function periodDateTime(t,zone='UTC'){
- const p=periodLocalParts(t,zone),pad=n=>String(n).padStart(2,'0');
- return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
-}
-function parsePeriodDateTime(value,zone='UTC',edge='start',previous){
- if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))return NaN;
- if(Number.isFinite(previous)&&periodDateTime(previous,zone)===value)return previous;
- const nominal=Date.parse(value+'Z');if(!Number.isFinite(nominal)||periodDateTime(nominal,'UTC')!==value)return NaN;
- // Collect the offsets on both sides of a transition. Reject skipped local
- // times; repeated times include both occurrences unless editing an existing bound.
- const candidates=new Set();
- for(let h=-48;h<=48;h+=6){const sample=nominal+h*3600000,offset=periodLocalEpoch(sample,zone)-sample,candidate=nominal-offset;if(periodDateTime(candidate,zone)===value)candidates.add(candidate);}
- const times=[...candidates].sort((a,b)=>a-b);return times.length?(edge==='end'?times.at(-1):times[0]):NaN;
-}
-function chooseCustomGraphPeriod(host,start,end){
- if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start||end-start>366*86400000)return false;
- resetGraphPeriod(host);host._periodMode='custom';host._periodHours=(end-start)/3600000;host._periodEnd=end;
- publishTimeframe(host);host._reloadPeriod();return true;
-}
-function timeframeSyncConfig(config,{draft=false}={}){
- if(!draft){
-  if(config.sync_timeframe!==undefined&&typeof config.sync_timeframe!=='boolean')throw Error('sync_timeframe must be a boolean. / Tijdvak synchroniseren moet aan of uit zijn.');
-  for(const key of ['hover_sync_group','timeframe_sync_group'])if(config[key]!=null&&typeof config[key]!=='string')throw Error(`${key} must be text. / De synchronisatiegroep moet tekst zijn.`);
- }
- return {sync_timeframe:config.sync_timeframe??false,hover_sync_group:config.hover_sync_group??config.timeframe_sync_group??''};
-}
-function timeframeGroup(host){return host._config?.sync_timeframe===true?((host._config.hover_sync_group??host._config.timeframe_sync_group)?.trim()||'default'):null;}
-function timeframeGroups(){
- const root=globalThis.window??globalThis,key=Symbol.for('eleven-cards.timeframe-sync.v1');
- return root[key]??=new Map();
-}
-function applyTimeframe(host,selection){
- // Default is a group-wide reset to each card's own configured range (or
- // native price window), rather than a copy of the sender's hours.
- if(selection.mode==='configured'&&selection.offset===0){resetGraphPeriod(host);return;}
- host._sharedTimeframe=selection;
- Object.assign(host,{_periodMode:selection.mode,_periodHours:selection.hours,_periodEnd:selection.end,_periodOffset:selection.offset,_periodAnchor:selection.anchor});
-}
-function disconnectTimeframeSync(host){
- host._disconnectTimeframeSync?.();host._disconnectTimeframeSync=null;
-}
-function connectTimeframeSync(host){
- disconnectTimeframeSync(host);
- const group=timeframeGroup(host);if(group===null||!host._connected)return;
- const groups=timeframeGroups();let entry=groups.get(group);
- if(!entry){entry={selection:null,listeners:new Set()};groups.set(group,entry);}
- const receive=(selection,source)=>{
-  if(source===host||host._sharedTimeframe===selection)return;
-  applyTimeframe(host,selection);host._reloadPeriod();
- };
- entry.listeners.add(receive);
- host._disconnectTimeframeSync=()=>entry.listeners.delete(receive);
- // Joining never publishes this card's default over an existing selection.
- if(entry.selection)applyTimeframe(host,entry.selection);
-}
-function publishTimeframe(host){
- const group=timeframeGroup(host);if(group===null||!host._connected)return;
- const entry=timeframeGroups().get(group);if(!entry)return;
- const selection={group,mode:host._periodMode,hours:host._periodHours??host._config.hours_to_show,
-  end:host._periodEnd,offset:host._periodOffset,anchor:host._periodAnchor,zone:host._hass?.config?.time_zone||'UTC',at:Date.now()};
- selection.range=localGraphPeriodRange(host,selection.at);
- entry.selection=selection;applyTimeframe(host,selection);
- for(const receive of entry.listeners)receive(selection,host);
-}
-function resetGraphPeriod(host){host._sharedTimeframe=null;host._periodMode='configured';host._periodHours=null;host._periodEnd=null;host._periodOffset=0;host._periodAnchor=null;host._periodMenuOpen=false;host._periodMenuPending=false;host._periodCustomDraft=null;host._periodTab=null;host._insightPending=null;}
-function graphPeriodRange(host,now=Date.now()){
- const shared=host._sharedTimeframe;
- if(shared&&timeframeGroup(host)===shared.group){
-  // One clock and timezone for the whole group, including separate bundles.
-  // Live selections advance together on the minute; historical ranges stay fixed.
-  if(shared.offset===0&&shared.end==null&&(Math.floor(now/60000)!==Math.floor(shared.at/60000))){
-   shared.at=now;shared.range=localGraphPeriodRange({_periodMode:shared.mode,_periodHours:shared.hours,_periodOffset:0,_hass:{config:{time_zone:shared.zone}}},now);
-  }
-  return {...shared.range};
- }
- return localGraphPeriodRange(host,now);
-}
-function localGraphPeriodRange(host,now){
- const mode=host._periodMode,offset=host._periodOffset??0;
- if(periodCalendarModes.includes(mode)){
-  const zone=host._hass?.config?.time_zone||'UTC',p=periodLocalParts(host._periodAnchor??now,zone);
-  let nominal,finishNominal;
-  if(mode==='week'){
-   nominal=Date.UTC(p.year,p.month-1,p.day);nominal+=(offset*7-(new Date(nominal).getUTCDay()+6)%7)*86400000;finishNominal=nominal+7*86400000;
-  }else if(mode==='month'||mode==='quarter'){
-   const size=mode==='quarter'?3:1,month=(mode==='quarter'?Math.floor((p.month-1)/3)*3:p.month-1)+offset*size;
-   nominal=Date.UTC(p.year,month,1);finishNominal=Date.UTC(p.year,month+size,1);
-  }else if(mode==='year'){nominal=Date.UTC(p.year+offset,0,1);finishNominal=Date.UTC(p.year+offset+1,0,1);}
-  else{nominal=Date.UTC(p.year,p.month-1,p.day+offset);finishNominal=nominal+86400000;}
-  const start=periodMidnight(nominal,zone),finish=periodMidnight(finishNominal,zone);
-  return {start,end:Math.max(start+1,Math.min(now,finish))};
- }
- const end=host._periodEnd??now;
- return {start:end-(host._periodHours??host._config.hours_to_show)*3600000,end};
-}
-function chooseGraphPeriod(host,value){
- const calendar=value==='configured'||periodCalendarModes.includes(value),hours=periodPresetHours[value]??Number(value);
- if(!calendar&&(!Number.isFinite(hours)||hours<1||hours>8760))return;
- resetGraphPeriod(host);
- host._periodMode=calendar?value:Object.entries(periodPresetHours).find(([,h])=>h===hours)?.[0]??String(value);
- if(!calendar)host._periodHours=hours;
- publishTimeframe(host);
- return host._reloadPeriod();
-}
-function moveGraphPeriod(host,direction){
- if(![-1,0,1].includes(direction))return;
- if(host._periodMode==='custom'){
-  if(direction===0){host._periodEnd=null;host._periodOffset=0;}
-  else{const end=(host._periodEnd??Date.now())+direction*host._periodHours*3600000;host._periodEnd=direction>0?Math.min(Date.now(),end):end;host._periodOffset=(host._periodOffset??0)+direction;}
-  host._periodCustomDraft=null;host._periodTab=null;host._sharedTimeframe=null;publishTimeframe(host);return host._reloadPeriod();
- }
- if(direction===0){host._periodOffset=0;host._periodEnd=null;host._periodAnchor=null;}
- else{
-  const previous=host._periodOffset??0;
-  const calendar=periodCalendarModes.includes(host._periodMode);
-  if(previous===0)host._periodAnchor=calendar?Date.now():host._status==='ready'?(host._end??Date.now()):Date.now();
-  host._periodOffset=Math.min(0,previous+direction);
-  if(host._periodOffset===0)host._periodAnchor=null;
-  if(!calendar){
-   host._periodEnd=host._periodOffset===0?null:host._periodAnchor+host._periodOffset*(host._periodHours??host._config.hours_to_show)*3600000;
-  }
- }
- host._sharedTimeframe=null;
- publishTimeframe(host);
- return host._reloadPeriod();
-}
-
-// Observed boundary deltas only: never interpolate a meter or split hourly energy.
-function consumptionFromHistory(history, start, end, intervalMinutes, now = Date.now()) {
-  const step = intervalMinutes * 60000;
-  if (![15, 60].includes(intervalMinutes) || !Array.isArray(history)) return [];
-  const samples = history.map(row => ({
-    timestamp: Date.parse(row.last_updated ?? row.last_changed),
-    value: row.state === null || row.state === '' ? NaN : Number(row.state),
-  })).filter(row => Number.isFinite(row.timestamp)).sort((a, b) => a.timestamp - b.timestamp);
-  const points = [];
-  let cursor = -1;
-  for (let timestamp = start; timestamp + step <= Math.min(end, now); timestamp += step) {
-    while (cursor + 1 < samples.length && samples[cursor + 1].timestamp <= timestamp) cursor++;
-    const first = cursor;
-    while (cursor + 1 < samples.length && samples[cursor + 1].timestamp <= timestamp + step) cursor++;
-    const last = cursor;
-    const a = samples[first];
-    const b = samples[last];
-    let valid = a && b && timestamp - a.timestamp <= 300000 && timestamp + step - b.timestamp <= 300000;
-    for (let i = first; valid && i <= last; i++) {
-      const sample = samples[i];
-      valid = Number.isFinite(sample.value) && sample.value >= 0
-        && (i === first || (sample.value >= samples[i - 1].value && sample.timestamp - samples[i - 1].timestamp <= 300000));
-    }
-    points.push({ timestamp, endTimestamp: timestamp + step, energy: valid ? b.value - a.value : null });
-  }
-  return points;
-}
-
-// HA recorder change is already reset-normalized and expressed in requested kWh.
-function consumptionFromStatistics(rows, start, end, now = Date.now()) {
-  if (!Array.isArray(rows)) return [];
-  const byStart = new Map(rows.map(row => [row.start, row]));
-  const points = [];
-  // Hour boundaries in absolute time; do not turn these into quarter-hour samples.
-  for (let timestamp = Math.ceil(start / 3600000) * 3600000; timestamp + 3600000 <= Math.min(end, now); timestamp += 3600000) {
-    const row = byStart.get(timestamp);
-    const valid = row?.end === timestamp + 3600000 && typeof row.change === 'number' && Number.isFinite(row.change) && row.change >= 0;
-    points.push({ timestamp, endTimestamp: timestamp + 3600000, energy: valid ? row.change : null });
-  }
-  return points;
-}
-
-// Overlay-only placement: preserve the established price-only tooltip geometry.
-function placeEnergyTooltip(width, height, boxWidth, boxHeight, anchorX, anchorY, markers) {
-  const edge = 4;
-  const gap = 12;
-  const clamp = (value, max) => Math.max(edge, Math.min(max - edge, value));
-  const xs = [anchorX + gap, anchorX - boxWidth - gap, clamp(anchorX - boxWidth / 2, width - boxWidth), edge, width - boxWidth - edge];
-  const ys = [anchorY + gap, anchorY - boxHeight - gap, ...markers.flatMap(m => [m.bottom + gap, m.top - boxHeight - gap]), edge, height - boxHeight - edge];
-  for (const left of xs) {
-    for (const top of ys) {
-      if (left < edge || top < edge || left + boxWidth > width - edge || top + boxHeight > height - edge) continue;
-      if (markers.every(m => left + boxWidth <= m.left - 4 || left >= m.right + 4 || top + boxHeight <= m.top - 4 || top >= m.bottom + 4)) return { left, top };
-    }
-  }
-  return { left: clamp(anchorX - boxWidth / 2, width - boxWidth), top: clamp(anchorY - boxHeight / 2, height - boxHeight) };
-}
-
-function zonedParts(value, timeZone) {
-  const date = value instanceof Date ? value : new Date(value);
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(date);
-  return Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-}
-
-function localDayKey(value, timeZone) {
-  const parts = zonedParts(value, timeZone);
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function localHour(value, timeZone) {
-  return Number(zonedParts(value, timeZone).hour);
-}
-
-function addDaysToKey(dayKey, days) {
-  const date = new Date(`${dayKey}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function calculateAveragePrice(points) {
-  if (!points.length) return null;
-  return points.reduce((total, point) => total + Number(point.price), 0) / points.length;
-}
-
-function offsetPriceData(data, offset) {
-  const amount = Number(offset);
-  if (!Array.isArray(data) || !Number.isFinite(amount)) return [];
-  return data.map((entry) => ({
-    ...entry,
-    price_per_kwh: Number((Number(entry?.price_per_kwh) + amount).toFixed(10)),
-  }));
-}
-
-function mergePriceSeries(importPoints = [], exportPoints = []) {
-  const merged = new Map();
-  for (const point of importPoints) {
-    merged.set(point.timestamp, {
-      timestamp: point.timestamp,
-      startTime: point.startTime,
-      dayKey: point.dayKey,
-      importPrice: point.price,
-    });
-  }
-  for (const point of exportPoints) {
-    const existing = merged.get(point.timestamp) ?? {
-      timestamp: point.timestamp,
-      startTime: point.startTime,
-      dayKey: point.dayKey,
-    };
-    existing.exportPrice = point.price;
-    merged.set(point.timestamp, existing);
-  }
-  return [...merged.values()].sort((left, right) => left.timestamp - right.timestamp);
-}
-
-function classifyPrice(price, threshold = 0.25) {
-  return Number(price) < Number(threshold) ? 'cheap' : 'expensive';
-}
-
-function classifyPriceLevel(price, cheapPrice = 0.15, normalPrice = 0.25, expensivePrice = 0.40) {
-  const value = Number(price);
-  if (value < 0) return 'negative';
-  if (value <= Number(cheapPrice)) return 'cheap';
-  if (value <= Number(expensivePrice)) return 'normal';
-  return 'expensive';
-}
-
-function isCheapestHoursEnabled(value) {
-  return Number.isFinite(Number(value)) && Number(value) > 0;
-}
-
-function normalizeLineStyle(value, fallback = 'solid') {
-  const allowed = new Set(['solid', 'dashed', 'dotted']);
-  return allowed.has(value) ? value : allowed.has(fallback) ? fallback : 'solid';
-}
-
-function normalizeSelectionMode(value) {
-  return ['individual', 'contiguous', 'minimum_blocks'].includes(value) ? value : 'individual';
-}
-
-function normalizeLineWidth(value, fallback = 3.5) {
-  const parsed = Number(value);
-  const fallbackValue = Number(fallback);
-  const width = Number.isFinite(parsed) ? parsed : Number.isFinite(fallbackValue) ? fallbackValue : 3.5;
-  return Math.round(Math.min(8, Math.max(1, width)) * 2) / 2;
-}
-
-function rgbColorToCss(value) {
-  if (!Array.isArray(value) || value.length !== 3) return null;
-  const channels = value.map(Number);
-  if (!channels.every((channel) => Number.isInteger(channel) && channel >= 0 && channel <= 255)) return null;
-  return `rgb(${channels.join(', ')})`;
-}
-
-function countMissingIntervals(points, intervalMinutes = inferIntervalMinutes(points)) {
-  const intervalMs = Number(intervalMinutes) * 60000;
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0 || points.length < 2) return 0;
-  const timestamps = [...new Set(points.map((point) => Number(point.timestamp)).filter(Number.isFinite))]
-    .sort((left, right) => left - right);
-  let missing = 0;
-  for (let index = 1; index < timestamps.length; index += 1) {
-    const steps = Math.round((timestamps[index] - timestamps[index - 1]) / intervalMs);
-    if (steps > 1) missing += steps - 1;
-  }
-  return missing;
-}
-
-function relativeAgeLabel(value, now = new Date()) {
-  const timestamp = new Date(value).getTime();
-  const nowTimestamp = new Date(now).getTime();
-  if (!Number.isFinite(timestamp) || !Number.isFinite(nowTimestamp)) return 'onbekend';
-  const minutes = Math.max(0, Math.floor((nowTimestamp - timestamp) / 60000));
-  if (minutes < 1) return 'zojuist';
-  if (minutes < 60) return `${minutes} min geleden`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} uur geleden`;
-  const days = Math.floor(hours / 24);
-  return `${days} ${days === 1 ? 'dag' : 'dagen'} geleden`;
-}
-
-function groupSelectedPeriods(points, selected, intervalMinutes) {
-  const intervalMs = Number(intervalMinutes) * 60000;
-  const periods = [];
-  const chosen = points
-    .filter((point) => selected.has(point.timestamp))
-    .sort((left, right) => left.timestamp - right.timestamp);
-
-  for (const point of chosen) {
-    const last = periods.at(-1);
-    const endTimestamp = point.timestamp + intervalMs;
-    if (last && last.dayKey === point.dayKey && last.endTimestamp === point.timestamp) {
-      last.averagePrice = (last.averagePrice * last.durationMinutes + point.price * Number(intervalMinutes))
-        / (last.durationMinutes + Number(intervalMinutes));
-      last.endTimestamp = endTimestamp;
-      last.durationMinutes += Number(intervalMinutes);
-    } else {
-      periods.push({
-        dayKey: point.dayKey,
-        startTimestamp: point.timestamp,
-        endTimestamp,
-        durationMinutes: Number(intervalMinutes),
-        averagePrice: point.price,
-      });
-    }
-  }
-  return periods;
-}
-
-function createPriceTicks(minimum, maximum, count = 5) {
-  const size = Math.max(2, Math.trunc(count));
-  const step = (Number(maximum) - Number(minimum)) / (size - 1);
-  return Array.from({ length: size }, (_, index) => Number((Number(maximum) - step * index).toFixed(10)));
-}
-
-// get_price returns unscaled base-currency totals, not chartdata metadata.
-function tibberPriceData(response) {
-  if(response?.success===false)throw Error('unavailable');
-  if(!Array.isArray(response?.price_info))throw Error('format');
-  return response.price_info.flatMap(row=>{
-    if(typeof row?.total!=='number' || !Number.isFinite(row.total) || typeof row.startsAt!=='string' || !Number.isFinite(Date.parse(row.startsAt)))return [];
-    return [{start_time:row.startsAt,price_per_kwh:row.total}];
-  });
-}
-
-function tibberPriceRange(now, timeZone) {
-  const day=localDayKey(now,timeZone);
-  const midnight=key=>{
-    const target=Date.parse(`${key}T00:00:00Z`);
-    let instant=target;
-    // Resolve each midnight independently: a two-day range can span 47/49 hours.
-    for(let i=0;i<4;i++) {
-      const p=zonedParts(instant,timeZone);
-      const local=Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`);
-      if(local===target)return new Date(instant).toISOString();
-      instant+=target-local;
-    }
-    throw Error('timezone');
-  };
-  return {start_time:midnight(day),end_time:midnight(addDaysToKey(day,2))};
-}
-
-// Zonneplan One exposes raw fixed-point amounts in forecast, not its scaled sensor state.
-function zonneplanPriceData(forecast) {
-  if(!Array.isArray(forecast))return [];
-  return forecast.flatMap(row=>{
-    const start_time=row?.start_date ?? row?.datetime;
-    const amount=row?.price_tax_included?.amount ?? row?.electricity_price;
-    if(typeof amount!=='number' || !Number.isFinite(amount) || !Number.isFinite(Date.parse(start_time)))return [];
-    return [{start_time,price_per_kwh:amount/10000000}];
-  });
-}
-
-function normalizePoints(data, timeZone) {
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((entry) => {
-      const timestamp = new Date(entry?.start_time).getTime();
-      const price = Number(entry?.price_per_kwh);
-      if (!Number.isFinite(timestamp) || !Number.isFinite(price)) return null;
-      return {
-        startTime: entry.start_time,
-        timestamp,
-        price,
-        dayKey: localDayKey(timestamp, timeZone),
-      };
-    })
-    .filter(Boolean)
-    .sort((left, right) => left.timestamp - right.timestamp);
-}
-
-function getVisiblePoints(data, now = new Date(), timeZone = 'Europe/Amsterdam', tomorrowAfterHour = 14) {
-  const today = localDayKey(now, timeZone);
-  const tomorrow = addDaysToKey(today, 1);
-  const showTomorrow = localHour(now, timeZone) >= Number(tomorrowAfterHour);
-  return normalizePoints(data, timeZone).filter(
-    (point) => point.dayKey === today || (showTomorrow && point.dayKey === tomorrow),
-  );
-}
-
-function splitByLocalDay(points) {
-  const groups = new Map();
-  for (const point of points) {
-    if (!groups.has(point.dayKey)) groups.set(point.dayKey, []);
-    groups.get(point.dayKey).push(point);
-  }
-  return groups;
-}
-
-function inferIntervalMinutes(points) {
-  const differences = [];
-  for (let index = 1; index < points.length; index += 1) {
-    const minutes = (points[index].timestamp - points[index - 1].timestamp) / 60000;
-    if (minutes > 0 && minutes <= 180) differences.push(minutes);
-  }
-  if (!differences.length) return 60;
-  differences.sort((a, b) => a - b);
-  return differences[Math.floor(differences.length / 2)];
-}
-
-function findCurrentPoint(points, now = new Date()) {
-  if (!points.length) return null;
-  const timestamp = now instanceof Date ? now.getTime() : new Date(now).getTime();
-  if (!Number.isFinite(timestamp)) return null;
-  const intervalMs = inferIntervalMinutes(points) * 60000;
-  return points.find((point) => point.timestamp <= timestamp && timestamp < point.timestamp + intervalMs) ?? null;
-}
-
-// The graph and Energy grid details must select the same active interval.
-function currentPricePoint(data, now = new Date(), timeZone = 'Europe/Amsterdam', tomorrowAfter = 14, offset = 0) {
-  return findCurrentPoint(getVisiblePoints(offsetPriceData(data, offset), now, timeZone, tomorrowAfter), now);
-}
-
-function selectCheapestDuration(points, totalMinutes = 240, options = {}) {
-  return selectDurationByPrice(points, totalMinutes, 'lowest', options);
-}
-
-function selectHighestDuration(points, totalMinutes = 240, options = {}) {
-  return selectDurationByPrice(points, totalMinutes, 'highest', options);
-}
-
-function compareScore(candidate, current, direction) {
-  if (!current) return true;
-  return direction === 'highest' ? candidate > current.score : candidate < current.score;
-}
-
-function selectContiguousDuration(points, count, intervalMinutes, direction) {
-  let best = null;
-  for (let start = 0; start + count <= points.length; start += 1) {
-    const window = points.slice(start, start + count);
-    const contiguous = window.every((point, index) => (
-      index === 0 || point.timestamp - window[index - 1].timestamp === intervalMinutes * 60000
-    ));
-    if (!contiguous) continue;
-    const score = window.reduce((total, point) => total + point.price, 0);
-    if (compareScore(score, best, direction)) best = { score, window };
-  }
-  return new Set((best?.window ?? []).map((point) => point.timestamp));
-}
-
-function selectMinimumBlocks(points, count, intervalMinutes, minimumBlockMinutes, direction) {
-  const requestedMinimum = Number(minimumBlockMinutes);
-  const minimumCount = Math.max(1, Math.min(
-    count,
-    Number.isFinite(requestedMinimum) ? Math.ceil(requestedMinimum / intervalMinutes) : 2,
-  ));
-  let states = new Map([['0|0', { selected: 0, run: 0, score: 0, indices: [] }]]);
-  for (let index = 0; index < points.length; index += 1) {
-    const contiguous = index === 0 || points[index].timestamp - points[index - 1].timestamp === intervalMinutes * 60000;
-    const next = new Map();
-    const save = (state) => {
-      const key = `${state.selected}|${state.run}`;
-      if (compareScore(state.score, next.get(key), direction)) next.set(key, state);
-    };
-    for (const original of states.values()) {
-      if (!contiguous && original.run > 0 && original.run < minimumCount) continue;
-      const state = !contiguous && original.run >= minimumCount ? { ...original, run: 0 } : original;
-      if (state.run === 0 || state.run >= minimumCount) save({ ...state, run: 0 });
-      if (state.selected < count) {
-        const run = state.run === 0 ? 1 : Math.min(minimumCount, state.run + 1);
-        save({
-          selected: state.selected + 1,
-          run,
-          score: state.score + points[index].price,
-          indices: [...state.indices, index],
-        });
-      }
-    }
-    states = next;
-  }
-  const candidates = [...states.values()].filter((state) => (
-    state.selected === count && (state.run === 0 || state.run >= minimumCount)
-  ));
-  const best = candidates.reduce((current, candidate) => (
-    compareScore(candidate.score, current, direction) ? candidate : current
-  ), null);
-  return new Set((best?.indices ?? []).map((index) => points[index].timestamp));
-}
-
-function selectDurationByPrice(points, totalMinutes, direction, options = {}) {
-  const selected = new Set();
-  if (!points.length || totalMinutes <= 0) return selected;
-  const intervalMinutes = inferIntervalMinutes(points);
-  const count = Math.min(points.length, Math.ceil(totalMinutes / intervalMinutes));
-  const mode = normalizeSelectionMode(options.mode);
-  if (mode === 'contiguous') return selectContiguousDuration(points, count, intervalMinutes, direction);
-  if (mode === 'minimum_blocks') {
-    return selectMinimumBlocks(points, count, intervalMinutes, options.minimumBlockMinutes, direction);
-  }
-  const ordered = [...points].sort(
-    direction === 'highest'
-      ? (left, right) => right.price - left.price || left.timestamp - right.timestamp
-      : (left, right) => left.price - right.price || left.timestamp - right.timestamp,
-  );
-  for (const point of ordered.slice(0, count).sort((left, right) => left.timestamp - right.timestamp)) {
-    selected.add(point.timestamp);
-  }
-  return selected;
-}
-
-// Dutch source strings are translation keys; no user-provided text is translated.
-const ENGLISH = Object.freeze({
- "Tijdvak synchroniseren":"Synchronize timeframe","Tijdvakgroep":"Timeframe group",
- "Volgt het gekozen tijdvak van ingeschakelde kaarten in dezelfde groep. Alleen beschikbare bronprijzen worden getoond.":"Follows the selected timeframe of enabled cards in the same group. Only available source prices are shown.",
- "Dezelfde sleutel koppelt kaarten op deze pagina. Leeg gebruikt de standaardgroep.":"The same key links cards on this page. Empty uses the default group.",
- "De prijsbron bevat geen prijsintervallen voor het gekozen tijdvak.":"The price source has no price intervals for the selected timeframe.",
-  "Prijsbron":"Price source",
-  "Tibber-aansluiting":"Tibber connection",
-  "Prijs-/templatesensor":"Price/template sensor",
-  "Tibber Prices (get_price)":"Tibber Prices (get_price)",
-  "Kies een prijs-/templatesensor, Tibber Prices get_price of Zonneplan One forecast.":"Choose a price/template sensor, Tibber Prices get_price or Zonneplan One forecast.",
-  "Selecteer de Zonneplan One-tariefsensor met forecast. Uur- en kwartierprijzen worden omgerekend naar EUR/kWh.":"Select the Zonneplan One tariff sensor with forecast. Hourly and quarter-hour prices are converted to EUR/kWh.",
-  "Optioneel bij één aansluiting. Kies de aansluiting bij meerdere Tibber Prices-configuraties. Alleen EUR/kWh.":"Optional with one connection. Select the connection when multiple Tibber Prices configurations exist. EUR/kWh only.",
-  "Tibber-prijzen laden…":"Loading Tibber prices…",
-  "Tibber-prijzen niet beschikbaar":"Tibber prices unavailable",
-  "Alleen EUR/kWh wordt ondersteund.":"Only EUR/kWh is supported.",
-  "Prijsgegevens worden opgehaald.":"Fetching price data.",
-  "Controleer de Tibber Prices-integratie, get_price en de gekozen aansluiting.":"Check the Tibber Prices integration, get_price and the selected connection.",
-  "Kies een prijsbron":"Choose a price source",
-  "Selecteer een prijsbron bij Afname in de kaartinstellingen.":"Select a price source under Import in the card settings.",
-  "De tabel verschijnt niet omdat er 0 uur is geselecteerd. Stel Goedkoopste uren per dag in op meer dan 0.":"The table is not shown because 0 hours are selected. Set Cheapest hours per day to a value greater than 0.",
-  "De tabel verschijnt niet omdat er 0 uur is geselecteerd. Stel Beste terugleveruren per dag in op meer dan 0.":"The table is not shown because 0 hours are selected. Set Best export hours per day to a value greater than 0.",
-  "Prijsgrenzen en prijskleuren":"Price thresholds and colors",
-  "Tabelkolommen":"Table columns",
-  "Lijn":"Line",
-  "Vulling":"Fill",
-  "Vaste kleur":"Fixed color",
-  "Volg lijn":"Follow line",
-  "Eigen kleur":"Own color",
-  "Lijnkleur":"Line color",
-  "Vulkleurmodus":"Fill color mode",
-  "Dekking":"Opacity",
-  "Dezelfde grenzen gelden voor beide tarieven; lage afnameprijzen en hoge terugleverprijzen zijn gunstig.":"The same thresholds apply to both tariffs; low import prices and high export prices are favorable.",
-  "Leeg behoudt de bestaande themakleur. Volg lijn volgt ook de prijskleuren.":"Empty preserves the existing theme color. Follow line also follows price colors.",
-  "Prijskleuren volgen de prijsgrenzen. Vaste kleur geldt voor de hele lijn.":"Price colors follow the thresholds. Fixed color applies to the entire line.",
-  "Lijnverloop": "Line interpolation",
-  "Vloeiend": "Smooth",
-  "Recht": "Linear",
-  "Trapvormig": "Stepped",
-  "Netafname": "Grid import",
-  "Verbruiksbron ontbreekt": "Consumption source missing",
-  "Gebruik een cumulatieve netafnamemeter in kWh": "Use a cumulative grid-import meter in kWh",
-  "Verbruik laden…": "Loading consumption\u2026",
-  "Verbruikshistorie niet beschikbaar": "Consumption history unavailable",
-  "Geen voltooide verbruiksintervallen": "No completed consumption intervals",
-  "Verbruikshistorie is onvolledig": "Consumption history is incomplete",
-  "Netafname energie": "Grid-import energy",
-  "Verbruikslijn tonen": "Show consumption line",
-  "Energiemeter netafname": "Grid-import energy meter",
-  "Toont gemeten netafname in kWh per voltooid interval, op een aparte schaal.": "Shows measured grid import in kWh per completed interval, on a separate scale.",
-  "Cumulatieve netafnamemeter in kWh (energy, total_increasing). Geen vermogen of huishoudelijk verbruik inclusief zon.": "Cumulative grid-import meter in kWh (energy, total_increasing). Not power or household consumption including solar.",
-  "Optioneel. Leeg gebruikt de secundaire thematekstkleur.": "Optional. Empty uses the secondary theme text color.",
-  "Toont een transparante kleur onder de verbruikslijn.": "Shows a transparent fill below the consumption line.",
-  "Optioneel. Leeg gebruikt de verbruikslijnkleur.": "Optional. Empty uses the consumption line color.",
-  "Vdg.": "Today",
-  "Mrg.": "Tmr.",
-  "Af.": "Imp.",
-  "Ter.": "Exp.",
-  "Afname": "Import",
-  "Teruglevering": "Export",
-  "Afname en teruglevering": "Import and export",
-  "Geen": "None",
-  "Doorgetrokken": "Solid",
-  "Gestreept": "Dashed",
-  "Gestippeld": "Dotted",
-  "Losse kwartieren": "Individual intervals",
-  "Eén aaneengesloten blok": "One continuous block",
-  "Blokken met minimale duur": "Blocks with minimum duration",
-  "Prijsentity afname": "Import price entity",
-  "Prijsentity teruglevering": "Export price entity",
-  "Correctie op terugleverprijs": "Export price correction",
-  "Grafiek": "Graph",
-  "Actuele prijzen": "Current prices",
-  "Titel": "Title",
-  "Titel tonen": "Show title",
-  "Verticale hoverlijn": "Vertical hover line",
-  "Hover synchroniseren": "Synchronize hover",
-  "Synchronisatiegroep": "Synchronization group",
-  "Deelt het gekozen tijdstip met andere Eleven-grafieken op deze pagina.": "Shares the selected time with other Eleven graphs on this page.",
-  "Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.": "Cards with the same group share hover and timeframe when the corresponding synchronization is enabled. Empty uses the default group.",
-  "Gemiddelde prijslijn": "Average price line",
-  "Gemiddelde prijs in tabel": "Average price in table",
-  "Dag in tabel": "Day column in table",
-  "Tarief in tabel": "Tariff column in table",
-  "Starttijd in tabel": "Start time column in table",
-  "Eindtijd in tabel": "End time column in table",
-  "Duur in tabel": "Duration column in table",
-  "Gem. prijs": "Avg. price",
-  "Toont de gemiddelde prijs per periode in de afname- en teruglevertabel, in ct/kWh.": "Shows the average price per period in the import and export table, in ct/kWh.",
-  "Prijsgrenzen tonen": "Show price thresholds",
-  "Lijnstijl": "Line style",
-  "Lijndikte": "Line width",
-  "Vaste lijnkleur": "Fixed line color",
-  "Vulling onder lijn": "Fill below line",
-  "Vulkleur": "Fill color",
-  "Vulling vervagen": "Fade fill",
-  "Selectiemethode": "Selection method",
-  "Minimale blokduur": "Minimum block duration",
-  "Gunstige perioden": "Favorable periods",
-  "Lijn en vulling": "Line and fill",
-  "Prijskleuren": "Price colors",
-  "Goedkope prijs": "Cheap price",
-  "Normale prijs": "Normal price",
-  "Dure prijs": "Expensive price",
-  "Prijs rond nul": "Price around zero",
-  "Negatieve prijs": "Negative price",
-  "Kleur gunstige afnameperioden": "Favorable import period color",
-  "Kleur gunstige terugleverperioden": "Favorable export period color",
-  "Goedkoop": "Cheap",
-  "Normaal": "Normal",
-  "Duur": "Duration",
-  "Goedkoopste uren per dag": "Cheapest hours per day",
-  "Beste terugleveruren per dag": "Best export hours per day",
-  "Tabel goedkoopste momenten": "Cheapest periods table",
-  "Tabel beste teruglevermomenten": "Best export periods table",
-  "Morgenprijzen tonen vanaf": "Show tomorrow's prices from",
-  "Algemeen": "General",
-  "uur": "h",
-  "Een prijsentity voor afname is verplicht.": "An import price entity is required.",
-  "Prijsniveaus moeten oplopen: goedkoop < normaal < duur.": "Price thresholds must increase: cheap < normal < expensive.",
-  "Afname-entiteit niet gevonden": "Import entity not found",
-  "Terugleverbron ontbreekt": "Export source missing",
-  "Stel export_entity in, of kies alleen afname.": "Set export_entity, or select import only.",
-  "Teruglever-entiteit niet gevonden": "Export entity not found",
-  "Nog geen prijsgegevens": "No price data yet",
-  "De afname-entiteit bevat geen prijsintervallen voor vandaag.": "The import entity has no price intervals for today.",
-  "Nu": "Now",
-  "nu": "now",
-  "Gem. afname": "Avg. import",
-  "Gem. teruglevering": "Avg. export",
-  "Vandaag": "Today",
-  "Morgen": "Tomorrow",
-  "prijsinterval ontbreekt": "price interval missing",
-  "prijsintervallen ontbreken": "price intervals missing",
-  "Morgenprijzen ontbreken": "Tomorrow's prices are missing",
-  "Morgenprijzen zijn onvolledig": "Tomorrow's prices are incomplete",
-  "Legenda": "Legend",
-  "Elektriciteitsprijzen per interval. Gebruik de pijltjestoetsen om prijzen te bekijken.": "Electricity prices per interval. Use the arrow keys to inspect prices.",
-  "Goedkoopst": "Cheapest",
-  "Beste opbrengst": "Best return",
-  "onbekend": "unknown",
-  "Toon": "Show",
-  "Verberg": "Hide",
-  "Gunstige momenten": "Favorable periods",
-  "Dag": "Day",
-  "Moment": "Tariff",
-  "Start": "Start",
-  "Einde": "End",
-  "goedkoopste": "cheapest",
-  "beste": "best",
-  "afname": "import",
-  "teruglevering": "export",
-  "niet beschikbaar": "unavailable",
-  "cent per kilowattuur": "cents per kilowatt-hour",
-  "tot": "to",
-  "Dynamische energieprijzen": "Dynamic energy prices",
-  "Afname- en terugleverprijzen met gunstige momenten per dag.": "Import and export prices with favorable periods per day.",
-  "Kies welke tarieven in de gedeelde tijdgrafiek staan.": "Choose which tariffs appear in the shared time chart.",
-  "Staat los van de gekozen grafiekweergave.": "Independent of the selected graph mode.",
-  "Verberg de titel om actieve gunstige-urencontext op die plek te tonen.": "Hide the title to show active favorable-hours context in its place.",
-  "Toont een verticale hulplijn bij het actieve prijsinterval.": "Shows a vertical guide for the active price interval.",
-  "Toont per zichtbare tariefreeks een gelabeld gemiddelde.": "Shows a labeled average for each visible tariff series.",
-  "Toont de lijnen en prijslabels voor goedkoop, normaal en duur.": "Shows the cheap, normal and expensive threshold lines and price labels.",
-  "Kies doorgetrokken, gestreept of gestippeld.": "Choose solid, dashed or dotted.",
-  "Lijndikte van 1 tot 8 pixels.": "Line thickness from 1 to 8 pixels.",
-  "Optioneel. Leeg behoudt de automatische prijskleuren.": "Optional. Empty keeps automatic price colors.",
-  "Toont een transparante kleur onder de afnamelijn.": "Shows a transparent fill below the import line.",
-  "Optioneel. Leeg gebruikt de primaire Home Assistant-kleur.": "Optional. Empty uses the Home Assistant primary color.",
-  "Laat de vulling geleidelijk transparant worden naar de onderkant.": "Gradually fades the fill towards the bottom.",
-  "Kies losse kwartieren, één blok of meerdere blokken.": "Choose individual intervals, one block or multiple blocks.",
-  "Alleen gebruikt bij blokken met minimale duur.": "Only used for blocks with minimum duration.",
-  "Toont een transparante kleur onder de terugleverlijn.": "Shows a transparent fill below the export line.",
-  "Optioneel. Leeg gebruikt blauw.": "Optional. Empty uses blue.",
-  "Optioneel. Leeg behoudt de groene themakleur voor gunstige prijzen.": "Optional. Empty keeps the theme's green color for favorable prices.",
-  "Optioneel. Leeg behoudt de standaard oranje prijskleur.": "Optional. Empty keeps the default orange price color.",
-  "Optioneel. Leeg behoudt de rode themakleur voor ongunstige prijzen.": "Optional. Empty keeps the theme's red color for unfavorable prices.",
-  "Optioneel. Leeg behoudt de standaard kleur rond nul in de afnamegradiënt.": "Optional. Empty keeps the default zero-price color in the import gradient.",
-  "Optioneel. Leeg behoudt de standaard negatieve afnameprijskleur.": "Optional. Empty keeps the default negative import price color.",
-  "Optioneel, onafhankelijk van prijskleuren. Leeg behoudt de groene themakleur voor perioden, labels en tabel.": "Optional, independent of price colors. Empty keeps the theme's green color for periods, labels and table.",
-  "Optioneel, onafhankelijk van prijskleuren. Leeg behoudt blauw voor perioden, labels en tabel.": "Optional, independent of price colors. Empty keeps blue for periods, labels and table.",
-  "Onder deze prijs is afname goedkoop; voor teruglevering is laag juist ongunstig.": "Below this price import is cheap; for export low prices are unfavorable.",
-  "Middelste prijsgrens voor beide tarieven.": "Middle price threshold for both tariffs.",
-  "Boven deze prijs is afname duur en teruglevering gunstig.": "Above this price import is expensive and export is favorable.",
-  "0 schakelt de selectie van goedkope afname-uren uit.": "0 disables cheap import hour selection.",
-  "Toont aaneengesloten goedkope afnamemomenten onder de grafiek.": "Shows continuous cheap import periods below the chart.",
-  "Prijsbron voor teruglevering. Verplicht zodra teruglevering wordt getoond.": "Export price source. Required whenever export is shown.",
-  "Terugleverprijs = prijs uit terugleverentity + verschil. Negatieve waarden zijn toegestaan.": "Export price = export entity price + correction. Negative values are allowed.",
-  "0 schakelt de selectie van beste terugleveruren uit.": "0 disables best export hour selection.",
-  "Toont aaneengesloten beste teruglevermomenten onder de grafiek.": "Shows continuous best export periods below the chart.",
-  "Vanaf dit uur worden beschikbare morgenprijzen getoond.": "Available tomorrow prices are shown from this hour.",
-  "Controleer {entity} in de cardconfiguratie.": "Check {entity} in the card configuration.",
-  "Goedkoopste {hours} uur/dag": "Cheapest {hours} h/day",
-  "Beste teruglevering {hours} uur/dag": "Best export {hours} h/day",
-  "Huidige {tariff}prijs {price}": "Current {tariff} price {price}",
-  "{hours} u {minutes} min": "{hours} h {minutes} min",
-  "{hours} uur": "{hours} h"
-});
-
-function resolveLanguage(hass) {
-  const language = hass?.locale?.language ?? hass?.language;
-  return typeof language === 'string' && /^nl(?:[-_]|$)/i.test(language) ? 'nl' : 'en';
-}
-
-// getConfigForm has no hass argument in HA. Schema getters read the frontend root;
-// native computeLabel/computeHelper are invoked as methods of hui-form-editor.
-function frontendHass() {
-  return typeof document === 'undefined' ? undefined : document.querySelector('home-assistant')?.hass;
-}
-
-function translate(text, language = 'en', values = {}) {
-  const template = language === 'nl' ? text : ENGLISH[text] ?? text;
-  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? `{${key}}`));
-}
-
-function formatDuration(minutes, language = 'en') {
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  return hours && remainder ? translate('{hours} u {minutes} min', language, { hours, minutes: remainder })
-    : hours ? translate('{hours} uur', language, { hours }) : `${remainder} min`;
-}
-
 function priceRequestWithTimeout(promise, milliseconds) {
   let timer;
   return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('timeout')),milliseconds);timer.unref?.();})])
@@ -1564,6 +1685,7 @@ const DEFAULT_CONFIG = Object.freeze({
   sync_hover: true,
   hover_sync_group: '',
   show_average_line: false,
+  show_y_grid: false,
   show_period_average: false,
   show_period_day: true,
   show_period_type: true,
@@ -1770,13 +1892,15 @@ class DynamicEnergyPriceCard extends HTMLElement {
       field(p+'_favorable_color'),field(p==='import'?'show_cheapest_table':'show_export_table')
     ]);
     const source=p=>[
-      select(p+'_source',[['sensor','Prijs-/templatesensor'],['tibber_prices','Tibber Prices (get_price)'],['zonneplan','Zonneplan One (forecast)']]),
+      select(p+'_source',[['sensor','Prijs-/templatesensor'],['tibber','Tibber (get_prices)'],['tibber_prices','Tibber Prices (get_price)'],['zonneplan','Zonneplan One (forecast)']]),
       ...(data[p+'_source']==='tibber_prices'
         ? [{name:p+'_tibber_entry',selector:{config_entry:{integration:'tibber_prices'}}}]
-        : [field(p==='import'?'entity':'export_entity')])
+        : data[p+'_source']==='tibber'
+          ? [{name:p+'_tibber_home',selector:{text:{}}}]
+          : [field(p==='import'?'entity':'export_entity')])
     ];
     const schema=[
-      group('graph_settings','Algemeen',['title','show_title','graph_mode','current_price_mode','tomorrow_after','show_average_line','show_price_levels','show_hover_line','sync_hover','sync_timeframe',...(data.sync_hover||data.sync_timeframe?['hover_sync_group']:[])].map(field)),
+      group('graph_settings','Algemeen',['title','show_title','graph_mode','current_price_mode','tomorrow_after','show_average_line','show_y_grid','show_price_levels','show_hover_line','sync_hover','sync_timeframe',...(data.sync_hover||data.sync_timeframe?['hover_sync_group']:[])].map(field)),
       group('price_settings','Prijsgrenzen en prijskleuren',[
         ...['cheap_price','normal_price','expensive_price'].map(field),
         group('price_color_settings','Prijskleuren',['cheap_color','normal_color','expensive_color','zero_color','negative_color'].map(field))
@@ -1787,10 +1911,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
       group('table_settings','Tabelkolommen',['day','type','start','end','duration','average'].map(c=>field('show_period_'+c)))
     ];
     const newLabels={graph_settings:'Algemeen',price_settings:'Prijsgrenzen en prijskleuren',table_settings:'Tabelkolommen'};
-    const suffix={source:'Prijsbron',tibber_entry:'Tibber-aansluiting',line_interpolation:'Lijnverloop',color_mode:'Lijnkleur',fill_mode:'Vulkleurmodus',fill_opacity:'Dekking',line_settings:'Lijn',fill_settings:'Vulling'};
+    const suffix={source:'Prijsbron',tibber_home:'Tibber-woning',tibber_entry:'Tibber-aansluiting',line_interpolation:'Lijnverloop',color_mode:'Lijnkleur',fill_mode:'Vulkleurmodus',fill_opacity:'Dekking',line_settings:'Lijn',fill_settings:'Vulling'};
     return {schema,computeLabel:function(s){const key=s?.name??'',label=newLabels[key]??suffix[key.replace(/^(import|export|consumption)_/,'')];return label?translate(label,resolveLanguage(this?.hass??frontendHass())):base.computeLabel.call(this,s);},computeHelper:function(s){
       const key=s?.name??'',lang=resolveLanguage(this?.hass??frontendHass());
-      if(key.endsWith('_source'))return translate('Kies een prijs-/templatesensor, Tibber Prices get_price of Zonneplan One forecast.',lang);
+      if(key.endsWith('_source'))return translate('Kies een prijs-/templatesensor, standaard Tibber get_prices, Tibber Prices get_price of Zonneplan One forecast.',lang);
+      if(key.endsWith('_tibber_home'))return translate('Leeg kiest automatisch de enige woning. Bij meerdere woningen: vul de exacte Tibber-woningnaam in. Geen entiteit nodig. Alleen EUR/kWh.',lang);
       if((key==='entity' && data.import_source==='zonneplan') || (key==='export_entity' && data.export_source==='zonneplan'))
         return translate('Selecteer de Zonneplan One-tariefsensor met forecast. Uur- en kwartierprijzen worden omgerekend naar EUR/kWh.',lang);
       if(key.endsWith('_tibber_entry'))return translate('Optioneel bij één aansluiting. Kies de aansluiting bij meerdere Tibber Prices-configuraties. Alleen EUR/kWh.',lang);
@@ -1832,6 +1957,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       sync_hover: "Hover synchroniseren",
       hover_sync_group: "Synchronisatiegroep",
       show_average_line: "Gemiddelde prijslijn",
+      show_y_grid: "Horizontaal Y-raster",
       show_period_average: "Gemiddelde prijs in tabel",
       show_period_day: "Dag in tabel",
       show_period_type: "Tarief in tabel",
@@ -1916,6 +2042,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
             { name: 'sync_hover', default: true, selector: { boolean: {} } },
             { name: 'hover_sync_group', selector: { text: {} } },
             { name: 'show_average_line', default: DEFAULT_CONFIG.show_average_line, selector: { boolean: {} } },
+            { name: 'show_y_grid', default: DEFAULT_CONFIG.show_y_grid, selector: { boolean: {} } },
             { name: 'show_period_average', default: DEFAULT_CONFIG.show_period_average, selector: { boolean: {} } },
             ...['day', 'type', 'start', 'end', 'duration'].map(column => ({ name: `show_period_${column}`, default: DEFAULT_CONFIG[`show_period_${column}`], selector: { boolean: {} } })),
             { name: 'show_price_levels', default: DEFAULT_CONFIG.show_price_levels, selector: { boolean: {} } },
@@ -2039,6 +2166,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
         sync_hover: "Deelt het gekozen tijdstip met andere Eleven-grafieken op deze pagina.",
         hover_sync_group: "Kaarten met dezelfde groep delen hover en tijdvak als de bijbehorende synchronisatie aanstaat. Leeg gebruikt de standaardgroep.",
         show_average_line: "Toont per zichtbare tariefreeks een gelabeld gemiddelde.",
+        show_y_grid: "Toont een horizontale rasterlijn bij elk zichtbaar Y-aslabel.",
         show_period_average: "Toont de gemiddelde prijs per periode in de afname- en teruglevertabel, in ct/kWh.",
         show_price_levels: "Toont de lijnen en prijslabels voor goedkoop, normaal en duur.",
         import_line_style: "Kies doorgetrokken, gestreept of gestippeld.",
@@ -2090,6 +2218,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   setConfig(config) {
     config ??= {};
     timeframeSyncConfig(config);
+    if (config.show_y_grid !== undefined && typeof config.show_y_grid !== 'boolean') throw new Error('show_y_grid');
     if (config.sync_hover !== undefined && typeof config.sync_hover !== 'boolean') throw new Error('sync_hover');
     if (config.hover_sync_group != null && typeof config.hover_sync_group !== 'string') throw new Error('hover_sync_group');
     SharedGraph.clearHover(this);
@@ -2097,9 +2226,10 @@ class DynamicEnergyPriceCard extends HTMLElement {
       ...DEFAULT_CONFIG,
       ...config,
       ...timeframeSyncConfig(config),
+      show_y_grid: config.show_y_grid ?? DEFAULT_CONFIG.show_y_grid,
     };
     for(const prefix of ['import','export']) {
-      if(!['sensor','tibber_prices','zonneplan'].includes(this._config[`${prefix}_source`]))throw Error(`${prefix}_source`);
+      if(!['sensor','tibber','tibber_prices','zonneplan'].includes(this._config[`${prefix}_source`]))throw Error(`${prefix}_source`);
     }
     this._resetTibber();
     this._watchTibberConnection();
@@ -2137,12 +2267,12 @@ class DynamicEnergyPriceCard extends HTMLElement {
   _formatDay(timestamp, timeZone) { return formatDay(timestamp, timeZone, this._language); }
 
   _hasExportSource() {
-    return this._config?.export_source === 'tibber_prices' || Boolean(this._config?.export_entity);
+    return ['tibber','tibber_prices'].includes(this._config?.export_source) || Boolean(this._config?.export_entity);
   }
 
   _tibberKey(prefix) {
     const zone=this._hass?.config?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return `${this._config[`${prefix}_tibber_entry`] || ''}|${localDayKey(new Date(),zone)}`;
+    return JSON.stringify([this._config[`${prefix}_source`],this._config[`${prefix}_source`]==='tibber' ? this._config[`${prefix}_tibber_home`] || '' : this._config[`${prefix}_tibber_entry`] || '',zone,localDayKey(new Date(),zone)]);
   }
 
   _sourceState(prefix) {
@@ -2150,7 +2280,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       const state=this._hass?.states?.[this._config[prefix==='import'?'entity':'export_entity']];
       return state ? {...state,attributes:{...state.attributes,data:zonneplanPriceData(state.attributes?.forecast)}} : null;
     }
-    if(this._config[`${prefix}_source`] !== 'tibber_prices')
+    if(!['tibber','tibber_prices'].includes(this._config[`${prefix}_source`]))
       return this._hass?.states?.[this._config[prefix==='import'?'entity':'export_entity']];
     const cached=this._tibberCache?.get(this._tibberKey(prefix));
     return cached?.status==='ready' ? {attributes:{data:cached.data}} : null;
@@ -2182,7 +2312,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _watchTibberConnection() {
-    const needed=this._config?.import_source==='tibber_prices' || (this._exportRequired() && this._config?.export_source==='tibber_prices');
+    const needed=['tibber','tibber_prices'].includes(this._config?.import_source) || (this._exportRequired() && ['tibber','tibber_prices'].includes(this._config?.export_source));
     const connection=needed?this._hass?.connection:undefined;
     if(connection===this._tibberConnection)return;
     this._unwatchTibberConnection();this._resetTibber();this._tibberConnection=connection;
@@ -2198,12 +2328,12 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const label=this._t(prefix==='import'?'Afname':'Teruglevering');
     return this._stateCard(
       this._t(status==='loading'?'Tibber-prijzen laden…':'Tibber-prijzen niet beschikbaar'),
-      `${label}: ${this._t(status==='currency'?'Alleen EUR/kWh wordt ondersteund.':status==='loading'?'Prijsgegevens worden opgehaald.':'Controleer de Tibber Prices-integratie, get_price en de gekozen aansluiting.')}`,
+      `${label}: ${this._t(status==='currency'?'Alleen EUR/kWh wordt ondersteund.':status==='home'?'Vul de exacte Tibber-woningnaam in bij meerdere woningen.':status==='loading'?'Prijsgegevens worden opgehaald.':this._config[`${prefix}_source`]==='tibber'?'Controleer de standaard Tibber-integratie, get_prices en de woningnaam.':'Controleer de Tibber Prices-integratie, get_price en de gekozen aansluiting.')}`,
     );
   }
 
   _ensureTibber(prefix) {
-    if(this._config[`${prefix}_source`] !== 'tibber_prices' || !this._hass || this._hass.connection?.connected===false) return;
+    if(!['tibber','tibber_prices'].includes(this._config[`${prefix}_source`]) || !this._hass || this._hass.connection?.connected===false) return;
     const key=this._tibberKey(prefix);
     this._tibberCache ??= new Map();
     const previous=this._tibberCache.get(key);
@@ -2219,15 +2349,18 @@ class DynamicEnergyPriceCard extends HTMLElement {
         // HA's configured currency is a guard, not proof of the Tibber home's currency.
         if(this._hass.config?.currency && this._hass.config.currency!=='EUR')throw Error('currency');
         const zone=this._hass.config?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const service_data=tibberPriceRange(new Date(),zone);
+        const source=this._config[`${prefix}_source`];
+        const home=this._config[`${prefix}_tibber_home`];
+        const range=tibberPriceRange(new Date(),zone);
+        const service_data=source==='tibber'?{start:range.start_time,end:range.end_time}:range;
         const entry=this._config[`${prefix}_tibber_entry`];
-        if(entry)service_data.entry_id=entry;
-        const {response}=await priceRequestWithTimeout(this._hass.callWS({type:'call_service',domain:'tibber_prices',service:'get_price',service_data,return_response:true}),15000);
+        if(source==='tibber_prices' && entry)service_data.entry_id=entry;
+        const {response}=await priceRequestWithTimeout(this._hass.callWS({type:'call_service',domain:source,service:source==='tibber'?'get_prices':'get_price',service_data,return_response:true}),15000);
         if(this._tibberCache?.get(key)!==request)return;
-        Object.assign(request,{status:'ready',data:tibberPriceData(response),fetchedAt:Date.now()});
+        Object.assign(request,{status:'ready',data:tibberPriceData(response,source,home),fetchedAt:Date.now()});
       } catch(error) {
         if(this._tibberCache?.get(key)!==request)return;
-        Object.assign(request,{status:error?.message==='currency'?'currency':'error',fetchedAt:Date.now()});
+        Object.assign(request,{status:['currency','home'].includes(error?.message)?error.message:'error',fetchedAt:Date.now()});
       }
       this._scheduleTibberRefresh();
       this._render();
@@ -2295,6 +2428,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._labelResize?.disconnect();if(this._labelLayoutFrame!=null)cancelAnimationFrame(this._labelLayoutFrame);this._labelLayoutFrame=null;
     this._connected=false;disconnectTimeframeSync(this);
     SharedGraph.disconnectHover(this);
     this._unwatchTibberConnection();
@@ -2309,22 +2443,66 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _observeConsumptionSize() {
-    if (this._config?.show_consumption !== true) {
-      this._consumptionResizeObserver?.disconnect();
-      this._consumptionResizeObserver = undefined;
-      return;
-    }
     if (this._consumptionResizeObserver || typeof ResizeObserver === 'undefined') return;
     this._consumptionResizeObserver = new ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width;
-      if (!width || width === this._consumptionWidth) return;
+      const height = entries[0]?.contentRect.height;
+      if (!width || (width === this._consumptionWidth && height === this._chartHeight)) return;
       this._consumptionWidth = width;
+      this._chartHeight = height;
+      this._layoutChartLabels();
       if (this._hass && this._config?.show_consumption && this._consumptionResizeFrame==null) {
         if(typeof requestAnimationFrame!=='function'){this._render();return;}
         this._consumptionResizeFrame=requestAnimationFrame(()=>{this._consumptionResizeFrame=null;if(this.isConnected)this._render();});
       }
     });
     this._consumptionResizeObserver.observe(this);
+  }
+
+  _layoutChartLabels() {
+    const chart=this.shadowRoot.querySelector('.chart');
+    if(!chart?.getBoundingClientRect||!globalThis.getComputedStyle)return;
+    const rawBounds=chart.getBoundingClientRect();if(!rawBounds.width||!rawBounds.height)return;
+    const scale=rawBounds.width/chart.clientWidth||1,bounds={left:rawBounds.left,top:rawBounds.top,width:rawBounds.width/scale,height:rawBounds.height/scale,right:rawBounds.left+rawBounds.width/scale,bottom:rawBounds.top+rawBounds.height/scale};
+    const inset=10,gap=8,all=s=>[...chart.querySelectorAll(s)],size=n=>{const r=n.getBoundingClientRect();return {left:bounds.left+(r.left-bounds.left)/scale,right:bounds.left+(r.right-bounds.left)/scale,top:bounds.top+(r.top-bounds.top)/scale,bottom:bounds.top+(r.bottom-bounds.top)/scale,width:r.width/scale,height:r.height/scale};};
+    const y=all('.y-label'),energy=all('.energy-axis-label'),ticks=all('.x-label');
+    for(const n of [...y,...energy,...ticks,...all('.level-label,.day-label,.average-label,.now-label,.energy-unit')]){n.hidden=false;n.style.marginLeft='0px';}
+    const width=nodes=>Math.max(0,...nodes.map(n=>size(n).width)),height=nodes=>Math.max(0,...nodes.map(n=>size(n).height));
+    const refs=all('.day-label,.average-label,.level-label,.now-label,.energy-unit').sort((a,b)=>{const priority=n=>n.matches('.day-label,.energy-unit')?0:n.matches('.average-label')?1:n.matches('.level-label')?2:3;return priority(a)-priority(b);});
+    for(const n of refs){n.dataset.anchorTop??=n.style.top;n.style.top=n.dataset.anchorTop;}
+    // Measure rendered typography, never infer gutters from SVG units or digit counts.
+    const next={left:inset+width(y)+gap,right:inset+(energy.length?Math.max(width(energy),width(all('.energy-unit')))+gap:0),top:inset+Math.max(height(all('.day-label,.energy-unit'))+gap,height(y)/2),bottom:inset+height(ticks)+gap+height(y)/2};
+    const minChart=Math.max(180,Math.min(460,refs.reduce((sum,n)=>sum+size(n).height+6,0)+next.top+next.bottom));
+    chart.style.minHeight=`${minChart}px`;
+    const content=this.shadowRoot.querySelector('.card-content');
+    if(content){const style=getComputedStyle(content),other=[...content.children].filter(n=>n!==chart&&n.tagName!=='STYLE').reduce((sum,n)=>{const s=getComputedStyle(n);return sum+size(n).height+parseFloat(s.marginTop||0)+parseFloat(s.marginBottom||0);},0);this.style?.setProperty('--energy-required-height',`${Math.ceil(other+minChart+parseFloat(style.paddingTop)+parseFloat(style.paddingBottom)+2)}px`);}
+    const changed=!this._labelInsets||Object.keys(next).some(k=>Math.abs(next[k]-this._labelInsets[k])>.5)||!this._renderChartSize||Math.abs(chart.clientWidth-this._renderChartSize.width)>.5||Math.abs(chart.clientHeight-this._renderChartSize.height)>.5;
+    this._labelInsets=next;
+    if(changed&&typeof requestAnimationFrame==='function'&&this._labelLayoutFrame==null){this._labelLayoutFrame=requestAnimationFrame(()=>{this._labelLayoutFrame=null;if(this.isConnected&&this._hass)this._render();});}
+    // Endpoints survive; suppress only interior captions, never grid lines or data.
+    const density=(nodes,vertical=false)=>{
+      for(const n of nodes){const r=size(n);if(!vertical){n.style.marginLeft=`${Math.max(0,bounds.left+inset-r.left)-Math.max(0,r.right-(bounds.right-inset))}px`;}}
+      const ordered=[...nodes].sort((a,b)=>vertical?size(a).top-size(b).top:size(a).left-size(b).left);if(ordered.length<2)return;
+      const start=r=>vertical?r.top:r.left,end=r=>vertical?r.bottom:r.right;
+      let previous=size(ordered[0]);const last=size(ordered.at(-1));
+      for(const n of ordered.slice(1,-1)){const r=size(n);n.hidden=start(r)<end(previous)+gap||end(r)+gap>start(last);if(!n.hidden)previous=r;}
+    };
+    density(y,true);density(energy,true);density(ticks);
+    const days=all('.day-label');
+    for(const day of days){day.title ||=day.textContent;day.textContent=day.title;}
+    for(let i=0;i<days.length;i++){const day=days[i],r=size(day),right=days[i+1]?size(days[i+1]).left-gap:bounds.right-inset;if(r.right>right)day.textContent=day.dataset.shortLabel;}
+    // Captions may move, their SVG lines retain exact tariff/time coordinates.
+    // Place date references first, then averages/thresholds/Now in free measured slots.
+    const placed=[];
+    for(const n of refs){
+      let r=size(n);n.style.marginLeft=`${Math.max(0,bounds.left+inset-r.left)-Math.max(0,r.right-(bounds.right-inset))}px`;
+      r=size(n);const low=bounds.top+inset,high=bounds.bottom-next.bottom-r.height,desired=Math.max(low,Math.min(r.top,high));
+      const candidates=[desired,low,...placed.flatMap(p=>[p.bottom+6,p.top-r.height-6])].filter(t=>t>=low&&t<=high).sort((a,b)=>Math.abs(a-desired)-Math.abs(b-desired));
+      const top=candidates.find(t=>!placed.some(p=>r.left<p.right+6&&r.right+6>p.left&&t<p.bottom+6&&t+r.height+6>p.top))??desired;
+      // Use the actual transformed box when applying top; no guessed text baseline.
+      n.style.top=`${parseFloat(getComputedStyle(n).top)+top-r.top}px`;
+      placed.push(size(n));
+    }
   }
 
   _unwatchConsumptionConnection() {
@@ -2444,7 +2622,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     if(this._config.price_provider===true){
       this._ensureTibber('import');this._ensureTibber('export');return;
     }
-    const tibberImport=this._config.import_source==='tibber_prices';
+    const tibberImport=['tibber','tibber_prices'].includes(this._config.import_source);
     if (!tibberImport && !this._config.entity) {
       this.shadowRoot.innerHTML = this._stateCard(this._t("Kies een prijsbron"), this._t("Selecteer een prijsbron bij Afname in de kaartinstellingen."));
       return;
@@ -2471,7 +2649,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       return;
     }
     const exportState = this._sourceState('export');
-    if(this._exportRequired() && this._config.export_source==='tibber_prices' && !exportState) {
+    if(this._exportRequired() && ['tibber','tibber_prices'].includes(this._config.export_source) && !exportState) {
       this.shadowRoot.innerHTML=this._tibberStatusCard('export');
       return;
     }
@@ -2558,7 +2736,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const consumptionPoints = this._consumption?.points ?? [];
     const consumptionIntervalMs = (this._consumption?.intervalMinutes ?? intervalMinutes) * 60000;
     const chartPixels = this.shadowRoot.querySelector('.chart')?.clientWidth || Math.max(1, (this.clientWidth || 1000) - (this.clientWidth <= 520 ? 24 : 32));
-    const plotRight = PLOT.right + (graphShowsConsumption ? 32 * svgWidth / chartPixels : 0);
+    const chartHeight=this.shadowRoot.querySelector('.chart')?.clientHeight||this._chartHeight||SVG_HEIGHT;
+    this._renderChartSize={width:chartPixels,height:chartHeight};
+    const insets=this._labelInsets??{left:40,right:graphShowsConsumption?52:10,top:36,bottom:36};
+    const PLOT={left:insets.left*svgWidth/chartPixels,right:insets.right*svgWidth/chartPixels,top:insets.top*svgHeight/chartHeight,bottom:insets.bottom*svgHeight/chartHeight};
+    const plotRight = PLOT.right;
     const plotWidth = svgWidth - PLOT.left - plotRight;
     const plotHeight = svgHeight - PLOT.top - PLOT.bottom;
     const span = Math.max(sharedRange?1:intervalMs, end - start);
@@ -2660,12 +2842,16 @@ class DynamicEnergyPriceCard extends HTMLElement {
         (positionedAverages[index - 1].labelY ?? positionedAverages[index - 1].y) + 18,
       );
     }
-    const averageLabel = positionedAverages.map((average) => `<span class="chart-label average-label ${average.key}-average-label" style="top:${(Math.min(PLOT.top + plotHeight - 8, average.labelY ?? average.y) / svgHeight) * 100}%;left:${PLOT.left + 6}px">${average.label} ${this._formatPrice(average.value)} ct</span>`).join('');
+    const averageLabel = positionedAverages.map((average) => `<span class="chart-label average-label ${average.key}-average-label" style="top:${(Math.min(PLOT.top + plotHeight - 8, average.labelY ?? average.y) / svgHeight) * 100}%;left:${(PLOT.left / svgWidth) * 100}%">${average.label} ${this._formatPrice(average.value)} ct</span>`).join('');
     const hoverLine = this._config.show_hover_line
       ? `<line class="hover-line" x1="0" y1="${PLOT.top}" x2="0" y2="${PLOT.top + plotHeight}" hidden />`
       : '';
 
     const yTicks = createPriceTicks(minimum, maximum, 5);
+    const yGrid = this._config.show_y_grid === true ? yTicks.map((price) => {
+      const y = yFor(price);
+      return `<line class="y-grid-line" x1="${PLOT.left}" y1="${y}" x2="${svgWidth - plotRight}" y2="${y}" />`;
+    }).join('') : '';
     const yLabels = yTicks.map((price) => {
       const y = yFor(price);
       return `<span class="chart-label y-label" style="top:${(y / svgHeight) * 100}%">${this._formatPrice(price, 0)}</span>`;
@@ -2697,7 +2883,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     }).join('');
     const dayLabels = [...groups.values()].map((dayPoints, index) => {
       const x = Math.max(PLOT.left + 8, xFor(dayPoints[0].timestamp) + 10);
-      return `<span class="chart-label day-label" style="left:${(x / svgWidth) * 100}%">${sharedRange?'':`${index === 0 ? this._t("Vandaag") : this._t("Morgen")} · `}${this._formatDay(dayPoints[0].timestamp, timeZone)}</span>`;
+      return `<span class="chart-label day-label" data-short-label="${escapeHtml(this._formatDay(dayPoints[0].timestamp,timeZone))}" style="left:${(x / svgWidth) * 100}%">${sharedRange?'':`${index === 0 ? this._t("Vandaag") : this._t("Morgen")} · `}${this._formatDay(dayPoints[0].timestamp, timeZone)}</span>`;
     }).join('');
 
     const todayKey = localDayKey(now, timeZone);
@@ -2724,8 +2910,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const currentImport = currentPricePoint(rawImportData,now,timeZone,this._config.tomorrow_after);
     const currentExport = currentPricePoint(rawExportData,now,timeZone,this._config.tomorrow_after);
     const currentCards = [];
-    if (currentShowsImport) currentCards.push(this._currentMetric(this._t("Afname"), currentImport, 'import', importSelected, cheapestEnabled));
-    if (currentShowsExport) currentCards.push(this._currentMetric(this._t("Teruglevering"), currentExport, 'export', exportSelected, exportBestEnabled));
+    if (currentShowsImport) currentCards.push(this._currentMetric(this._t("Afname"), currentImport, 'import', importSelected, cheapestEnabled, graphIncludesImport));
+    if (currentShowsExport) currentCards.push(this._currentMetric(this._t("Teruglevering"), currentExport, 'export', exportSelected, exportBestEnabled, graphIncludesExport));
 
     const showTitle = this._config.show_title !== false;
     const useCompactSummary = !showTitle
@@ -2749,8 +2935,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
           ? `<div class="heading"><div class="header-cheapest">${contextLabels.join('')}</div></div>`
           : '';
     const seriesLegend = [];
-    if (graphIncludesImport && !useCompactSummary) seriesLegend.push(this._seriesLegendItem('import', this._t("Afname")));
-    if (graphIncludesExport) seriesLegend.push(this._seriesLegendItem('export', this._t("Teruglevering")));
+    if (graphIncludesImport && !currentShowsImport && !useCompactSummary) seriesLegend.push(this._seriesLegendItem('import', this._t("Afname")));
+    if (graphIncludesExport && !currentShowsExport) seriesLegend.push(this._seriesLegendItem('export', this._t("Teruglevering")));
     if (consumptionEnabled) seriesLegend.push(this._seriesLegendItem('consumption', `${this._t('Netafname')} · kWh / ${this._consumption?.intervalMinutes ?? intervalMinutes} min`));
     const legendItems = [...seriesLegend, ...(showTitle ? contextLabels : [])];
     const legend = legendItems.length
@@ -2763,16 +2949,20 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const exportPeriods = exportBestEnabled && this._config.show_export_table
       ? exportSelectedPeriods
       : [];
-    const favorableTable = importPeriods.length || exportPeriods.length
-      ? this._periodTable(importPeriods, exportPeriods, timeZone, todayKey, tomorrowKey)
+    const periodDetailsOpen=this.shadowRoot.querySelector('.price-periods')?.open;
+    const periodTable = importPeriods.length || exportPeriods.length
+      ? this._periodTable(importPeriods, exportPeriods, timeZone, todayKey, tomorrowKey) : '';
+    const favorableTable = periodTable
+      ? `<details class="price-periods"${periodDetailsOpen?' open':''}><summary>${this._t("Gunstige momenten")}${this._config.show_period_average?'<span class="table-unit">ct/kWh</span>':''}</summary>${periodTable}</details>`
       : '';
 
     this._chart = {
       timeline, importSelected, exportSelected, intervalMs, timeZone, xFor, yFor, start, span,
       cheapPrice, normalPrice, expensivePrice, svgWidth, svgHeight, graphShowsImport, graphShowsExport,
-      importAppearance, exportAppearance, plotRight, consumptionPoints, consumptionAppearance, consumptionIntervalMs, graphShowsConsumption, energyYFor,
+      importAppearance, exportAppearance, plotLeft:PLOT.left, plotRight, consumptionPoints, consumptionAppearance, consumptionIntervalMs, graphShowsConsumption, energyYFor,
     };
 
+    const active=this.shadowRoot.activeElement,focusSeries=active?.matches('.legend-series')?active.dataset.series:null,focusPeriods=active?.matches('.price-periods>summary');
     this._graph ??= new SharedGraph();
     this.shadowRoot.innerHTML = `
       <ha-card lang="${this._language}">
@@ -2807,7 +2997,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
                 </linearGradient>
                 ${['import','export','consumption'].map(p=>`<linearGradient id="${p}-follow-fade"><stop offset="0" stop-color="white"/><stop offset="1" stop-color="white" stop-opacity="${.01/(p==='consumption'?.18:.22)}"/></linearGradient><mask id="${p}-follow-mask" maskUnits="userSpaceOnUse" x="0" y="${PLOT.top}" width="${svgWidth}" height="${plotHeight}"><rect x="0" y="${PLOT.top}" width="${svgWidth}" height="${plotHeight}" fill="url(#${p}-follow-fade)"/></mask>`).join('')}
               </defs>`,
-              before: selectionBandRects + levelLines + averageLine,
+              before: selectionBandRects + yGrid + levelLines + averageLine,
               fills: [
                 {d: importAreaPath, className: importAreaClass},
                 {d: exportAreaPath, className: exportAreaClass},
@@ -2830,14 +3020,21 @@ class DynamicEnergyPriceCard extends HTMLElement {
           <div class="sr-only" aria-live="polite"></div>
         </div>
       </ha-card>
-      <style>${this._styles()}</style>`;
+      <style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart,.price-periods .price-table-wrap',controls:'.price-periods>summary',surfaces:'.tooltip'})}</style>`;
+    this._layoutChartLabels();
+    this._labelResize?.disconnect();
+    const labelChart=this.shadowRoot.querySelector('.chart');
+    if(labelChart&&globalThis.ResizeObserver){this._labelResize=new ResizeObserver(()=>{if(this.shadowRoot.querySelector('.chart')===labelChart)this._layoutChartLabels();});for(const n of [labelChart,...labelChart.querySelectorAll('.chart-label'),this.shadowRoot.querySelector('.header')].filter(Boolean))this._labelResize.observe(n);}
     this._graph.restore(this);
     this._chartHasLoaded = this._graph.loaded;
     this._bindInteractions();
+    if(focusSeries)this.shadowRoot.querySelector(`.legend-series[data-series="${focusSeries}"]`)?.focus({preventScroll:true});
+    if(focusPeriods)this.shadowRoot.querySelector('.price-periods>summary')?.focus({preventScroll:true});
+    const periods=this.shadowRoot.querySelector('.price-periods');if(periods)periods.ontoggle=()=>this._layoutChartLabels();
     SharedGraph.restoreHover(this);
   }
 
-  _currentMetric(label, point, type, selected, enabled) {
+  _currentMetric(label, point, type, selected, enabled, interactive=false) {
     const price = point?.price ?? null;
     const priceClass = price === null
       ? 'unavailable'
@@ -2849,12 +3046,13 @@ class DynamicEnergyPriceCard extends HTMLElement {
         ? `<div class="current-window active">${this._t("Goedkoopst")}</div>`
         : `<div class="current-window active">${this._t("Beste opbrengst")}</div>`
       : '';
-    return `<div class="current-metric ${type}">
-      <span class="current-label">${label}</span>
+    const tag=interactive?'button':'div',appearance=this._seriesAppearance(type);
+    return `<${tag} class="current-metric ${type}${interactive?' legend-series':''}" ${interactive?`type="button" data-series="${type}" aria-pressed="${!this._hiddenSeries.has(type)}"`:""}>
+      <span class="current-label">${interactive?`<i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i>`:""}${label}</span>
       <div class="current ${priceClass}" aria-label="${this._t("Huidige {tariff}prijs {price}", { tariff: label.toLowerCase(), price: price === null ? this._t("onbekend") : `${priceText} ${this._t("cent per kilowattuur")}` })}">
         <strong>${priceText}</strong><span>ct/kWh</span>
       </div>${badge}
-    </div>`;
+    </${tag}>`;
   }
 
   _compactCurrentMetric(label, point, type, selected, enabled) {
@@ -2866,7 +3064,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const hidden = this._hiddenSeries.has(type);
     return `<button type="button" class="compact-current legend-series" data-series="${type}" aria-pressed="${!hidden}" title="${hidden ? this._t("Toon") : this._t("Verberg")} ${label.toLowerCase()}">
       <i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i>
-      ${label} <span>${this._t("nu")}</span> <strong class="${priceClass}">${priceText}</strong><small>ct/kWh</small>${favorable ? `<em>${this._t("Goedkoopst")}</em>` : ''}
+      <span class="legend-label">${label}</span> <span>${this._t("nu")}</span> <strong class="legend-value ${priceClass}">${priceText}</strong><small>ct/kWh</small>${favorable ? `<em>${this._t("Goedkoopst")}</em>` : ''}
     </button>`;
   }
 
@@ -2923,7 +3121,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   _seriesLegendItem(type, label) {
     const appearance = this._seriesAppearance(type);
     const hidden = this._hiddenSeries.has(type);
-    return `<button type="button" class="legend-series" data-series="${type}" aria-pressed="${!hidden}" title="${hidden ? this._t("Toon") : this._t("Verberg")} ${label.toLowerCase()}"><i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i>${label}</button>`;
+    return `<button type="button" class="legend-series" data-series="${type}" aria-pressed="${!hidden}" title="${hidden ? this._t("Toon") : this._t("Verberg")} ${label.toLowerCase()}"><i class="swatch series-swatch ${appearance.style}" style="--series-color:${appearance.swatchColor};--series-width:${appearance.width}px"></i><span class="legend-label">${label}</span></button>`;
   }
 
   _toggleSeries(type) {
@@ -2942,7 +3140,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _stateCard(title, message) {
-    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}</style>`;
+    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart,.price-periods .price-table-wrap',controls:'.price-periods>summary',surfaces:'.tooltip'})}</style>`;
   }
 
   _bindInteractions() {
@@ -2960,6 +3158,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       if (event.pointerType === 'mouse') this._hideTooltip();
     });
     chart.addEventListener('focus', () => {
+      this._tooltipPointer=null;
       const nearest = this._chart.timeline.reduce((best, point, index) => (
         Math.abs(point.timestamp - Date.now()) < Math.abs(this._chart.timeline[best].timestamp - Date.now()) ? index : best
       ), 0);
@@ -2967,6 +3166,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     });
     chart.addEventListener('keydown', (event) => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape'].includes(event.key)) return;
+      this._tooltipPointer=null;
       event.preventDefault();
       if (event.key === 'Escape') return this._hideTooltip();
       if (event.key === 'Home') this._activeIndex = 0;
@@ -2980,10 +3180,11 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _pointFromPointer(event) {
+    SharedGraph.rememberTooltipPointer(this,event);
     const chart = this.shadowRoot.querySelector('.chart');
     const bounds = chart.getBoundingClientRect();
     const svgX = ((event.clientX - bounds.left) / bounds.width) * this._chart.svgWidth;
-    const timestamp = this._chart.start + Math.max(0, Math.min(1, (svgX - PLOT.left) / (this._chart.svgWidth - PLOT.left - this._chart.plotRight))) * this._chart.span;
+    const timestamp = this._chart.start + Math.max(0, Math.min(1, (svgX - (this._chart.plotLeft??PLOT.left)) / (this._chart.svgWidth - (this._chart.plotLeft??PLOT.left) - this._chart.plotRight))) * this._chart.span;
     let low = 0;
     let high = this._chart.timeline.length - 1;
     while (low < high) {
@@ -3004,7 +3205,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       : '—';
     const appearance = this._chart.consumptionAppearance;
     const range = point ? `${this._formatTime(point.timestamp, this._chart.timeZone)}–${this._formatTime(point.endTimestamp, this._chart.timeZone)}` : '';
-    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b>${this._t('Netafname')} <em class="tooltip-value">${value}</em></b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
+    return { point, html: `<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.swatchColor}"></i><b><em class="tooltip-label">${this._t('Netafname')}: </em><em class="tooltip-value">${value}</em></b>${range && (point.timestamp !== timestamp || point.endTimestamp - point.timestamp !== this._chart.intervalMs) ? `<small>${range}</small>` : ''}</span>`,
       live: `${this._t('Netafname')} ${value}, ${range}` };
   }
 
@@ -3055,7 +3256,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       else dot.style.removeProperty('border-color');
       dot.setAttribute('class', `hover-dot${type === 'export' ? ' export-dot' : ''} ${priceClass}`);
       const favorable = selected.has(point.timestamp);
-      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b>${type === 'import' ? this._t("Afname") : this._t("Teruglevering")} <em class="tooltip-value">${this._formatPrice(price)} ct/kWh</em></b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
+      entries.push(`<span><i class="tooltip-series ${appearance.style}" style="--series-color:${appearance.color || `var(--${priceClass === 'negative' ? 'negative-color' : priceClass})`}"></i><b><em class="tooltip-label">${type === 'import' ? this._t("Afname") : this._t("Teruglevering")}: </em><em class="tooltip-value">${this._formatPrice(price)} ct/kWh</em></b>${favorable ? `<small>${favorableLabel} ${escapeHtml(hours)} ${this._t("uur")}</small>` : ''}</span>`);
       liveEntries.push(`${type === 'import' ? this._t("afname") : this._t("teruglevering")} ${this._formatPrice(price)} ${this._t("cent per kilowattuur")}${favorable ? `, ${favorableLabel} ${hours} ${this._t("uur")}` : ''}`);
     };
     if (this._chart.graphShowsImport) showDot('import', point.importPrice, this._chart.importSelected, this._config.cheapest_hours, this._t("goedkoopste"));
@@ -3083,40 +3284,17 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const anchorY = anchorYs.length
       ? anchorYs.reduce((total, value) => total + value, 0) / anchorYs.length
       : this._chart.svgHeight / 2;
-    const chart = this.shadowRoot.querySelector('.chart');
-    const chartWidth = chart.clientWidth;
-    const chartHeight = chart.clientHeight;
-    const anchorX = (x / this._chart.svgWidth) * chartWidth;
-    const anchorTop = (anchorY / this._chart.svgHeight) * chartHeight;
-    const tooltipWidth = tooltip.offsetWidth;
-    const tooltipHeight = tooltip.offsetHeight;
-    const gap = 12;
-    const edge = 4;
-    const canPlaceRight = anchorX + gap + tooltipWidth <= chartWidth - edge;
-    const canPlaceLeft = anchorX - gap - tooltipWidth >= edge;
-    const canPlaceBelow = anchorTop + gap + tooltipHeight <= chartHeight - edge;
-    tooltip.dataset.horizontal = canPlaceRight ? 'right' : canPlaceLeft ? 'left' : 'center';
-    tooltip.dataset.vertical = canPlaceBelow ? 'below' : 'above';
-    const centeredX = Math.max(tooltipWidth / 2 + edge, Math.min(chartWidth - tooltipWidth / 2 - edge, anchorX));
-    tooltip.style.left = `${tooltip.dataset.horizontal === 'center' ? centeredX : anchorX}px`;
-    tooltip.style.top = `${anchorTop}px`;
-    if (this._chart.graphShowsConsumption) {
-      const bounds = chart.getBoundingClientRect();
-      const markers = [...this.shadowRoot.querySelectorAll('.hover-dot:not([hidden])')].map(dot => {
-        const rect = dot.getBoundingClientRect();
-        return { left: rect.left - bounds.left, right: rect.right - bounds.left, top: rect.top - bounds.top, bottom: rect.bottom - bounds.top };
-      });
-      const placement = placeEnergyTooltip(chartWidth, chartHeight, tooltipWidth, tooltipHeight, anchorX, anchorTop, markers);
-      tooltip.dataset.horizontal = 'positioned';
-      tooltip.style.left = `${placement.left}px`;
-      tooltip.style.top = `${placement.top}px`;
-    }
+    const chart = this.shadowRoot.querySelector('.chart'),bounds=chart.getBoundingClientRect();
+    tooltip.dataset.horizontal='positioned';
+    const markers=[...this.shadowRoot.querySelectorAll('.hover-dot:not([hidden])')].map(dot=>{const r=dot.getBoundingClientRect();return {left:r.left-bounds.left,right:r.right-bounds.left,top:r.top-bounds.top,bottom:r.bottom-bounds.top};});
+    SharedGraph.positionTooltip(this,{chart,tooltip,x:guideX/this._chart.svgWidth*bounds.width,y:anchorY/this._chart.svgHeight*bounds.height,markers,local:publish});
     const live = this.shadowRoot.querySelector('.sr-only');
     live.textContent = `${this._formatTime(point.timestamp, this._chart.timeZone)} ${this._t("tot")} ${this._formatTime(nextTime, this._chart.timeZone)}, ${liveEntries.join(', ')}.`;
     if (publish) SharedGraph.publishHover(this, timestamp);
   }
 
   _hideTooltip(publish = true) {
+    this._tooltipPointer=null;
     if (publish) SharedGraph.clearHover(this);
     this._hoverTimestamp = null;
     this.shadowRoot.querySelector('.tooltip')?.setAttribute('hidden', '');
@@ -3141,6 +3319,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     }).join('\n');
     return `
       :host {
+        min-height:var(--energy-required-height,0px);
         --cheap: var(--success-color, #19a974);
         --normal: #f2a93b;
         --expensive: var(--error-color, #e45c4f);
@@ -3151,10 +3330,10 @@ class DynamicEnergyPriceCard extends HTMLElement {
         ${colorOverrides}
         --cheapest-fill: color-mix(in srgb, var(--import-best) 13%, transparent);
         --export-best-fill: color-mix(in srgb, var(--export-best) 18%, transparent);
-        --font-size-meta: 10px;
+        --font-size-meta: 11px;
         --font-size-label: 12px;
-        --font-size-title: 18px;
-        --font-size-value: 20px;
+        --font-size-title: 16px;
+        --font-size-value: 16px;
         --font-weight-regular: 400;
         --font-weight-medium: 500;
         --font-weight-strong: 600;
@@ -3163,9 +3342,9 @@ class DynamicEnergyPriceCard extends HTMLElement {
         display: block;
         height: 100%;
       }
-      ha-card { overflow: hidden; height: 100%; }
-      .card-content { display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; height: 100%; padding: 16px 16px 12px; color: var(--primary-text-color); font-weight: var(--font-weight-regular); line-height: var(--line-height-normal); }
-      .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+      ha-card { overflow: visible; height: 100%; min-height:var(--energy-required-height,0px); }
+      .card-content { display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; height: 100%; padding: var(--eleven-card-padding,16px); color: var(--primary-text-color); font-weight: var(--font-weight-regular); line-height: var(--line-height-normal); }
+      .header { display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:6px; }
       .heading { min-width: 0; }
       h2 { margin: 0; font-size: var(--font-size-title); line-height: var(--line-height-tight); font-weight: var(--font-weight-strong); letter-spacing: -0.01em; }
       .header-cheapest { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; min-height: 34px; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
@@ -3173,19 +3352,15 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .compact-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 30px; margin-bottom: 2px; }
       .compact-current { min-width: 0; white-space: nowrap; color: var(--primary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
       .compact-current span, .compact-current small { color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); }
+      .compact-current .legend-label { font-size: inherit; font-weight: inherit; }
       .compact-current strong { font-size: 16px; font-variant-numeric: tabular-nums; }
-      .compact-current strong.negative { color: var(--negative-color); }
-      .compact-current strong.cheap { color: var(--cheap); }
-      .compact-current strong.normal { color: var(--normal); }
-      .compact-current strong.expensive { color: var(--expensive); }
-      .compact-current strong.unavailable { color: var(--secondary-text-color); }
       .compact-current em { padding: 2px 5px; border-radius: 999px; color: var(--import-best); background: var(--cheapest-fill); font-size: var(--font-size-meta); font-style: normal; }
       .compact-context { overflow: hidden; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); text-overflow: ellipsis; white-space: nowrap; }
-      .current-block { display: flex; justify-content: flex-end; align-items: flex-start; gap: 8px; flex: none; margin-left: auto; }
-      .current-metric { display: grid; justify-items: end; gap: 3px; min-width: 0; }
-      .current-label { color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
-      .current { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 5px; padding: 7px 9px; border-radius: 8px; background: var(--secondary-background-color); font-variant-numeric: tabular-nums; }
-      .current strong { font-size: var(--font-size-value); line-height: 1; font-weight: var(--font-weight-strong); }
+      .current-block { display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start;gap:8px 24px; }
+      .current-metric,.current-metric.legend-series { display:grid;justify-items:start;align-content:center;gap:3px;min-width:44px;max-width:100%;text-align:start; }
+      .current-label { display:flex;align-items:center;gap:6px;color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
+      .current { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 5px; padding:0;border-radius:0;background:none;max-width:100%; font-variant-numeric: tabular-nums; }
+      .current strong { white-space:nowrap;min-width:0;font-size: var(--font-size-value); line-height: 1; font-weight: var(--font-weight-strong); }
       .current span { font-size: var(--font-size-meta); color: var(--secondary-text-color); }
       .current.negative strong { color: var(--negative-color); }
       .current.cheap strong { color: var(--cheap); }
@@ -3195,9 +3370,12 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .current-window { color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
       .current-window.active { color: var(--import-best); }
       .current-metric.export .current-window.active { color: var(--export-best); }
-      .legend { display: flex; flex-wrap: wrap; gap: 7px 16px; margin: 12px 0 2px; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
+      .y-grid-line { stroke: var(--divider-color,#ddd); stroke-width: 0.8; vector-effect: non-scaling-stroke; }
+      .legend { display: flex; flex-wrap: wrap; gap: 7px 16px; margin: 0 0 10px; color: var(--secondary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
       .legend span { display: inline-flex; align-items: center; gap: 6px; }
-      .legend-series { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 1px 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+      .legend-label { color: var(--secondary-text-color); }
+      .legend-value { color: var(--primary-text-color,#20252b); }
+      .legend-series { display: inline-flex; align-items: center; gap: 6px; min-width: 44px; min-height: 44px; box-sizing: border-box; margin: 0; padding: 1px 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
       .legend-series[aria-pressed="false"] { opacity: 0.45; text-decoration: line-through; }
       .legend-series:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; border-radius: 3px; }
       .data-status { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-height: 14px; margin: 3px 0 0; color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
@@ -3213,16 +3391,16 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .chart:focus-visible { box-shadow: inset 0 0 0 2px var(--primary-color); border-radius: 8px; }
       svg { display: block; width: 100%; height: 100%; overflow: hidden; }
       .chart-label { position: absolute; z-index: 1; pointer-events: none; font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: 0 1px 2px var(--card-background-color), 0 0 4px var(--card-background-color); }
-      .x-label { bottom: 4px; transform: translateX(-50%); color: var(--secondary-text-color); }
-      .energy-axis-label { right: 1px; transform: translateY(-50%); color: var(--secondary-text-color); }
-      .energy-unit { right: 1px; top: 0; color: var(--secondary-text-color); }
-      .with-consumption .level-label { right: 34px; }
+      .x-label { bottom: 10px; transform: translateX(-50%); color: var(--secondary-text-color); }
+      .energy-axis-label { right: 10px; transform: translateY(-50%); color: var(--secondary-text-color); }
+      .energy-unit { right: 10px; top: 10px; color: var(--secondary-text-color); }
+      .with-consumption .level-label { right:var(--energy-right-label-gap,54px); }
       .consumption-area { fill: var(--consumption-fill-color); }
       .consumption-area.fade { fill: url(#consumption-area-gradient); opacity: 1; }
-      .y-label { left: 1px; transform: translateY(-50%); color: var(--secondary-text-color); }
-      .day-label { top: 8px; color: var(--primary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
+      .y-label { left: 10px; transform: translateY(-50%); color: var(--secondary-text-color); }
+      .day-label { top: 10px; color: var(--primary-text-color); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
       .now-label { top: 24px; transform: translateX(-50%); color: var(--primary-text-color); font-weight: var(--font-weight-strong); }
-      .level-label { right: 3px; transform: translateY(-135%); padding: 1px 4px; border-radius: 3px; color: var(--secondary-text-color); background: color-mix(in srgb, var(--card-background-color) 88%, transparent); }
+      .level-label { right: 10px; transform: translateY(-135%); padding: 1px 4px; border-radius: 3px; color: var(--secondary-text-color); background: color-mix(in srgb, var(--card-background-color) 88%, transparent); }
       .level-label.import-level:nth-of-type(1) { color: var(--cheap); }
       .average-label { transform: translateY(-135%); padding: 2px 5px; border-radius: 4px; color: var(--primary-text-color); background: color-mix(in srgb, var(--card-background-color) 88%, transparent); font-size: var(--font-size-label); font-weight: var(--font-weight-strong); }
       .export-average-label { border-left: 2px dashed currentColor; }
@@ -3261,15 +3439,17 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .export-dot { width: 14px; height: 14px; }
       .consumption-dot { width: 10px; height: 10px; border-width: 2px; }
       ${SharedGraph.tooltipStyles()}
-      .tooltip[data-horizontal="right"][data-vertical="below"] { transform: translate(12px, 12px); }
-      .tooltip[data-horizontal="right"][data-vertical="above"] { transform: translate(12px, calc(-100% - 12px)); }
-      .tooltip[data-horizontal="left"][data-vertical="below"] { transform: translate(calc(-100% - 12px), 12px); }
-      .tooltip[data-horizontal="left"][data-vertical="above"] { transform: translate(calc(-100% - 12px), calc(-100% - 12px)); }
-      .tooltip[data-horizontal="center"][data-vertical="below"] { transform: translate(-50%, 12px); }
-      .tooltip[data-horizontal="center"][data-vertical="above"] { transform: translate(-50%, calc(-100% - 12px)); }
 
       .tooltip[data-horizontal="positioned"] { transform: none; }
 
+      .price-periods{flex:none;margin-top:8px}
+      .price-periods>summary{min-height:44px;min-width:44px;padding:10px 12px;box-sizing:border-box;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:var(--font-size-label);font-weight:500;color:var(--secondary-text-color);list-style:none}
+      .price-periods>summary::-webkit-details-marker{display:none}
+      .price-periods>summary::after{content:'⌄';margin-inline-start:auto}
+      .price-periods[open]>summary::after{content:'⌃'}
+      .price-periods>summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+      .price-periods .price-table-wrap{margin-top:8px;padding:8px;box-sizing:border-box;border-top:0}
+      .price-periods .price-table-wrap h3{display:none}
       .price-table-wrap { flex: 0 1 auto; min-height: 0; max-height: 190px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider-color); overflow: auto; }
       .price-table-wrap h3 { margin: 0 0 4px; font-size: var(--font-size-label); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
       .table-unit { float: right; color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); }
@@ -3286,7 +3466,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       [hidden] { display: none !important; }
       @media (max-width: 520px) {
-        :host { --font-size-title: 17px; --font-size-value: 18px; }
+        :host { --font-size-title: 16px; --font-size-value: 16px; }
         .card-content { padding: 12px 12px 10px; }
         .compact-summary { gap: 8px; }
         .compact-current { font-size: 11px; }
@@ -3294,9 +3474,9 @@ class DynamicEnergyPriceCard extends HTMLElement {
         .compact-context { font-size: var(--font-size-meta); }
         .header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; }
         .heading { grid-column: 1 / -1; }
-        .current-block { grid-column: 1 / -1; width: 100%; max-width: none; margin-left: 0; gap: 5px; justify-content: flex-end; }
-        .current { padding: 5px 7px; column-gap: 3px; }
-        .legend { gap: 6px 10px; margin-top: 9px; }
+        .current-block { grid-column:1 / -1;width:100%;max-width:none;margin-left:0;gap:8px 24px;justify-content:flex-start; }
+        .current { padding:0;column-gap:5px; }
+        .legend { gap: 6px 10px; }
         .data-status { margin-top: 2px; }
         .chart { flex-basis: 260px; min-height: 110px; }
 
@@ -3306,9 +3486,9 @@ class DynamicEnergyPriceCard extends HTMLElement {
       }
       @media (max-width: 360px) {
         .cheapest-table { font-size: 10px; }
-        .current-block { justify-content: stretch; }
-        .current-metric { flex: 1 1 0; justify-items: stretch; }
-        .current { justify-content: center; }
+        .current-block { justify-content:flex-start; }
+        .current-metric { flex:0 1 auto;justify-items:start; }
+        .current { justify-content:start; }
       }
       @media (prefers-reduced-motion: reduce) { .tooltip { transition: none; } }
       ${this._config?.embedded===true?`:host{height:auto;min-width:0}ha-card{height:auto;background:transparent;border:0;border-radius:0;box-shadow:none}.card-content{height:auto;padding:0}.state{padding:8px 0}.chart{flex:0 0 auto;height:260px;min-height:180px}.current{border-radius:8px}.cheapest-table .period-type{border-radius:8px}`:''}
@@ -3317,7 +3497,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
 }
 
 if (!customElements.get('eleven-dynamic-energy-price-card')) {
-  customElements.define('eleven-dynamic-energy-price-card',withSharedCardBackground(DynamicEnergyPriceCard));
+  customElements.define('eleven-dynamic-energy-price-card',withCardBackground(DynamicEnergyPriceCard));
 }
 
 window.customCards = window.customCards || [];

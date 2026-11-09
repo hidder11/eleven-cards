@@ -1,0 +1,10 @@
+{
+  "name": "eleven-appliance-planner-card",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check dist/eleven-appliance-planner.js"
+  }
+}

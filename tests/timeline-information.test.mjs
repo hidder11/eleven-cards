@@ -35,7 +35,7 @@ test('information remains safe and useful for hidden, short, stale and rejected 
 });
 test('timeline hover tooltip uses separate theme-aware labels and values',()=>{
  const c=fixture(),tooltip={style:{},getBoundingClientRect:()=>({width:200,height:100})},guide={style:{}};
- const chart={querySelector:s=>s==='.tooltip'?tooltip:guide,getBoundingClientRect:()=>({width:600,top:40})};
+ const chart={querySelector:s=>s==='.tooltip'?tooltip:s==='.guide'?guide:null,getBoundingClientRect:()=>({left:20,right:620,width:600,top:40,bottom:240,height:200})};
  c.shadowRoot.querySelector=s=>s==='.chart'?chart:null;c._showTooltip(H/2,false);
  assert.match(tooltip.innerHTML,/<b class="tooltip-label">switch.a <em class="tooltip-value">on<\/em>/);
  assert.match(c.shadowRoot.innerHTML,/\.tooltip \.tooltip-label\{color:var\(--secondary-text-color,#666\)\}/);

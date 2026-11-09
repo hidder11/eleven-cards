@@ -6,10 +6,59 @@ const states={'sensor.a':{state:'12',attributes:{friendly_name:'Kitchen <script>
 const data=id=>[{entity_id:id,last_changed:new Date(Date.now()-86400000).toISOString(),state:'10',attributes:{unit_of_measurement:'W'}}];
 const hass={states,config:{time_zone:'Europe/Amsterdam'},language:'nl',callWS:async()=>[],callApi:async()=>[data('sensor.a')]};
 
-test('long heatmap windows limit cell DOM to visible rows',()=>{
- const card=new HeatmapCard();card.setConfig({entity:'sensor.a'});card._rows=Array.from({length:366},()=>({cells:[]}));
- const top=card._matrixWindow(0,800),bottom=card._matrixWindow(9000,800);
- assert.ok(top[1]-top[0]<60);assert.ok(bottom[1]-bottom[0]<60);assert.ok(bottom[0]>300);assert.equal(bottom[1],366);
+test('summed card renders the total name, all History contributors and summed insights',async()=>{
+ const card=new HeatmapCard();card.setConfig({entity:'sensor.a',sum_entities:['sensor.b'],hours_to_show:24,show_navigation:false});
+ card.hass={...hass,states:{...states,'sensor.b':{attributes:{unit_of_measurement:'W',friendly_name:'Office'}}},callApi:async(_method,url)=>{
+  const id=new URL('http://fixture/'+url).searchParams.get('filter_entity_id');return [data(id)];
+ }};
+ card.connectedCallback();
+ try{
+  await card._refresh();assert.equal(card._status,'ready');
+  assert.equal(card._sensorName(),'Kitchen <script> + Office');assert.match(card._information('en'),/Kitchen &lt;script&gt; \+ Office/);
+  assert.match(card.shadowRoot.innerHTML,/entity_id=sensor.a%2Csensor.b/);
+  assert.equal(card._rows.flatMap(r=>r.cells).find(c=>c.value!=null).value,20);
+  const loaded=card._data,generation=card._generation;
+  card.hass={...card.hass,states:{...card.hass.states,'sensor.b':{...card.hass.states['sensor.b'],state:'999'}}};
+  assert.equal(card._generation,generation);assert.equal(card._data,loaded);
+  card.setConfig({...card._config,name:'Combined power'});await card._refresh();assert.equal(card._sensorName(),'Combined power');
+ }finally{card.disconnectedCallback();}
+});
+
+test('additional contributor metadata and existence invalidate cached sums and pending responses',async()=>{
+ for(const patch of [{unit_of_measurement:'kW'},{friendly_name:'Renamed'},{state_class:'measurement'},{device_class:'power'},null]){
+  const card=new HeatmapCard();card.setConfig({entity:'sensor.a',sum_entities:['sensor.b'],hours_to_show:24,show_navigation:false});
+  const base={...hass,states:{...states,'sensor.b':{attributes:{unit_of_measurement:'W',friendly_name:'Office'}}},callApi:async(_method,url)=>[data(new URL('http://fixture/'+url).searchParams.get('filter_entity_id'))]};
+  card.hass=base;card.connectedCallback();
+  try{
+   await card._refresh();assert.equal(card._status,'ready');
+   const resolves=[];const pendingHass={...base,callWS:()=>new Promise(r=>{resolves.push(r);})};card.hass=pendingHass;const pending=card._refresh();
+   const generation=card._generation;
+   card.hass={...base,states:{...base.states,'sensor.b':patch?{attributes:{...base.states['sensor.b'].attributes,...patch}}:undefined}};
+   assert.ok(card._generation>generation);assert.equal(card._data,null);
+   resolves.forEach(resolve=>resolve([]));await pending;await card._refresh();
+   if(!patch || patch.unit_of_measurement){assert.equal(card._status,'error');assert.equal(card._data,null);assert.match(card.shadowRoot.innerHTML,/eenheid|bestaat/);}
+   else{assert.equal(card._status,'ready');assert.ok(card._data);if(patch.friendly_name)assert.match(card._sensorName(),/Renamed/);}
+  }finally{card.disconnectedCallback();}
+ }
+});
+
+test('initial summed load rejects a contributor unit change before any data is cached',async()=>{
+ const card=new HeatmapCard(),resolves=[];
+ card.setConfig({entity:'sensor.a',sum_entities:['sensor.b'],hours_to_show:24,show_navigation:false});
+ const base={...hass,states:{...states,'sensor.b':{attributes:{unit_of_measurement:'W'}}}};
+ card.hass={...base,callWS:()=>new Promise(resolve=>resolves.push(resolve))};card.connectedCallback();const pending=card._refresh();
+ try{
+  card.hass={...base,states:{...base.states,'sensor.b':{attributes:{unit_of_measurement:'kW'}}}};
+  resolves.forEach(resolve=>resolve([]));await pending;await card._refresh();
+  assert.equal(card._data,null);assert.equal(card._status,'error');assert.equal(card._error,'sum_unit_mismatch');
+ }finally{card.disconnectedCallback();}
+});
+
+test('long heatmap windows keep every row and size naturally, ignoring legacy height caps',()=>{
+ const card=new HeatmapCard();card.setConfig({entity:'sensor.a',max_height:100});card._rows=Array.from({length:366},(_,i)=>({key:String(i),timestamp:Date.UTC(2026,0,i+1),cells:[]}));
+ card._data={unit:'W'};card._start=Date.UTC(2026,0,1);card._end=Date.UTC(2027,0,1);card._render();
+ assert.equal(card._virtualRows,false);assert.equal((card.shadowRoot.innerHTML.match(/class="matrix-row"/g)||[]).length,366);
+ assert.ok(card.getCardSize()>190);assert.doesNotMatch(card.shadowRoot.innerHTML,/content-visibility|virtual-row|overflow:auto;max-height/);
 });
 
 test('history renders escaped labels; repeated hass updates do not refetch; detach clears polling',async()=>{
@@ -58,7 +107,7 @@ test('editor, stub and layout expose a single sensor and optional numeric bounds
   for(const name of ['low_color','high_color'])assert.deepEqual(fields(HeatmapCard.getConfigForm().schema).find(s=>s.name===name).selector,{color_rgb:{}});
   assert.deepEqual(editor._config.low_color,[219,234,254]);
   assert.ok(new HeatmapCard().getGridOptions().rows>=3);
-  const annual=new HeatmapCard();annual.setConfig({entity:'sensor.a',hours_to_show:8760,show_navigation:false});assert.ok(annual.getCardSize()<=18);
+  const annual=new HeatmapCard();annual.setConfig({entity:'sensor.a',hours_to_show:8760,show_navigation:false});assert.ok(annual.getCardSize()>190);
 });
 
 test('configuration groups match the chart editors and expose native selectors with localized help',()=>{
@@ -71,6 +120,9 @@ test('configuration groups match the chart editors and expose native selectors w
   assert.ok(!colors.schema.some(s=>s.name==='low_color'));
   assert.equal(definition.computeLabel.call({hass:{language:'en'}},{name:'show_title'}),'Show title');
   assert.match(definition.computeHelper.call({hass:{language:'nl'}},{name:'gradient_stops'}),/sensoreenheid/);
+  assert.match(definition.computeHelper.call({hass:{language:'en'}},{name:'max_height'}),/no longer caps/);
+  assert.match(definition.computeHelper.call({hass:{language:'nl'}},{name:'max_height'}),/zonder intern scrollen/);
+  assert.match(definition.computeHelper.call({hass:{language:'en'}},{name:'cell_width'}),/available width/);
   const period=groups.find(s=>s.name==='data_processing').schema.find(s=>s.name==='aggregation_period');
   assert.equal(period.default,'hour');assert.deepEqual(period.selector.select.options.map(o=>o.value),['hour','day','week','month']);
   assert.equal(period.selector.select.options[2].label,'Week (maandag)');
@@ -116,7 +168,7 @@ test('visibility, custom grid dimensions and color stops change the rendered car
   const card=new HeatmapCard();card.setConfig({entity:'sensor.a',show_navigation:false,show_title:false,show_legend:false,show_labels:false,cell_width:7,cell_height:18,cell_gap:0,border_radius:0,max_height:200,color_mode:'gradient',gradient_mode:'steps',gradient_stops:[{value:0,color:[0,0,0]},{value:5,color:[255,0,0]},{value:15,color:[0,255,0]}]});
   card.hass=hass;card.connectedCallback();await card._refresh();const html=card.shadowRoot.innerHTML;
   assert.doesNotMatch(html,/<h2>|<div class="legend"|<button[^>]*data-cell/);
-  assert.match(html,/max-height:200px/);assert.match(html,/min-width:168px/);assert.match(html,/min-width:7px;height:18px/);
+  assert.match(html,/repeat\(24,minmax\(0,1fr\)\)/);assert.match(html,/min-width:0;height:var\(--heatmap-row-height,18px\)/);assert.match(html,/overflow:visible/);assert.doesNotMatch(html,/max-height:200px|heatmap-scroll-hint/);
   assert.match(html,/background-color:rgb\(255,0,0\)/);
   assert.match(html,/data-insight="data"/);card.disconnectedCallback();
 });

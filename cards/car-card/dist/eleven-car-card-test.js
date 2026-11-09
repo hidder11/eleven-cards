@@ -1,6 +1,72 @@
 // Eleven Car (beta) - self-contained standalone module
 (()=>{
-const withSharedCardBackground=(()=>{
+// Paint only, scoped to each caller's shadow root and explicit semantic roles.
+// Material recipes/palettes belong to the optional YAML theme, never this helper.
+// Do not use generic control selectors: swatches, state tracks and chart colors
+// must keep their functional paint. chartUI is an explicit non-House opt-in
+// for shared chart-control geometry. No behavior or public-token writes.
+function cardThemeStyles({wells='',controls='',selected='',plots='',surfaces='',chartUI=false,periodUI=chartUI}={}) {
+ // Segmented groups own their paint; descendants pressing must not press the group.
+ if(chartUI)controls=controls.split(',').filter(selector=>!['.zoom-controls','.chart-links'].includes(selector.trim())).join(',');
+ if(periodUI)controls=[controls,'.period-default [data-ui-button=surface]'].filter(Boolean).join(',');
+ const well=selector=>selector?`${selector}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px))}`:'';
+ return `
+ha-card{background:var(--ha-card-background,var(--card-background-color,#fff));color:var(--primary-text-color,#212121);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none)}
+${well(wells)}
+${wells?`:is(${wells}):is([data-ui-detail-surface]){background:var(--secondary-background-color,#eee)}`:''}
+${plots?`${plots}{box-shadow:var(--eleven-material-well,none);border-radius:var(--eleven-material-radius-well,0px);background:var(--eleven-material-plot-background,var(--eleven-material-inset,transparent))}`:''}
+${surfaces?`${surfaces}{box-shadow:var(--eleven-material-surface-shadow,none)}`:''}
+${controls?`${controls}{background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+:is(${controls}):not(:disabled):hover{background:var(--eleven-material-control-hover-background,var(--secondary-background-color,transparent))}
+:is(${controls}):not(:disabled):active{box-shadow:var(--eleven-material-well,none)}`:''}
+${selected?`${selected}{box-shadow:var(--eleven-material-selection-well,none);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}`:''}
+${periodUI?`
+.period-menu [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.period-menu [data-period-option][aria-checked=true]{border:0;color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));box-shadow:var(--eleven-material-selection-well,none);text-decoration:none;transform:translateY(1px)}
+.period-menu [data-period-option][aria-checked=true]:hover{background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)))}
+.period-menu [data-period-option]{min-width:0}
+.period-menu .period-options{grid-template-columns:repeat(5,minmax(0,1fr))}
+.period-menu .period-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}
+.period-menu .ui-popup-heading [data-ui-button]{min-width:44px}
+`:''}
+${chartUI?`
+/* Opt-in only: House's shared primitive defaults remain unchanged. */
+.card-header{margin:0 0 12px;gap:12px;align-items:center}
+.card-header h2{margin:0;flex:1 1 100%}
+.header-actions{width:100%;gap:8px;justify-content:space-between}
+.header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}
+.chart-controls{flex:1 1 100%;width:100%}
+.chart-controls>[data-period]{position:relative;flex:none}
+.chart-controls>.period-controls{flex:1 1 auto;margin-inline-end:0;padding-inline-end:0}
+.chart-controls>.period-controls::after{display:none}
+.header-actions .period-trigger{width:100%;justify-content:space-between;padding:4px 6px;flex:1 1 auto}
+.period-trigger span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:normal;line-height:1.35;text-align:start}
+.legend [data-ui-legend]{min-height:44px;min-width:44px;box-sizing:border-box}
+${segmentedControlStyles('.chart-controls','.chart-controls>.period-controls>.period-trigger,.chart-controls>[data-period]',{first:'.chart-controls>.period-controls>.period-trigger'})}
+${segmentedControlStyles('.zoom-controls','.zoom-controls>[data-zoom]')}
+${segmentedControlStyles('.chart-links','.chart-links>.history-link,.chart-links>.insight-control>.insight-trigger',{last:'.chart-links>.insight-control>.insight-trigger'})}
+@container(min-width:600px){.card-header h2{flex:1 1 110px}.header-actions{width:auto;flex:0 1 auto;justify-content:flex-end}.chart-controls{flex:0 1 auto;width:auto}}
+`:''}
+@media(forced-colors:active){ha-card${[wells,controls,selected,plots,surfaces].filter(Boolean).map(s=>','+s).join('')}{box-shadow:none}}
+`;
+}
+
+// A single raised group with separate native button press states; no parent :active.
+function segmentedControlStyles(group,buttons,{first=`:is(${group})>:is(button,a):first-child`,last=`:is(${group})>:is(button,a):last-child`,dividers=`:is(${group})>:not(:first-child)`}={}){return `
+${group}{gap:0;align-items:stretch;background:var(--eleven-material-control-background,var(--secondary-background-color,#eee));box-shadow:var(--eleven-material-control-shadow,var(--eleven-surface-shadow,none));border-radius:var(--eleven-material-radius-button,9px)}
+:is(${buttons}){position:relative;align-self:stretch;height:auto;padding:2px 6px;background:transparent;box-shadow:none;border:0;border-radius:0;min-height:36px;min-width:36px;font-size:12px;box-sizing:border-box}
+:is(${buttons}) svg{width:14px;height:14px}
+${first?`:is(${buttons}):is(${first}){border-start-start-radius:var(--eleven-material-radius-button,9px);border-end-start-radius:var(--eleven-material-radius-button,9px)}`:''}
+${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-material-radius-button,9px);border-end-end-radius:var(--eleven-material-radius-button,9px)}`:''}
+:is(${dividers}){position:relative}
+:is(${dividers})::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--divider-color,#ddd) 55%,transparent);pointer-events:none;z-index:1}
+:is(${buttons}):disabled{opacity:1;color:color-mix(in srgb,var(--primary-text-color,#20252b) 35%,transparent);cursor:default}
+:is(${buttons}):not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none}
+:is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
+:is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+@media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
@@ -475,8 +541,8 @@ const withCardBackground=(Base,options={})=>class extends Base{
   if(this.isConnected&&!this._elevenBackgroundMotion)this._elevenBackgroundMotion=observeCardBackgroundMotion(this);
  }
  static async getConfigElement(){
-  if(!customElements.get('eleven-car-background-editor-test'))customElements.define('eleven-car-background-editor-test',ElevenCardBackgroundEditor);
-  const editor=document.createElement('eleven-car-background-editor-test');editor.backgroundOptions=options;
+  if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
+  const editor=document.createElement('eleven-card-background-editor');editor.backgroundOptions=options;
   if(super.getConfigElement)editor.nativeEditor=await super.getConfigElement();
   else if(super.getConfigForm){
    if(!customElements.get('ha-form')&&window.loadCardHelpers){
@@ -598,63 +664,83 @@ class ElevenCardBackgroundEditor extends HTMLElement{
  }
 }
 
-return Base=>withCardBackground(Base,{preserveNative:true});
-})();
-// One recipe for raised information surfaces across all cards.
-const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
-function uiSurfaceStyles(selector){return `
-:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
-${selector}{box-shadow:var(--eleven-surface-shadow)}
-@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
-`;}
 
-// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
-function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function uiAttributes(values={}){
- return Object.entries(values).map(([key,value])=>{
-  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
-  if(value==null)return '';
-  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
-  return ` ${key}="${uiEscape(value)}"`;
- }).join('');
+const barBounds=(min,max)=>Number.isFinite(min)&&Number.isFinite(max)&&max>min?{min,max}:{min:0,max:100};
+const barPercent=(value,min,max)=>Math.max(0,Math.min(100,(value-min)/(max-min)*100));
+
+// All text/attributes are escaped; only finite measurements become fill widths.
+function uiBar({value=null,min=0,max=100,target=null,charging=false,label='',valueText='',decorative=false,attrs={}}={}){
+ ({min,max}=barBounds(min,max));
+ const known=Number.isFinite(value),amount=known?Math.max(min,Math.min(max,value)):null;
+ const percent=known?barPercent(amount,min,max):0,marker=Number.isFinite(target)?barPercent(target,min,max):null;
+ const active=!!charging&&known&&amount<max&&(!Number.isFinite(target)||amount<target);
+ return `<div${uiAttributes({...attrs,'data-ui-bar':'','data-charging':String(active),'data-unavailable':String(!known),...(decorative?{'aria-hidden':'true'}:{'aria-label':label,...(known?{role:'progressbar','aria-valuemin':min,'aria-valuemax':max,'aria-valuenow':amount,...(valueText?{'aria-valuetext':valueText}:{})}:{})})})}><span class="ui-bar-fill" style="width:${percent}%">${active?'<span class="ui-bar-motion" aria-hidden="true"></span>':''}</span>${marker==null?'':`<span class="ui-bar-marker" style="left:${marker}%" aria-hidden="true"></span>`}</div>`;
 }
-function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
- const classes=className?` class="${uiEscape(className)}"`:'';
- const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
- return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
+
+function uiSlider({value=0,min=0,max=100,step=1,disabled=false,attrs={}}={}){
+ ({min,max}=barBounds(min,max));
+ const amount=Number.isFinite(value)?Math.max(min,Math.min(max,value)):min;
+ return `<input${uiAttributes({...attrs,type:'range','data-ui-slider':'',min,max,step:Number.isFinite(step)&&step>0?step:1,value:amount,...(disabled?{disabled:true}:{}),style:(attrs.style?attrs.style+';':'')+`--ui-bar-position:${barPercent(amount,min,max)}%`})}>`;
 }
-function uiButtonStyles(){return `
-[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
-[data-ui-button="icon"]{width:32px;height:32px}
-[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
-[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
-[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
-[data-ui-button]:disabled{opacity:.35;cursor:default}
-[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
-[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
-[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
-[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
+
+// Call alongside existing input handlers; never sends a command or replaces events.
+function syncUISlider(input){
+ const min=Number(input.min),max=Number(input.max),value=Number(input.value);
+ input.style.setProperty('--ui-bar-position',Number.isFinite(value)&&Number.isFinite(min)&&Number.isFinite(max)&&max>min?barPercent(value,min,max)+'%':'0%');
+}
+
+function uiBarStyles(){return `
+[data-ui-bar]{--_bar-tone:var(--ui-bar-tone,var(--accent-color,var(--primary-color,#2196f3)));position:relative;box-sizing:border-box;display:block;min-width:0;width:100%;height:var(--ui-bar-height,12px);border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%),inset -1px -1px 0 rgb(255 255 255 / 20%));isolation:isolate}
+[data-ui-bar]>.ui-bar-fill{display:block;position:relative;overflow:hidden;isolation:isolate;height:100%;border-radius:inherit;background:var(--_bar-tone);box-shadow:inset 0 1px 0 #ffffff30}
+[data-ui-bar]>.ui-bar-marker{position:absolute;top:-5px;width:2px;height:calc(100% + 10px);transform:translateX(-50%);max-width:100%;border-radius:2px;background:var(--primary-text-color,#20252b);pointer-events:none}
+[data-ui-bar]>.ui-bar-marker[style*="left:0%"]{transform:none}
+[data-ui-bar]>.ui-bar-marker[style*="left:100%"]{transform:translateX(-100%)}
+[data-ui-bar] .ui-bar-motion{position:absolute;inset:0 auto 0 0;width:65%;pointer-events:none;background:linear-gradient(90deg,transparent,#ffffff4d 50%,transparent);animation:ui-bar-charge var(--ui-bar-duration,3.8s) linear infinite;animation-delay:var(--ui-bar-delay,0s)}
+@keyframes ui-bar-charge{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
+input[data-ui-slider]{--_bar-tone:var(--ui-bar-tone,var(--accent-color,var(--primary-color,#2196f3)));box-sizing:border-box;appearance:none;-webkit-appearance:none;display:block;width:100%;height:44px;min-height:44px;min-width:0;margin:0;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);cursor:pointer;touch-action:pan-y}
+input[data-ui-slider]::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:linear-gradient(var(--_bar-tone),var(--_bar-tone)) 0 / var(--ui-bar-position,0%) 100% no-repeat,var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%))}
+input[data-ui-slider]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:18px;height:18px;margin-top:-3px;border-radius:50%;border:2px solid var(--card-background-color,#fff);background:var(--_bar-tone);box-shadow:0 0 0 1px var(--_bar-tone)}
+input[data-ui-slider]::-moz-range-track{height:12px;border-radius:999px;background:var(--secondary-background-color,#eee);box-shadow:var(--eleven-material-well,inset 1px 2px 4px rgb(0 0 0 / 14%))}
+input[data-ui-slider]::-moz-range-progress{height:12px;border-radius:999px;background:var(--_bar-tone)}
+input[data-ui-slider]::-moz-range-thumb{box-sizing:border-box;width:18px;height:18px;border-radius:50%;border:2px solid var(--card-background-color,#fff);background:var(--_bar-tone);box-shadow:0 0 0 1px var(--_bar-tone)}
+input[data-ui-slider]:focus-visible{outline:2px solid var(--_bar-tone);outline-offset:3px}
+input[data-ui-slider]:disabled{opacity:.45;cursor:default}
+@media(prefers-reduced-motion:reduce){[data-ui-bar] .ui-bar-motion{display:none;animation:none}}
+@media(forced-colors:active){[data-ui-bar]{background:Canvas;border:1px solid CanvasText;box-shadow:none}[data-ui-bar]>.ui-bar-fill{background:Highlight;box-shadow:none;forced-color-adjust:none}[data-ui-bar]>.ui-bar-marker{background:CanvasText}[data-ui-bar] .ui-bar-motion{display:none}input[data-ui-slider]{appearance:auto;accent-color:Highlight}}
 `;}
 
 
 // The caller formats measurements and translates the subtitle. All text is escaped.
-function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',attrs={}}={}){
+function uiPrimaryValue({value,unit='',subtitle='',subtitleEntity='',compact=false,entity='',layout='',unitPosition='raised',attrs={}}={}){
  const missing=value==null||value==='';
  const number=uiEscape(missing?'—':value);
  const label=subtitle!==''&&subtitle!=null?(subtitleEntity?`<button type="button" class="primary-label" data-entity="${uiEscape(subtitleEntity)}">${uiEscape(subtitle)}</button>`:`<div class="primary-label">${uiEscape(subtitle)}</div>`):'';
- return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing)})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
+ return `<div${uiAttributes({...attrs,'data-ui-primary-value':'','data-density':compact?'compact':'standard','data-unavailable':String(missing),'data-primary-layout':layout==='uniform'?'uniform':null,'data-unit-position':layout==='uniform'&&['raised','baseline','center'].includes(unitPosition)?unitPosition:null})}><div class="primary-value">${entity?`<button type="button" class="primary-number" data-entity="${uiEscape(entity)}" aria-label="${uiEscape((missing?'—':value)+(!missing&&unit?' '+unit:''))}">${number}</button>`:`<span class="primary-number">${number}</span>`}${!missing&&unit?`<small>${uiEscape(unit)}</small>`:''}</div>${label}</div>`;
 }
 
 function uiPrimaryValueStyles(){return `
-[data-ui-primary-value]{--_primary-tone:var(--ui-primary-tone,var(--tone,var(--primary-color,#2196f3)));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
+[data-ui-primary-value]{--_primary-tone:var(--accent-color,var(--primary-color,#2196f3));min-width:0;color:var(--primary-text-color,#20252b);font:inherit;text-align:start}
 [data-ui-primary-value] .primary-value{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin:0;font-size:var(--ui-primary-size,60px);line-height:1.15;font-weight:650;letter-spacing:-.055em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 [data-ui-primary-value] .primary-number{display:block;min-width:0;max-width:100%;overflow-wrap:anywhere}
 [data-ui-primary-value] button.primary-number{font:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:inherit}[data-ui-primary-value] button:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px;border-radius:3px}
 [data-ui-primary-value] .primary-value small{display:block;margin:8px 0 0;font-size:var(--ui-primary-unit-size,16px);line-height:1.4;font-weight:400;letter-spacing:-.03em;color:var(--secondary-text-color,#626a78)}
-[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid color-mix(in srgb,var(--_primary-tone) 55%,transparent);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
-[data-ui-primary-value] button.primary-label{display:block;max-width:100%;min-height:0;margin-bottom:0;padding-block:0;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
+[data-ui-primary-value] .primary-label{margin-top:6px;padding-inline-start:8px;border-inline-start:2px solid var(--_primary-tone);font-size:11px;line-height:1.4;font-weight:400;letter-spacing:0;color:var(--secondary-text-color,#626a78);overflow-wrap:anywhere}
+[data-ui-primary-value] button.primary-label{display:flex;align-items:center;box-sizing:border-box;max-width:100%;min-width:44px;min-height:44px;margin-bottom:0;padding-block:6px;padding-inline-end:0;border-block:0;border-inline-end:0;border-radius:0;background:none;font-family:inherit;text-align:start;cursor:pointer}
 [data-ui-primary-value][data-density=compact] .primary-value{font-size:var(--ui-primary-size,46px)}
 [data-ui-primary-value][data-density=compact] .primary-value small{font-size:var(--ui-primary-unit-size,14px);margin-top:5px}
+/* One opt-in composition owns value, unit and subtitle geometry for all cards. */
+[data-ui-primary-value][data-primary-layout=uniform]{--ui-primary-size:44px;--ui-primary-unit-size:16px}
+[data-ui-primary-value][data-primary-layout=uniform][data-density=compact]{--ui-primary-size:36px;--ui-primary-unit-size:14px}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-value{display:flex;align-items:flex-start;flex-wrap:nowrap;gap:6px;min-height:44px;font-size:var(--ui-primary-size);line-height:1.1;font-weight:650;letter-spacing:-.035em;white-space:nowrap;overflow-wrap:normal}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-number{display:block;min-width:0;min-height:0;max-width:none;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+[data-ui-primary-value][data-primary-layout=uniform] button.primary-number{min-height:44px}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-value small{flex:none;margin:6px 0 0;font-size:var(--ui-primary-unit-size);line-height:1.4;letter-spacing:0;white-space:nowrap}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=baseline] .primary-value{align-items:baseline}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=baseline] .primary-value small{margin:0}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=center] .primary-value{align-items:center}
+[data-ui-primary-value][data-primary-layout=uniform][data-unit-position=center] .primary-value small{margin:0}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-label{position:relative;display:flex;align-items:flex-start;box-sizing:border-box;min-width:0;min-height:44px;max-width:100%;margin:2px 0 0;padding:0 0 0 8px;border:0;border-radius:0;background:none;font-family:inherit;font-size:12px;font-weight:400;line-height:1.4;letter-spacing:0;color:var(--secondary-text-color,#626a78);text-align:start;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+[data-ui-primary-value][data-primary-layout=uniform] .primary-label::before{content:'';position:absolute;inset-inline-start:0;top:2px;width:2px;height:12px;border-radius:1px;background:var(--_primary-tone)}
 `;}
 
 
@@ -689,9 +775,10 @@ function uiMetricStyles(){return uiSurfaceStyles('[data-ui-metric]')+`
 [data-ui-metric][data-density=compact] .ui-metric-icon{width:20px;height:20px;border-radius:6px;transform:translate(2px,-2px)}
 [data-ui-metric][data-density=compact] .ui-metric-icon svg,[data-ui-metric][data-density=compact] .ui-metric-icon ha-icon{width:16px;height:16px;--mdc-icon-size:16px}
 [data-ui-metric][data-density=compact] .ui-metric-value{font-size:20px}
+[data-ui-metric][data-value-kind=text] .ui-metric-value{font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-.03em;white-space:normal;overflow-wrap:break-word}
 [data-ui-metric][data-density=compact] .ui-metric-info{margin-top:4px;padding-top:4px}
 [data-ui-metric][data-unavailable=true]{--_metric-tone:var(--secondary-text-color,#626a78)}
-button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:hover{filter:brightness(1.04)}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
+button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]:not(:disabled):hover{background:color-mix(in srgb,var(--secondary-background-color,#eee) 94%,var(--primary-text-color,#20252b));color:var(--primary-text-color,#20252b);filter:none}button[data-ui-metric]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
 [data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
 [data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
 @supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
@@ -712,7 +799,11 @@ function bindUITabs({tabs,panels,onSelect=()=>{}}){
   const target=buttons.find(tab=>tab.dataset.uiTab===value&&!tab.disabled);if(!target)return false;
   for(const tab of buttons){const active=tab===target;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
   for(const panel of sections)panel.hidden=panel.dataset.uiTabPanel!==value;
-  if(focus)target.focus({preventScroll:true});if(notify)onSelect(value,target);return true;
+  if(focus)target.focus({preventScroll:true});
+  // Keep a selected tab visible within a scrolling strip without moving the page.
+  const list=target.parentElement;
+  if(list&&list.scrollWidth>list.clientWidth&&target.getBoundingClientRect){const box=target.getBoundingClientRect(),view=list.getBoundingClientRect();list.scrollLeft+=box.left<view.left?box.left-view.left:box.right>view.right?box.right-view.right:0;}
+  if(notify)onSelect(value,target);return true;
  };
  for(const tab of buttons){
   const click=()=>select(tab.dataset.uiTab,{focus:true});
@@ -746,6 +837,24 @@ ${uiTabIndicatorStyles()}
 [data-ui-tabs][data-ui-card-tabs] [role=tab][aria-selected=true]{font-weight:600}
 [data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
+
+function uiBalancedTabsStyles(){
+ const strip=':host [data-ui-tabs][role=tablist]';
+ const tab=strip+' [role=tab][data-ui-tab]';
+ return `
+${strip}{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:stretch;gap:0;width:100%;box-sizing:border-box;padding:0;border:0;background:transparent;box-shadow:none;overflow:visible}
+${strip}:has(>[role=tab]:nth-child(4)){display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+${strip}::-webkit-scrollbar{display:none}
+${strip}:has(>[role=tab]:nth-child(4)) [role=tab][data-ui-tab]{flex:1 0 88px}
+${tab}{display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:44px;max-width:none;min-height:44px;height:auto;margin:0;padding:5px 6px 3px;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--secondary-text-color,#666);font-family:inherit;font-size:13px;font-weight:400;line-height:1.3;text-align:center;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;text-decoration:none;transform:none}
+${tab}:not(:disabled):hover{color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none;transform:none}
+${tab}[aria-selected=true],${tab}[aria-selected=true]:not(:disabled):hover{color:var(--primary-text-color,#20252b);font-weight:400;background:transparent;box-shadow:none;text-decoration:none;transform:none}
+${uiTabIndicatorStyles({strip,tab,color:'var(--accent-color,var(--primary-color))'})}
+${tab}:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
+${strip}~[data-ui-tab-panel]{border:0;padding-block-start:12px;background:transparent}
+@media(forced-colors:active){${strip}{border-bottom-color:CanvasText}${tab}[aria-selected=true]{border-bottom-color:Highlight;outline:1px solid Highlight;outline-offset:-2px;box-shadow:none}${tab}:focus-visible{outline:2px solid CanvasText;outline-offset:-4px}}
+`;
+}
 
 
 const entityTabText=value=>typeof value==='string'?value.trim():'';
@@ -1007,7 +1116,52 @@ class SharedGraph {
     return true;
   }
   static tooltipStyles() {
-    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-value{font-weight:600;font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+    return uiSurfaceStyles('.tooltip')+`.tooltip{position:absolute;z-index:4;box-sizing:border-box;min-width:0;max-width:calc(100% - 8px);padding:12px;border:0;border-radius:8px;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;overflow:auto;overflow-wrap:anywhere;pointer-events:none}.tooltip[hidden]{display:none}.tooltip strong{display:block;margin-bottom:10px;font-size:12px;font-weight:600;white-space:normal}.tooltip span{display:grid;grid-template-columns:7px minmax(0,1fr);column-gap:7px;padding:5px 0;white-space:normal;align-items:baseline}.tooltip i{display:block;width:7px;height:7px;border:0;border-radius:2px;background:var(--series-color)}.tooltip b{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;font-weight:400;min-width:0;overflow-wrap:anywhere}.tooltip .tooltip-label{font-style:normal;color:var(--secondary-text-color,#9ca3af)}.tooltip .tooltip-value{font-weight:600;color:var(--primary-text-color,#20252b);font-style:normal;text-align:right;white-space:normal;overflow-wrap:anywhere}.tooltip small{display:block;grid-column:2;color:var(--secondary-text-color,#666);font-size:10px;white-space:normal;font-variant-numeric:tabular-nums}`;
+  }
+  static tooltipPlacement({left,right,top,bottom,width,height,x,y,markers=[],gap=6}) {
+    const clamp=(value,min,max)=>Math.max(min,Math.min(value,Math.max(min,max)));
+    const candidates=[];
+    for(const dx of [gap,-width-gap])for(const dy of [gap,-height-gap]){
+      const l=clamp(x+dx,left,right-width),t=clamp(y+dy,top,bottom-height);
+      const overlaps=markers.filter(m=>(m.right??m.x+4)>l-3&&(m.left??m.x-4)<l+width+3&&(m.bottom??m.y+4)>t-3&&(m.top??m.y-4)<t+height+3).length;
+      const coversPointer=x>=l&&x<=l+width&&y>=t&&y<=t+height;
+      const distance=Math.max(l-x,0,x-l-width)+Math.max(t-y,0,y-t-height);
+      const clipped=Math.abs(l-x-dx)+Math.abs(t-y-dy);
+      candidates.push({left:l,top:t,score:overlaps*10000+(coversPointer?100000:0)+distance+clipped});
+    }
+    const best=candidates.sort((a,b)=>a.score-b.score)[0];return {left:best.left,top:best.top};
+  }
+  static rememberTooltipPointer(host,event) {
+    host._tooltipPointer=Number.isFinite(event?.clientX)&&Number.isFinite(event?.clientY)?{x:event.clientX,y:event.clientY}:null;
+  }
+  static positionTooltip(host,{chart,tooltip,x,y,markers=[],local=true}) {
+    const box=chart.getBoundingClientRect(),sx=box.width/(chart.clientWidth||box.width)||1,sy=box.height/(chart.clientHeight||box.height)||1;
+    const content=host.shadowRoot?.querySelector('.card-content,.content')?.getBoundingClientRect?.()??box;
+    let left=Math.max(box.left+4,8),right=Math.min((box.right??box.left+box.width)-4,globalThis.window?.innerWidth-8||Infinity);
+    let top=Math.max(content.top+4,8),bottom=Math.min((content.bottom??content.top+content.height)-4,globalThis.window?.innerHeight-8||Infinity);
+    // Respect clipping parents and HA shadow-tree scrolling containers.
+    for(let node=chart.parentElement;node;node=node.parentElement??node.getRootNode?.().host){
+      if(!globalThis.getComputedStyle||!node.getBoundingClientRect)continue;
+      const style=getComputedStyle(node),r=node.getBoundingClientRect();
+      if(/auto|scroll|hidden|clip/.test(style.overflowX)){left=Math.max(left,r.left+4);right=Math.min(right,r.right-4);}
+      if(/auto|scroll|hidden|clip/.test(style.overflowY)){top=Math.max(top,r.top+4);bottom=Math.min(bottom,r.bottom-4);}
+    }
+    right=Math.max(left,right);bottom=Math.max(top,bottom);
+    tooltip.style.maxWidth=`${(right-left)/sx}px`;tooltip.style.maxHeight=`${(bottom-top)/sy}px`;
+    const measured=tooltip.getBoundingClientRect(),active=this.hoverState().get(this.hoverGroup(host));
+    const pointer=(local||active?.source===host)?host._tooltipPointer:null;
+    const anchor=pointer??{x:box.left+x,y:box.top+y};
+    const placement=this.tooltipPlacement({left,right,top,bottom,width:measured.width,height:measured.height,x:anchor.x,y:anchor.y,markers:markers.map(m=>({left:box.left+(m.left??m.x-4),right:box.left+(m.right??m.x+4),top:box.top+(m.top??m.y-4),bottom:box.top+(m.bottom??m.y+4)}))});
+    tooltip.style.left=`${(placement.left-box.left)/sx}px`;tooltip.style.top=`${(placement.top-box.top)/sy}px`;
+    return placement;
+  }
+  static yGrid(axes, height = 300, width = 1000) {
+    const positions = new Map();
+    for (const axis of axes) for (const value of axis.ticks) {
+      const y = Number(((axis.max - value) / (axis.max - axis.min) * height).toFixed(6));
+      positions.set(y, positions.get(y) || value === 0);
+    }
+    return `<g class="y-grid" aria-hidden="true" pointer-events="none">${[...positions].map(([y,zero])=>`<line class="y-grid-line" x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color,#ddd)" stroke-width="0.8" stroke-opacity="${zero ? 1 : .65}" vector-effect="non-scaling-stroke"/>`).join('')}</g>`;
   }
   static publishHover(host, timestamp) {
     const group = this.hoverGroup(host);
@@ -1502,36 +1656,38 @@ const evccHistoryMethods = {
   if (!this._entities.power) return '';
   const title = dutch ? 'Laadverloop' : 'Charging power';
   const points = this._historyData ?? [];
-  if (!points.some(point => point.value != null)) return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><p class="notice">${this._historyLoading ? (dutch ? 'Laadverloop laden…' : 'Loading charge history…') : this._historyMissingSession ? (dutch ? 'Sessiebegin niet beschikbaar. Controleer de historie van de aangesloten-sensor.' : 'Session start unavailable. Check the connection sensor history.') : (dutch ? 'Geen vermogenshistorie beschikbaar.' : 'No power history available.')}</p></div>`;
+  if (!points.some(point => point.value != null)) return `<div class="history"><div class="chart-head"><span>${title}</span></div><p class="notice">${this._historyLoading ? (dutch ? 'Laadverloop laden…' : 'Loading charge history…') : this._historyMissingSession ? (dutch ? 'Sessiebegin niet beschikbaar. Controleer de historie van de aangesloten-sensor.' : 'Session start unavailable. Check the connection sensor history.') : (dutch ? 'Geen vermogenshistorie beschikbaar.' : 'No power history available.')}</p></div>`;
   const {start, end} = this._historyRange, max = Math.max(2, Math.ceil(points.reduce((maximum, p) => Math.max(maximum, p.value ?? 0), 0) / 2) * 2);
-  const x = time => 38 + (time - start) / (end - start) * 256, y = value => value == null ? NaN : 100 - value / max * 88;
+  const x = time => (time - start) / (end - start) * 300, y = value => value == null ? NaN : 112 - value / max * 104;
   const graph = this._historyGraph ??= new SharedGraph();
   const coordinates = points.map(p => [x(p.time), y(p.value)]);
-  const svg = graph.render({shadowRoot: this.shadowRoot, isConnected: false}, {viewBox: '0 0 300 120', defs: '<defs><linearGradient id="evcc-power-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--primary-color,#2196f3)" stop-opacity=".22"/><stop offset="100%" stop-color="var(--primary-color,#2196f3)" stop-opacity="0"/></linearGradient></defs>', before: '<path class="grid-line" d="M38 12H294M38 56H294"/><path class="grid-line grid-zero" d="M38 100H294"/>', fills: [{d: evccHistoryArea(coordinates, 100), className: 'power-area', fill: 'url(#evcc-power-fade)'}], lines: [{d: SharedGraph.path(coordinates, 'step'), className: 'series-line', appearance: {...graphLineStyle('solid', 2), stroke: 'var(--primary-color,#2196f3)'}}], after: '<path class="cursor" hidden/>'});
+  const svg = graph.render({shadowRoot: this.shadowRoot, isConnected: false}, {viewBox: '0 0 300 120', defs: '<defs><linearGradient id="evcc-power-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--primary-color,#2196f3)" stop-opacity=".22"/><stop offset="100%" stop-color="var(--primary-color,#2196f3)" stop-opacity="0"/></linearGradient></defs>', before: '<path class="grid-line" d="M0 8H300M0 60H300"/><path class="grid-line grid-zero" d="M0 112H300"/>', fills: [{d: evccHistoryArea(coordinates, 112), className: 'power-area', fill: 'url(#evcc-power-fade)'}], lines: [{d: SharedGraph.path(coordinates, 'step'), className: 'series-line', appearance: {...graphLineStyle('solid', 3.5), stroke: 'var(--primary-color,#2196f3)'}}], after: '<path class="cursor" hidden/>'});
   const format = time => new Intl.DateTimeFormat(this._hass.locale?.language ?? this._hass.language ?? 'en', {...(end-start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(time);
   this._historyGeometry = {x, y, points};
-  return `<div class="history"><div class="chart-head"><span>${title}</span><span>kW</span></div><div class="plot" tabindex="0" role="group" aria-label="${dutch ? 'Laadvermogen. Gebruik links en rechts voor meetpunten.' : 'Charging power. Use left and right for readings.'}">${svg}<span class="point hover-dot" aria-hidden="true" hidden></span>${[max, max / 2, 0].map((value, index) => `<span class="axis-y" style="top:${10 + index * 36.6667}%">${value}</span>`).join('')}<div class="tooltip" hidden><strong></strong><span><i style="--series-color:var(--primary-color)"></i><b>${dutch ? 'Laadvermogen' : 'Charging power'} <em class="tooltip-value"></em></b></span></div></div><div class="chart-axis">${[start, (start + end) / 2, end].map(time => `<span>${uiEscape(format(time))}</span>`).join('')}</div><p class="sr-only chart-readout" aria-live="polite"></p></div>`;
+  return `<div class="history"><div class="chart-head"><span>${title}</span></div><div class="history-chart"><span class="axis-unit">kW</span><div class="chart-scale" aria-hidden="true">${[max, max / 2, 0].map(value => `<span class="axis-y" style="top:${y(value) / 120 * 100}%">${value}</span>`).join('')}</div><div class="plot" tabindex="0" role="group" aria-label="${dutch ? 'Laadvermogen. Gebruik links en rechts voor meetpunten.' : 'Charging power. Use left and right for readings.'}">${svg}<span class="point hover-dot" aria-hidden="true" hidden></span><div class="tooltip" hidden><strong></strong><span><i style="--series-color:var(--primary-color)"></i><b>${dutch ? 'Laadvermogen' : 'Charging power'} <em class="tooltip-value"></em></b></span></div></div><div class="chart-axis">${[start, (start + end) / 2, end].map(time => `<span>${uiEscape(format(time))}</span>`).join('')}</div></div><p class="sr-only chart-readout" aria-live="polite"></p></div>`;
  },
  _bindHistory() {
   const plot = this.shadowRoot.querySelector('.plot');
   if (!plot) return;
   const {points, x, y} = this._historyGeometry, tooltip = plot.querySelector('.tooltip');
   const hide = () => { tooltip.hidden = true; plot.querySelector('.cursor').setAttribute('hidden', ''); plot.querySelector('.point').setAttribute('hidden', ''); };
-  const select = index => {
+  const select = (index,event) => {
+   SharedGraph.rememberTooltipPointer(this,event);
    this._historyIndex = Math.max(0, Math.min(points.length - 1, index));
    const point = points[this._historyIndex];
    if (point.value == null) { hide(); return; }
    const cursor = plot.querySelector('.cursor'), dot = plot.querySelector('.point');
-   cursor.removeAttribute('hidden'); dot.removeAttribute('hidden'); cursor.setAttribute('d', `M${x(point.time)} 12V100`); dot.style.left = `${x(point.time) / 300 * 100}%`; dot.style.top = `${y(point.value) / 120 * 100}%`;
+   cursor.removeAttribute('hidden'); dot.removeAttribute('hidden'); cursor.setAttribute('d', `M${x(point.time)} 8V112`); dot.style.left = `${x(point.time) / 300 * 100}%`; dot.style.top = `${y(point.value) / 120 * 100}%`;
    const language = this._hass.locale?.language ?? this._hass.language ?? 'en';
    tooltip.hidden = false; tooltip.querySelector('strong').textContent = new Intl.DateTimeFormat(language, {...(this._historyRange.end-this._historyRange.start >= 86400000 ? {day:'numeric',month:'short'} : {}),hour: '2-digit', minute: '2-digit', timeZone: this._hass.config?.time_zone ?? 'UTC'}).format(point.time);
    tooltip.querySelector('.tooltip-value').textContent = new Intl.NumberFormat(language, {maximumFractionDigits: 2}).format(point.value) + ' kW';
-   tooltip.style.left = x(point.time) < 166 ? 'auto' : '38px'; tooltip.style.right = x(point.time) < 166 ? '6px' : 'auto';
+   const box=plot.getBoundingClientRect();tooltip.style.right='auto';
+   SharedGraph.positionTooltip(this,{chart:plot,tooltip,x:x(point.time)/300*box.width,y:y(point.value)/120*box.height});
    this.shadowRoot.querySelector('.chart-readout').textContent = tooltip.textContent;
   };
   plot.addEventListener('pointermove', event => {
    const rect = plot.getBoundingClientRect(), position = (event.clientX - rect.left) / rect.width * 300;
-   select(points.reduce((best, point, index) => Math.abs(x(point.time) - position) < Math.abs(x(points[best].time) - position) ? index : best, 0));
+   select(points.reduce((best, point, index) => Math.abs(x(point.time) - position) < Math.abs(x(points[best].time) - position) ? index : best, 0),event);
   });
   plot.addEventListener('pointerleave', hide); plot.addEventListener('blur', hide);
   plot.addEventListener('focus', () => select(this._historyIndex ?? points.length - 1));
@@ -1543,6 +1699,7 @@ const evccHistoryMethods = {
   });
  },
 };
+
 
 
 
@@ -1567,12 +1724,12 @@ const evccSolarMethods = {
   const value = this._pendingSolar?.value ?? this._solarDraft ?? current;
   const disabled = !range || this._offline() || !!this._pendingSolar || typeof this._hass.callService !== 'function';
   const label = dutch ? 'Zonnevoorkeur' : 'Solar preference';
-  return `<div class="solar-setting"><dl class="metrics solar-metric"><div><dt><label for="solar-share">${label}</label></dt><dd><output for="solar-share" data-solar-output>${this._config.show_controls ? this._solarValue(value) : this._reading('solar_share', dutch)}</output>${this._config.show_controls ? `<input id="solar-share" type="range" data-solar-share min="${range?.min ?? 0}" max="${range?.max ?? 100}" step="${range?.step ?? 10}" value="${value ?? 0}" aria-label="${label}" aria-valuetext="${uiEscape(value == null ? (dutch ? 'Niet beschikbaar' : 'Unavailable') : value + '%')}" aria-describedby="solar-preference-description"${disabled ? ' disabled' : ''}>` : ''}</dd></div></dl><span id="solar-preference-description" class="sr-only">${dutch ? 'Minimum aandeel zon' : 'Minimum solar share'}</span><p id="solar-hint" class="solar-hint" hidden>${uiEscape(evccSolarHint(value, dutch))}</p>${this._pendingSolar ? `<p class="notice" role="status">${dutch ? 'Solar share instellen…' : 'Setting solar share…'}</p>` : ''}${this._solarError ? `<p class="notice error" role="alert">${uiEscape(this._solarError)}</p>` : ''}</div>`;
+  return `<div class="solar-setting"><dl class="metrics solar-metric"><div><dt><label for="solar-share">${label}</label></dt><dd><output for="solar-share" data-solar-output>${this._config.show_controls ? this._solarValue(value) : this._reading('solar_share', dutch)}</output>${this._config.show_controls ? uiSlider({value:value??0,min:range?.min??0,max:range?.max??100,step:range?.step??10,disabled,attrs:{id:'solar-share','data-solar-share':'','aria-label':label,'aria-valuetext':value==null?(dutch?'Niet beschikbaar':'Unavailable'):value+'%','aria-describedby':'solar-preference-description'}}) : ''}</dd></div></dl><span id="solar-preference-description" class="sr-only">${dutch ? 'Minimum aandeel zon' : 'Minimum solar share'}</span><p id="solar-hint" class="solar-hint" hidden>${uiEscape(evccSolarHint(value, dutch))}</p>${this._pendingSolar ? `<p class="notice" role="status">${dutch ? 'Solar share instellen…' : 'Setting solar share…'}</p>` : ''}${this._solarError ? `<p class="notice error" role="alert">${uiEscape(this._solarError)}</p>` : ''}</div>`;
  },
  _bindSolar() {
   const input = this.shadowRoot.querySelector('[data-solar-share]');
   if (!input) return;
-  const progress = () => input.style.setProperty('--solar-position', ((Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min)) * 100) + '%');
+  const progress = () => syncUISlider(input);
   progress();
   input.addEventListener('input', progress);
   input.addEventListener('pointerdown', () => { if (!input.disabled) this._solarEditing = true; });
@@ -1641,14 +1798,6 @@ const galleryStatusStyles=`
  .live-readings{align-items:stretch}.live-readings>div{display:grid;grid-template-rows:auto auto auto;gap:2px;align-content:start;box-sizing:border-box;min-height:0;padding:12px}
  .live-readings .eyebrow{font-size:11px;line-height:1.4;margin:0}.live-readings .live-value{font-size:24px;line-height:1.25;font-weight:650;margin:0;letter-spacing:-.03em}.live-readings .live-sub{font-size:11px;line-height:24px;align-self:stretch;min-height:24px;margin:0}
  @supports(grid-template-rows:subgrid){.live-readings{grid-template-rows:auto auto auto;row-gap:2px}.live-readings>div{grid-row:span 3;grid-template-rows:subgrid}}
- .battery-track{height:12px;border-radius:7px;background:color-mix(in srgb,var(--secondary-background-color) 80%,var(--ha-card-background,var(--card-background-color,#fff)));isolation:isolate}
- .battery-fill{position:relative;overflow:hidden;isolation:isolate;border-radius:7px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color,#2196f3) 85%,#fff),var(--primary-color,#2196f3))}
- .target-marker{top:-3px;height:18px;z-index:3;pointer-events:none}
- .battery-fill::before{content:none;position:absolute;inset:0 auto 0 0;width:42%;border-radius:inherit;pointer-events:none;background:linear-gradient(105deg,transparent 0%,#ffffff22 20%,#ffffffbb 43%,#fffffff2 52%,#ffffff88 63%,transparent 100%)}
- @media(prefers-reduced-motion:no-preference){
-  .content:is([data-tone=charging],[data-tone=planned]) .battery-fill::before{content:'';animation:battery-sweep var(--power-duration,6s) linear infinite;animation-play-state:var(--power-motion,paused);animation-delay:var(--power-delay,0s)}
- }
- @keyframes battery-sweep{0%{transform:translateX(-110%);opacity:0}8%{opacity:1}90%{opacity:1}100%{transform:translateX(250%);opacity:0}}
  :host([data-motion=paused]) *,:host([data-motion=paused]) ::before,:host([data-motion=paused]) ::after{animation-play-state:paused!important}
 `;
 
@@ -1661,11 +1810,6 @@ const evccGalleryStyles=`
  .status-line{padding:10px 12px;background:var(--secondary-background-color);border:0;border-radius:7px;margin-bottom:8px}
  .live-readings{gap:16px;border:0;padding:0}.live-readings>div{padding:10px 12px;background:var(--secondary-background-color);border:0;border-radius:7px}.live-value{font-size:24px}
  .mode-options{margin-top:0}.solar-setting{margin-top:16px;padding:12px;background:var(--secondary-background-color);border-radius:7px}.solar-setting-head{gap:10px;align-items:center}.solar-setting-head label{display:flex;align-items:center;gap:9px;min-width:0;font-size:11px}.solar-setting-head ha-icon{--mdc-icon-size:18px;flex:none;padding:7px;border-radius:50%;background:color-mix(in srgb,var(--primary-color) 12%,transparent);color:var(--primary-color)}.solar-title{display:flex;flex-direction:column;gap:1px}.solar-title strong{font-size:11px;font-weight:600;line-height:1.4;color:var(--primary-text-color)}.solar-title small{font-size:10px;line-height:1.4;color:var(--secondary-text-color)}.solar-setting-head output{flex:none;color:var(--primary-color);font-size:18px;font-weight:600;letter-spacing:-.02em;padding:5px 8px;border-radius:6px;background:var(--ha-card-background)}
- input[data-solar-share]{appearance:none;-webkit-appearance:none;height:36px;margin:6px 0 0;background:transparent;--solar-position:60%;--solar-track:color-mix(in srgb,var(--secondary-background-color) 80%,var(--ha-card-background,var(--card-background-color,#fff)));touch-action:pan-y}
- input[data-solar-share]::-webkit-slider-runnable-track{height:12px;border-radius:7px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color) 85%,#fff),var(--primary-color)) left / var(--solar-position) 100% no-repeat,var(--solar-track)}
- input[data-solar-share]::-moz-range-track{height:12px;border-radius:7px;background:var(--solar-track)}input[data-solar-share]::-moz-range-progress{height:12px;border-radius:7px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color) 85%,#fff),var(--primary-color))}
- input[data-solar-share]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:16px;height:22px;border-radius:5px;background:var(--ha-card-background,var(--card-background-color,#fff));border:2px solid var(--primary-color);box-shadow:0 1px 3px #0002;margin-top:-5px}
- input[data-solar-share]::-moz-range-thumb{box-sizing:border-box;width:16px;height:22px;border-radius:5px;background:var(--ha-card-background,var(--card-background-color,#fff));border:2px solid var(--primary-color);box-shadow:0 1px 3px #0002}
  .solar-setting-head output{padding:0;border-radius:0;background:transparent;font-variant-numeric:tabular-nums}
  .solar-scale{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:10px;color:var(--secondary-text-color);margin:0 1px 10px;font-variant-numeric:tabular-nums}.solar-scale span:first-child,.solar-scale span:last-child{display:flex;flex-direction:column;gap:1px}.solar-scale span:last-child{text-align:right}.solar-scale b{font-size:10px;font-weight:400;color:var(--primary-text-color)}.solar-hint{line-height:1.5;padding-top:10px;border-top:1px solid var(--divider-color)}
  .solar-setting{padding:0;background:transparent;border:0;border-radius:0}.solar-scale{margin-bottom:0}
@@ -1692,6 +1836,7 @@ const evccGalleryStyles=`
 
 
 
+
 function evccCardStyles() { return `
 :host{display:block;min-width:0;height:100%;min-height:0;container-type:inline-size}
 ha-card{display:block;height:100%;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);font:inherit}
@@ -1703,7 +1848,6 @@ header{display:flex;align-items:center;justify-content:space-between;flex-wrap:w
 .car-name{font-size:12px;font-weight:600;overflow-wrap:anywhere;margin-bottom:2px;line-height:1.4;color:var(--secondary-text-color,#666)}.picture{min-width:0;display:grid;place-items:center;min-height:120px}.picture img{width:112%;max-width:460px;height:132px;margin-left:-10%;object-fit:contain;display:block;filter:drop-shadow(0 10px 7px #0002)}.picture ha-icon{--mdc-icon-size:86px;color:var(--secondary-text-color,#666)}.picture small{text-align:center;color:var(--secondary-text-color,#666);font-size:11px;overflow-wrap:anywhere}
 button{font:inherit;color:inherit;cursor:pointer;background:transparent;border:0;padding:0;text-align:start;min-height:24px;max-width:100%;overflow-wrap:anywhere}button:not(:disabled):hover{color:var(--primary-color,#2196f3)}button:focus-visible,.plot:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:2px;border-radius:3px}button:disabled{cursor:default}
 .eyebrow{display:block;color:var(--secondary-text-color,#666);font-size:11px;line-height:1.4}.battery-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0;min-width:0}.battery-value{font-size:44px;line-height:1.15;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.035em;min-width:0}.battery-meta{min-width:0;max-width:100%;text-align:start}.target,.range{display:flex;align-items:baseline;justify-content:flex-start;flex-wrap:wrap;gap:0 5px;font-size:11px;color:var(--secondary-text-color,#666)}.range>button{font-size:12px;font-weight:600;color:var(--primary-text-color,#20252b)}
-.battery-track,.solar-strip{height:5px;background:var(--secondary-background-color,#eee);border-radius:5px;position:relative;margin-right:1px}.battery-fill,.solar-strip span{height:100%;background:var(--primary-color,#2196f3);border-radius:inherit;display:block}.target-marker{position:absolute;top:-3px;height:11px;width:2px;background:var(--primary-text-color,#20252b);transform:translateX(-1px)}
 .status-line{display:flex;align-items:center;gap:8px;padding:10px 12px;border-left:2px solid var(--evcc-glow);border-radius:7px;background:linear-gradient(100deg,color-mix(in srgb,var(--evcc-glow) 10%,transparent),transparent);margin-bottom:12px}.status-line ha-icon{--mdc-icon-size:18px;flex:none;color:var(--evcc-glow)}.status-line strong{font-size:14px;font-weight:600}.status-line p{font-size:11px;line-height:1.4;margin:2px 0 0;color:var(--secondary-text-color,#666)}
 .live-readings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.live-readings>div{padding:10px 12px;background:var(--secondary-background-color,#eee);border-radius:7px;min-width:0}.live-value{font-size:24px;font-weight:650;line-height:1.35;font-variant-numeric:tabular-nums;letter-spacing:-.03em}.live-sub{font-size:11px;line-height:1.4;color:var(--secondary-text-color,#666);display:block;overflow-wrap:anywhere}
 dl{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.metrics>div{min-width:0}.metrics dt{font-size:11px;color:var(--secondary-text-color,#666);overflow-wrap:anywhere;line-height:1.4;margin-bottom:2px}.metrics dd{margin:0;min-width:0;font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -1740,9 +1884,72 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content{--ui-metric-tone:var(--tone)}.charging-status{margin-top:16px}.content[data-density=compact] .charging-status{margin-top:12px}
 .charging-readings{margin:0}.car-stage .battery-row{margin-top:0}.car-stage header{margin-top:0;padding-top:8px}.content[data-density=compact] .car-stage .battery-row,.content[data-density=compact] .car-stage header{margin-top:0}.content[data-density=compact] .car-stage header{padding-top:6px}
 .header-region .ui-metric-value button{font:inherit;line-height:inherit;letter-spacing:inherit;min-height:0}.header-region .ui-metric-info button{font:inherit;line-height:inherit;min-height:0;vertical-align:baseline}
-.hero{padding-top:0}.battery-track,.battery-fill{border-radius:var(--ui-metric-radius,8px)}
+.hero{padding-top:0}
 .battery-row [data-ui-primary-value]{max-width:160px}
+/* Vehicle media follows the complete summary in both Auto and EVCC. */
+.car-stage{grid-template-columns:minmax(0,1fr);min-height:0}
+.car-stage .picture{position:relative;grid-column:1;grid-row:2;inset:auto;width:100%;height:145px;margin-top:12px}
+[data-ui-metric] .ui-metric-icon{grid-row:1}
+[data-ui-metric] .ui-metric-value{grid-column:1/-1;overflow-wrap:normal;word-break:normal;white-space:nowrap}
+[data-ui-metric] .ui-metric-title{overflow-wrap:normal;word-break:normal}
+[data-ui-metric] .ui-metric-value button{overflow-wrap:normal;word-break:normal;white-space:inherit}
+.car-status .ui-metric-value,.charging-status .ui-metric-value{white-space:normal}
+@container(max-width:340px){.car-readings,.charging-readings{grid-template-columns:minmax(0,1fr);row-gap:12px}}
+.content[data-density=compact] .car-stage{min-height:0}
+.content[data-density=compact] .car-stage .picture{height:108px}
+/* Opt in locally; shared tab defaults remain protected for House. */
+.mode-options [data-ui-button]{min-height:44px;border-bottom:0;text-decoration:none}
+.mode-options [aria-pressed=true],.mode-options button[aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));transform:translateY(1px)}
+/* EVCC-only refinement: regular Auto keeps its approved renderer and paint. */
+.content[data-evcc] h2{font-size:16px;font-weight:600}
+.content[data-evcc] .gallery-top{margin:0 0 12px;padding:0;background:none}
+.content[data-evcc] .hero{padding:0;margin:0}
+.content[data-evcc] .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:12px;min-height:0;padding:0}
+.content[data-evcc] .car-stage::before,.content[data-evcc] .car-stage::after{content:none}
+.content[data-evcc] .car-stage .battery-row{grid-column:1;grid-row:1;min-width:0;margin:0;z-index:1}
+.content[data-evcc] .battery-row [data-ui-primary-value]{max-width:100%;width:100%}
+.content[data-evcc] .car-stage .picture{position:relative;grid-column:2;grid-row:1;width:100%;height:112px;min-height:0;margin:0;inset:auto;overflow:hidden;z-index:0}
+.content[data-evcc] .picture img{position:absolute;width:100%;height:100%;left:calc(50% + var(--evcc-image-offset-x,0px));bottom:calc(-1 * var(--evcc-image-offset-y,0px));max-width:none;margin:0;object-fit:contain;filter:none;transform:translateX(-50%) scale(var(--evcc-image-scale,1));transform-origin:center center}
+.content[data-evcc] .picture ha-icon{--mdc-icon-size:64px}
+.content[data-evcc] .battery-meta{display:none}
+.hero>.battery-progress{margin-top:8px}
+.content[data-evcc] .charging-status{margin-top:0}
+.content[data-evcc] [data-ui-metric]{background:var(--secondary-background-color);--ui-metric-tone:var(--secondary-text-color)}
+.content[data-evcc] .charging-status .ui-metric-icon{color:var(--status-accent)}
+.content[data-evcc] [data-ui-metric] .ui-metric-value::before{content:none}
+.content[data-evcc] .charging-readings{column-gap:12px;grid-template-columns:repeat(var(--evcc-reading-columns,2),minmax(0,1fr))}
+.content[data-evcc] .ui-metric-title,.content[data-evcc] .ui-metric-info{overflow-wrap:normal;word-break:normal}
+.content[data-evcc] .evcc-panel{padding-top:12px}
+.content[data-evcc] .evcc-tabs{margin-top:16px}
+.content[data-evcc] .mode-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,64px),1fr));gap:8px}
+.content[data-evcc] button:focus-visible,.content[data-evcc] input:focus-visible,.content[data-evcc] .plot:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
+.content[data-evcc] .mode-options [data-ui-button]{padding:8px 4px;font-size:13px}
+.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true],.content[data-evcc] .mode-options [data-ui-button][aria-pressed=true]:not(:disabled):hover{color:var(--accent-color,var(--primary-color));background:var(--eleven-material-selection-background,color-mix(in srgb,var(--accent-color,var(--primary-color)) 12%,var(--secondary-background-color)));border-bottom:0;text-decoration:none;box-shadow:var(--eleven-material-selection-well,none)}
+.content[data-evcc] input[data-solar-share]{min-height:44px;accent-color:var(--accent-color,var(--primary-color))}
+.content[data-evcc] .evcc-number{display:inline-block;white-space:nowrap}
+.content[data-evcc] .ui-metric-icon{grid-row:1}
+.content[data-evcc] [data-ui-metric] .ui-metric-value{grid-column:1/-1}
+.content[data-evcc] [data-ui-tabs][data-ui-card-tabs]{overflow:visible}
+.content[data-evcc] [data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 1 88px;min-width:min-content;max-width:100%;overflow:visible;text-overflow:clip}
+.content[data-evcc] .car-stage[data-hero-stacked]{grid-template-columns:minmax(0,1fr)}
+.content[data-evcc] .car-stage[data-hero-stacked] .picture{grid-column:1;grid-row:2}
+/* Axes share the plot bounds, with a fixed label gutter at every card width. */
+.history .chart-head{justify-content:flex-start;gap:6px;margin-bottom:8px}
+.history{padding-top:0;border-top:0}
+.history .chart-head{font-size:12px}
+.history-chart{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:0;row-gap:4px;min-width:0;padding:8px 12px 8px 8px;box-sizing:border-box}
+.history-chart>.axis-unit{grid-column:1/-1;grid-row:1;color:var(--secondary-text-color);font-size:10px;font-weight:600;line-height:1.2}
+.chart-scale{grid-column:1;grid-row:2;position:relative;min-width:0}
+.chart-scale .axis-y{left:auto;right:8px;text-align:end}
+.history-chart>.plot{grid-column:2;grid-row:2;min-width:0}
+.history-chart>.chart-axis{grid-column:2;grid-row:3;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:0;margin:0;line-height:1.4}
+.history-chart>.chart-axis>span{min-width:0;overflow-wrap:anywhere}
+.history-chart>.chart-axis>span:nth-child(2){text-align:center}
+.history-chart>.chart-axis>span:last-child{text-align:end}
+${uiBarStyles()}
 `; }
+
+
 
 
 
@@ -1796,7 +2003,7 @@ class EvccCard extends HTMLElement {
   this._render();
  }
  get hass() { return this._hass; }
- disconnectedCallback() { this._motionCleanup?.(); this._motionCleanup=null; this._cancelMode(); this._cancelSolar(); this._tabController?.disconnect(); clearInterval(this._clockTimer); this._clockTimer = null; this._resetHistory(); this._signature = null; }
+ disconnectedCallback() { this._evccLayoutObserver?.disconnect(); this._motionCleanup?.(); this._motionCleanup=null; this._cancelMode(); this._cancelSolar(); this._tabController?.disconnect(); clearInterval(this._clockTimer); this._clockTimer = null; this._resetHistory(); this._signature = null; }
  _cancelMode() { clearTimeout(this._modeTimer); this._pendingMode = null; this._actionVersion++; }
  getCardSize() { return this._config?.compact ? 8 : 12; }
  getGridOptions() { return {columns: 12, min_columns: 6, rows: this._config?.compact ? 10 : 12, min_rows: 3}; }
@@ -1812,9 +2019,10 @@ class EvccCard extends HTMLElement {
   const unit=field==='power'&&sourceUnit==='W'?'kW':sourceUnit;
   let markup=uiEscape(value??'\u2014');
   if(value!=null&&['remaining_duration','charge_duration'].includes(field)&&evccDuration(entity,dutch?'nl':'en')){
-   markup=markup.replace(/(\d+) (u|h|min)\b/g,'$1 <span class="ui-metric-unit">$2</span>');
+   markup=markup.replace(/(\d+) (u|h|min)\b/g,'<span class="evcc-number">$1</span> <span class="ui-metric-unit">$2</span>');
   }else if(value!=null&&evccNumber(entity)!=null&&unit&&value.endsWith(' '+unit)){
-   markup=uiEscape(value.slice(0,-unit.length).trimEnd())+' <span class="ui-metric-unit">'+uiEscape(unit)+'</span>';
+   markup='<span class="evcc-number">'+uiEscape(value.slice(0,-unit.length).trimEnd())+'</span> <span class="ui-metric-unit">'+uiEscape(unit)+'</span>';
+  }else if(value!=null&&evccNumber(entity)!=null){markup='<span class="evcc-number">'+uiEscape(value)+'</span>';
   }
   if(!interactive)return id?markup:'\u2014';
   return id ? `<button type="button" data-entity="${uiEscape(id)}" title="${uiEscape(id)}" aria-label="${uiEscape(evccLabel(field, dutch) + ': ' + (value ?? unavailable))}">${markup}${value == null ? `<span class="sr-only"> ${unavailable}</span>` : ''}</button>` : '—';
@@ -1880,9 +2088,28 @@ class EvccCard extends HTMLElement {
   return '<div class="charging-readings" data-ui-metric-grid>'+uiMetric({title:evccLabel('power',dutch),valueContent:this._reading('power',dutch,technical.length>0),action:!technical.length&&!!this._entities.power,attrs:!technical.length?{'data-entity':this._entities.power||''}:{},infoContent:technical.join(' &middot; '),icon:'mdi:lightning-bolt-outline',compact:this._config.compact})+uiMetric({title:view.kind==='done'?(dutch?'Laaddoel':'Charge target'):evccLabel('remaining_duration',dutch),valueContent:time,action:charging&&!!this._entities.remaining_duration,attrs:charging?{'data-entity':this._entities.remaining_duration||''}:{},info:this._config.compact?'':hint,icon:'mdi:timer-outline',compact:this._config.compact})+'</div>';
  }
 
+ _fitEvccLayout() {
+  this._evccLayoutObserver?.disconnect();
+  if (!this.isConnected || !this._config.evcc_enabled) return;
+  const root=this.shadowRoot,stage=root.querySelector('.car-stage'),primary=root.querySelector('.primary-value'),grid=root.querySelector('.charging-readings');
+  if(!stage||!primary)return;
+  const ctx=document.createElement('canvas').getContext('2d');
+  const width=(node,text=node.textContent)=>{const s=getComputedStyle(node);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;return ctx.measureText(text).width+Math.max(0,text.length-1)*(parseFloat(s.letterSpacing)||0);};
+  const fit=()=>{
+   if(!this.isConnected||!this._config.evcc_enabled||!stage.isConnected){this._evccLayoutObserver?.disconnect();return;}
+   const number=primary.querySelector('.primary-number'),unit=primary.querySelector('small'),s=getComputedStyle(primary),base=parseFloat(s.fontSize),slot=(stage.clientWidth-12)/3,reserve=(unit?.getBoundingClientRect().width||0)+(parseFloat(s.columnGap)||0),natural=width(primary,number?.textContent||'');
+   const stacked=base>48&&natural+reserve>slot;stage.toggleAttribute('data-hero-stacked',stacked);
+   if(number){const size=Math.floor(base*Math.min(1,Math.max(20,(stacked?stage.clientWidth:slot)-reserve)/Math.max(1,natural))*100)/100+'px';if(number.style.fontSize!==size)number.style.fontSize=size;}
+   const textWidth=node=>node.classList?.contains('evcc-number')?width(node.closest('.ui-metric-value,dd'),node.textContent):[...node.childNodes].reduce((total,child)=>total+(child.nodeType===3?width(node,child.textContent):textWidth(child)+(parseFloat(getComputedStyle(child).marginInlineStart)||0)),0);
+   if(grid){const minimum=Math.max(...[...grid.children].map(tile=>{const value=tile.querySelector('.ui-metric-value'),label=tile.querySelector('.ui-metric-title');return Math.max(textWidth(value),...label.textContent.split(/\s+/).map(word=>width(label,word)+34))+24;}));const columns=minimum*2+12<=grid.clientWidth?'2':'1';if(grid.style.getPropertyValue('--evcc-reading-columns')!==columns)grid.style.setProperty('--evcc-reading-columns',columns);}
+   for(const span of root.querySelectorAll('.evcc-number')){const parent=span.closest('.ui-metric-value,dd');if(!parent||!parent.clientWidth)continue;const base=parseFloat(getComputedStyle(parent).fontSize),size=Math.floor(base*Math.min(1,parent.clientWidth/Math.max(1,width(parent,span.textContent)))*100)/100+'px';if(span.style.fontSize!==size)span.style.fontSize=size;}
+  };
+  fit();this._evccLayoutObserver=new ResizeObserver(fit);
+  for(const el of [stage,primary,primary.querySelector('small'),grid,...root.querySelectorAll('.ui-metric-value,.ui-metric-title')])if(el)this._evccLayoutObserver.observe(el);
+ }
  _render() {
   if (!this._config) return;
-  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
+  if (!this._hass) { this.shadowRoot.innerHTML = `<style>${evccCardStyles()}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.history-chart',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(this._title(false))}"><div class="content"><p class="notice">EVCC…</p></div></ha-card>`; return; }
   const hass = this._hass, states = hass.states ?? {}, dutch = evccDutch(hass), config = this._config;
   this._ensureClock();
   const previousSolar = this._entities?.solar_share, previousPower = this._entities?.power;
@@ -1905,12 +2132,16 @@ class EvccCard extends HTMLElement {
   const configured = Object.values(this._entities).some(Boolean), status = offline ? 'unknown' : evccStatus(this._entities, states);
   const vehicle = evccVehicleName(states[this._entities.vehicle]) || (dutch ? 'Elektrische auto' : 'Electric vehicle');
   const soc = evccPercent(states[this._entities.soc]), target = evccPercent(states[this._entities.target_soc]);
+  const speed = powerMotion(states[this._entities.power], {maxKw: config.animation_max_kw, speed: config.animation_speed});
+  const charging = !offline && speed.moving && ['solar','charging'].includes(view.kind);
+  const barDuration = 3.8 / config.animation_speed;
+  const batteryBar = uiBar({value:soc,target,charging,label:dutch?'Accuniveau':'Battery level',valueText:soc==null?'':`${soc}% · ${view.title}${target==null?'':` · ${dutch?'Laaddoel':'Charge target'} ${target}%`}`,attrs:{class:'battery-progress',style:`--ui-bar-duration:${barDuration}s;--ui-bar-delay:${-(now/1000%barDuration)}s`}});
   const image = this._vehicleImage ? this._vehicleImage() : evccImageUrl(states[config.image_entity], hass);
   const imageWarning = dutch ? 'Autoafbeelding niet beschikbaar' : 'Vehicle image unavailable';
-  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
+  this.shadowRoot.innerHTML = `<style>${uiButtonStyles()}${uiTabsStyles()}${graphStyles()}${SharedGraph.tooltipStyles()}${evccCardStyles()}${this._extraStyles?.()??''}${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.history-chart',controls:'[data-ui-button=surface]:not([aria-pressed=true]),[data-ui-tabs][data-ui-card-tabs] [role=tab]:not([aria-selected=true])',selected:'[data-ui-tabs] [role=tab][aria-selected=true],.mode-options [aria-pressed=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(this._title(dutch))}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-evcc data-density="${config.compact ? 'compact' : 'standard'}" data-state="${status}" data-view="${view.kind}" data-tone="${view.tone}" data-theme="${hass.themes?.darkMode ? 'dark' : 'light'}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&configured&&!['disconnected','unknown'].includes(view.tone)}">
    <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene"><div class="gallery-top">${!configured ? `<header><h2>${uiEscape(this._title(dutch))}</h2></header>` : ''}
    ${offline ? `<p class="notice warning" role="status">${dutch ? 'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.' : 'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>` : ''}
-   ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${(this._hasVehicleImage?.()??config.image_entity) ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? `<div class="battery-track" role="progressbar" aria-label="${dutch ? 'Accuniveau' : 'Battery level'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${soc}"><div class="battery-fill" style="width:${soc}%"></div>${target != null ? `<span class="target-marker" style="left:${target}%"></span>` : ''}</div>` : ''}</div>
+   ${configured ? `<div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({layout:'uniform',value:soc==null?null:formatEvccValue('soc',states[this._entities.soc],hass).replace(/\s*%$/,''),unit:'%',subtitle:this._entities.range?(this._value('range')??'\u2014')+' '+(dutch?'actieradius':'range'):'',subtitleEntity:this._entities.range||'',entity:this._entities.soc,compact:config.compact,attrs:{class:'battery-value'}})}<div class="battery-meta"></div></div><div class="picture">${image ? `<img src="${uiEscape(image)}" alt="${uiEscape(vehicle)}"><small hidden>${imageWarning}</small>` : `<ha-icon icon="mdi:car-electric" aria-hidden="true"></ha-icon>${(this._hasVehicleImage?.()??config.image_entity) ? `<small>${imageWarning}</small>` : ''}`}</div></div>${soc != null ? batteryBar : ''}</div>
     </div>${this._statusMarkup(view)}</div>${this._liveMarkup(dutch, view, now)}</div>
     ${this._tabsMarkup(dutch)}` : `<p class="empty">${dutch ? 'Kies de EVCC-laadvermogensensor van je laadpunt in de configuratie. Je kunt ook afzonderlijke entiteiten opgeven.' : 'Select your loadpoint’s EVCC charge power sensor in the editor, or configure individual entities.'}</p>`}
    ${configured ? '' : '</div></div></div>'}</div></ha-card>`;
@@ -1920,7 +2151,7 @@ class EvccCard extends HTMLElement {
   if (this._motionState !== view.kind || this._motionEntity !== this._entities.power) {
    this._motionState = view.kind; this._motionEntity = this._entities.power; this._powerClock = null;
   }
-  const speed = powerMotion(states[this._entities.power], {maxKw: config.animation_max_kw, speed: config.animation_speed}), previous = this._powerClock;
+  const previous = this._powerClock;
   const moving = !offline && speed.moving && ['solar', 'charging'].includes(view.kind);
   const phase = previous ? previous.phase + (previous.moving ? (now - previous.time) / 1000 / previous.seconds : 0) : 0;
   this._powerClock = {phase, time: now, seconds: speed.seconds, moving};
@@ -1940,6 +2171,7 @@ class EvccCard extends HTMLElement {
   else if (focusedEntity) [...this.shadowRoot.querySelectorAll('[data-entity]')].find(button => button.dataset.entity === focusedEntity)?.focus({preventScroll: true});
   else if (focusedMode) [...this.shadowRoot.querySelectorAll('[data-mode]')].find(button => button.dataset.mode === focusedMode)?.focus({preventScroll: true});
   else if (focusedTab) ([...this.shadowRoot.querySelectorAll('[data-ui-tab]')].find(tab => tab.dataset.uiTab === focusedTab) ?? this.shadowRoot.querySelector('[role="tab"][aria-selected="true"]'))?.focus({preventScroll: true});
+  this._fitEvccLayout();
   this._syncHistory();
  }
 }
@@ -2106,7 +2338,7 @@ const CAR_EDITOR_HELPERS={
  image_scale:['Vergroot de auto binnen de vaste headerhoogte. Een grote afbeelding kan vóór het percentage komen.','Scale the car within the fixed header height. A large image may overlap the percentage.'],
  image_offset_y:['Negatief = omhoog, positief = omlaag. De headerhoogte blijft gelijk.','Negative moves up, positive moves down. Header height stays fixed.'],
  image_offset_x:['Negatief = naar links, positief = naar rechts. Nul plaatst de afbeelding horizontaal in het midden van de kaart.','Negative moves left, positive moves right. Zero centers the image horizontally in the card.'],
- battery_style:['Kies een klassieke balk, slanke capsule, zacht licht (standaard) of fijne lijn.','Choose a classic bar, slim capsule, soft light (default) or fine line.'],
+ battery_style:['Alle balken gebruiken dezelfde verzonken stijl. Standaard 12 px, slank 8 px of een fijne lijn van 4 px.','All bars share the recessed style. Default 12 px, slim 8 px or a fine 4 px line.'],
  animation_speed:['Snelheidsfactor: 0,5× is half zo snel, 2× is dubbel zo snel. Bij nul of onbekend laadvermogen pauzeert de animatie.','Speed factor: 0.5× is half speed, 2× is double speed. Zero or unknown charge power pauses animation.'],
  animation_max_kw:['Vermogen waarbij de animatie de hoogste snelheid bereikt. Dit verandert geen EVCC-laadlimiet.','Power at which animation reaches its maximum speed. This does not change EVCC charge limits.'],
  color:['Vaste accentkleur voor eigen gegevens. Met EVCC volgt de kleur de laadstatus.','Fixed accent for custom data. With EVCC the color follows charging state.'],
@@ -2126,7 +2358,7 @@ class CarEditor extends customTabsEditor(EvccEditor) {
   const config=this._config,evcc=config.evcc_enabled;
   const schema=[group('general',nl?'Algemeen':'General',[text('title'),boolean('evcc_enabled')],true),
    group('vehicle_image',nl?'Autoafbeelding':'Vehicle image',[select('image_source',[{value:'entity',label:nl?'Afbeelding-entiteit':'Image entity'},{value:'media',label:'Media'}]),...(config.image_source==='media'?[{name:'image_media',selector:{media:{accept:['image/*']}}}]:[entity('image_entity','image')]),number('image_scale',50,300,5,'%'),number('image_offset_x',-150,150,1,'px'),number('image_offset_y',-150,150,1,'px')]),
-   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',headerBackgroundOptions(nl)),number('background_strength',0,100,5,'%'),boolean('animate_background'),select('battery_style',[{value:'classic',label:nl?'Klassiek · 12 px':'Classic · 12 px'},{value:'slim',label:nl?'Slanke capsule · 8 px':'Slim capsule · 8 px'},{value:'soft',label:nl?'Zacht licht · 8 px (standaard)':'Soft light · 8 px (default)'},{value:'line',label:nl?'Fijne lijn · 4 px':'Fine line · 4 px'}]),...(!evcc?[select('color',CAR_COLORS.map(item=>({...item,label:item.label.split(' / ')[nl?0:1]})))]:[]),...(evcc?[number('animation_speed',0.25,3,0.25,'×'),number('animation_max_kw',0.1,500,0.1,'kW','box')]:[])])];
+   group('appearance',nl?'Weergave':'Appearance',[boolean('compact'),select('background',headerBackgroundOptions(nl)),number('background_strength',0,100,5,'%'),boolean('animate_background'),select('battery_style',[{value:'classic',label:nl?'Klassiek · 12 px':'Classic · 12 px'},{value:'slim',label:nl?'Slanke capsule · 8 px':'Slim capsule · 8 px'},{value:'soft',label:nl?'Verzonken · 12 px (standaard)':'Recessed · 12 px (default)'},{value:'line',label:nl?'Fijne lijn · 4 px':'Fine line · 4 px'}]),...(!evcc?[select('color',CAR_COLORS.map(item=>({...item,label:item.label.split(' / ')[nl?0:1]})))]:[]),...(evcc?[number('animation_speed',0.25,3,0.25,'×'),number('animation_max_kw',0.1,500,0.1,'kW','box')]:[])])];
   if(!evcc){
    schema.push(group('percentage_settings',nl?'Percentage':'Percentage',[entity('percentage_entity'),...(!config.percentage_entity?[number('percentage',0,100,1,'%')]:[])],true));
    schema.push(group('range_settings',nl?'Actieradius':'Range',[
@@ -2203,11 +2435,13 @@ class CarEditor extends customTabsEditor(EvccEditor) {
 
 
 
+
+
 const carDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
 
 class CarCard extends EvccCard {
  constructor(){super();this._mediaImage=new CarMediaImage(()=>{this._signature=null;this._render();});}
- disconnectedCallback(){this._mediaImage.reset();super.disconnectedCallback();}
+ disconnectedCallback(){this._carLayoutObserver?.disconnect();this._mediaImage.reset();super.disconnectedCallback();}
  _hasVehicleImage(){return this._config.image_source==='media'?!!this._config.image_media?.media_content_id:!!this._config.image_entity;}
  _vehicleImage(){return this._config.image_source==='media'?this._mediaImage.url:carImageUrl(this._hass?.states?.[this._config.image_entity],this._hass);}
  static async getConfigElement(){
@@ -2234,12 +2468,9 @@ class CarCard extends EvccCard {
   return id?`<button type="button" data-entity="${uiEscape(id)}" aria-label="${uiEscape(label+': '+value)}">${markup}</button>`:markup;}
  _extraSignature(){return this._config.custom_tabs.flatMap(tab=>tab.entities.map(row=>this._hass?.states?.[row.entity]));}
  _extraStyles(){return `
-  .content[data-battery-style=slim] .battery-track,.content[data-battery-style=soft] .battery-track{height:8px}
-  .content[data-battery-style=line] .battery-track{height:4px}
-  .content:is([data-battery-style=slim],[data-battery-style=soft],[data-battery-style=line]) .target-marker{top:-2px;height:calc(100% + 4px);width:1px}
-  .content[data-battery-style=soft] .battery-fill{background:color-mix(in srgb,var(--primary-color) 65%,var(--secondary-background-color));box-shadow:0 0 8px color-mix(in srgb,var(--primary-color) 18%,transparent)}
-  .content[data-battery-style=soft] .battery-fill::before{filter:opacity(.45)}
-  .content[data-battery-style=line] .battery-fill::before{background:linear-gradient(100deg,transparent,#ffffff99,transparent)}
+  .hero>.battery-progress{margin-top:10px}
+  .content[data-battery-style=slim] .battery-progress{--ui-bar-height:8px}
+  .content[data-battery-style=line] .battery-progress{--ui-bar-height:4px}
  `;}
  _applyPresentation(){
   const content=this.shadowRoot.querySelector('.content');if(!content)return;
@@ -2274,32 +2505,91 @@ class CarCard extends EvccCard {
   const label=config['field_'+i+'_label']||entity?.attributes?.friendly_name||id||(nl?'Gegevensveld '+i:'Data field '+i);
   const value=carFieldReading(entity,this._hass,config,i);
   const plain=carFieldReading(entity,this._hass,{...config,['field_'+i+'_show_unit']:false},i),split=value.startsWith(plain);
-  return uiMetric({title:label,value:plain==='\u2014'?null:split?plain:value,unit:split?value.slice(plain.length).trim():'',icon:config['field_'+i+'_icon']||(i===2?'mdi:map-marker-distance':'mdi:counter'),compact:config.compact,action:!!id,attrs:{class:i===1?'car-status':'car-field','data-entity':id||'','data-car-field':String(i)}});
+  const numeric=plain!=='\u2014'&&Number.isFinite(Number(config['field_'+i+'_attribute']?entity?.attributes?.[config['field_'+i+'_attribute']]:entity?.state));
+  return uiMetric({title:label,value:plain==='\u2014'?null:split?plain:value,valueContent:plain==='\u2014'?'':`<span class="${numeric?'car-number':'car-text'}">${uiEscape(split?plain:value)}</span>`,unit:split?value.slice(plain.length).trim():'',icon:config['field_'+i+'_icon']||(i===2?'mdi:map-marker-distance':'mdi:counter'),compact:config.compact,action:!!id,attrs:{class:i===1?'car-status':'car-field','data-value-kind':numeric?'number':'text','data-entity':id||'','data-car-field':String(i)}});
+ }
+ _fitCarReadings(){
+  this._carLayoutObserver?.disconnect();
+  if(this._config.evcc_enabled||!this.isConnected)return;
+  const root=this.shadowRoot,grid=root.querySelector('.car-readings'),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+
+  const fit=()=>{
+   const stage=root.querySelector('.car-stage'),primary=root.querySelector('.primary-value'),number=primary?.querySelector('.primary-number');
+   if(stage&&number){
+    // Keep ordinary hero tracks 1:2; enlarged text may use the full row.
+    // Measure from the stable parent font so fitting cannot compound itself.
+    const s=getComputedStyle(primary),base=parseFloat(s.fontSize),unit=primary.querySelector('small');
+    ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+    const natural=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0);
+    const reserve=unit?unit.getBoundingClientRect().width+(parseFloat(s.columnGap)||0):0;
+    const slot=(stage.clientWidth-12)/3,normal=parseFloat(getComputedStyle(root.querySelector('.content')).getPropertyValue('--ui-primary-size'));
+    const stacked=base>normal*1.1&&natural+reserve>slot;
+    stage.toggleAttribute('data-hero-stacked',stacked);
+    const available=stacked?stage.clientWidth:slot,size=Math.floor(base*Math.min(1,Math.max(44,available-reserve)/Math.max(1,natural))*100)/100+'px';
+    if(number.style.fontSize!==size)number.style.fontSize=size;
+   }
+   if(grid){const fields=[...grid.children].filter(field=>field.dataset.carField!=='1'),available=grid.clientWidth;
+    const needed=Math.max(0,...fields.map(field=>{const number=field.querySelector('.car-number'),value=field.querySelector('.ui-metric-value'),label=field.querySelector('.ui-metric-title');let n=0;
+     if(number){const s=getComputedStyle(value);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;n=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0);}
+     const s=getComputedStyle(label);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;const word=Math.max(0,...label.textContent.split(/\s+/).map(w=>ctx.measureText(w).width));return Math.max(n,word+34)+24;}));
+    const columns=fields.length>1&&needed*fields.length+12*(fields.length-1)<=available?fields.length:1;
+    if(grid.style.getPropertyValue('--ui-metric-columns')!==String(columns))grid.style.setProperty('--ui-metric-columns',String(columns));
+   }
+   for(const number of root.querySelectorAll('.car-number')){const value=number.parentElement,s=getComputedStyle(value),base=parseFloat(s.fontSize);ctx.font=`${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;const natural=ctx.measureText(number.textContent).width+Math.max(0,number.textContent.length-1)*(parseFloat(s.letterSpacing)||0),size=base*Math.min(1,value.clientWidth/Math.max(1,natural));const px=Math.floor(size*100)/100+'px';if(number.style.fontSize!==px)number.style.fontSize=px;}
+  };
+  fit();this._carLayoutObserver=new ResizeObserver(fit);
+  for(const node of [root.querySelector('.content'),...root.querySelectorAll('.primary-value,.primary-value small,.ui-metric-value,.ui-metric-title')])if(node)this._carLayoutObserver.observe(node);
  }
  _render(){
   if(!this._config)return;
   if(this.isConnected)this._mediaImage.update(this._hass,this._config.image_source==='media'?this._config.image_media:null);
-  if(this._config.evcc_enabled){super._render();this._applyPresentation();return;}
+  if(this._config.evcc_enabled){this._carLayoutObserver?.disconnect();super._render();this._applyPresentation();return;}
   const config=this._config,hass=this._hass,states=hass?.states??{},nl=carDutch(hass),percent=carPercentage(config,states);
   const offline=hass?.connected===false||hass?.connection?.connected===false;
   const signature=JSON.stringify([config,hass?.themes?.darkMode,hass?.locale,hass?.language,offline,...[config.percentage_entity,config.range_entity,config.image_entity,config.field_1_entity,config.field_2_entity,config.field_3_entity].map(id=>states[id]),this._extraSignature()]);
   if(signature===this._signature)return;this._signature=signature;
   const scroll=this.shadowRoot.querySelector('.content')?.scrollTop??0,focused=this.shadowRoot.activeElement?.dataset.entity,focusedTab=this.shadowRoot.activeElement?.dataset.uiTab;
   const title=config.title||(nl?'Mijn auto':'My car'),image=this._vehicleImage(),percentage=percent==null?'\u2014':carReading({state:String(percent),attributes:{unit_of_measurement:'%'}},hass);
-  const fields=[2,3].filter(i=>config['show_field_'+i]);
+  const fields=[1,2,3].filter(i=>config['show_field_'+i]);
   this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${evccCardStyles()}${this._extraStyles()}
-   .car-status{margin-top:16px}.car-readings{margin:0}.content{--ui-metric-tone:var(--tone)}
-   .content[data-density=compact] .car-status{margin-top:12px}
-   .content .header-scene[data-no-readings]{padding-bottom:0}
-   .range-value{font-size:12px;font-weight:600;color:var(--primary-text-color,#20252b)}
-  </style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
+   /* Regular Auto only: EVCC keeps its independent presentation. */
+   :host,ha-card{height:auto;min-height:0}.content{height:auto;overflow:visible}
+   .gallery-top{margin:0;padding:0;background:none}.hero{margin:0;padding:0}
+   .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;padding:0;min-height:0}
+   .car-stage .battery-row{grid-column:1;grid-row:1;align-items:stretch}
+   .car-stage::before,.car-stage::after{content:none}
+   .battery-row [data-ui-primary-value]{max-width:100%}
+   .car-stage .picture{position:relative;inset:auto;grid-column:2;grid-row:1;width:100%;height:auto;aspect-ratio:3.05;min-height:0;margin:0;overflow:hidden}
+   .car-stage .picture img{position:absolute;inset:0;left:var(--evcc-image-offset-x,0px);bottom:auto;top:var(--evcc-image-offset-y,0px);width:100%;height:100%;max-width:none;margin:0;object-fit:contain;transform:scale(var(--evcc-image-scale,1));transform-origin:center;filter:none}
+   .car-stage[data-hero-stacked]{grid-template-columns:minmax(0,1fr)}
+   .car-stage[data-hero-stacked] .picture{grid-column:1;grid-row:2}
+   .content[data-density=compact] .car-stage .picture{height:auto;aspect-ratio:3.5}
+   .car-stage .picture:has(ha-icon),.car-stage .picture:has(img[hidden]){min-height:88px;aspect-ratio:auto}
+   .picture small{font-size:12px;line-height:1.4;overflow-wrap:break-word}.picture:has(img[hidden]) small{padding:12px}
+   .car-status,.content[data-density=compact] .car-status{margin-top:0}
+   .car-readings{margin-top:12px;row-gap:12px;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr))}
+   .car-readings>[data-car-field="1"],.car-readings:has(>[data-car-field="1"])>[data-ui-metric]:last-child:nth-child(2){grid-column:1/-1}
+   [data-ui-metric]{background:var(--secondary-background-color);padding:12px;min-height:44px;row-gap:4px}
+   [data-ui-metric] .ui-metric-title{font-size:12px;overflow-wrap:break-word;line-height:1.4}
+   [data-ui-metric] .ui-metric-value{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;white-space:normal;overflow-wrap:break-word;word-break:normal;line-height:1.3}
+   [data-ui-metric] .car-text{min-width:0;max-width:100%;overflow-wrap:break-word}
+   [data-ui-metric] .car-number{display:inline-block;white-space:nowrap;overflow-wrap:normal;word-break:normal}
+   [data-ui-metric] .ui-metric-unit{font-size:12px;line-height:1.4;margin:0;white-space:normal;overflow-wrap:break-word}
+   [data-ui-metric] .ui-metric-icon{color:var(--secondary-text-color);transform:none;width:22px;height:22px}
+   .content[data-density=compact] [data-ui-metric]{padding:10px}
+   .content .header-scene{padding-bottom:0}.car-readings:empty{display:none}
+   .content button[data-entity],.metrics button{min-height:44px}
+   .content button:focus-visible{outline-color:var(--accent-color,var(--primary-color))}
+   .metrics{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}.metrics dt{font-size:12px;overflow-wrap:break-word}.metrics dd{overflow-wrap:break-word}.metrics button{overflow-wrap:break-word}
+  ${cardThemeStyles({wells:'[data-ui-metric],.live-readings>div',plots:'.plot',controls:'[data-ui-button=surface]',selected:'[data-ui-tabs] [role=tab][aria-selected=true]'})}${uiBalancedTabsStyles()}</style><ha-card aria-label="${uiEscape(title)}"><div class="content" style="--header-background-opacity:${config.background_strength/100}" data-density="${config.compact?'compact':'standard'}" data-theme="${hass?.themes?.darkMode?'dark':'light'}" data-tone="${config.color}" data-background="${config.background}" data-animated="${config.animate_background&&!offline&&percent!=null}">
    <div class="header-region"><div class="header-background" aria-hidden="true">${headerAtmosphere(config.background)}</div><div class="header-scene" ${fields.length?'':'data-no-readings'}><div class="gallery-top">
     ${offline?`<p class="notice warning" role="status">${nl?'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.':'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>`:''}
-    <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}</div>
+    <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({layout:'uniform',value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}
+    </div>
      <div class="picture">${image?`<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:`<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>${this._hasVehicleImage()?`<small>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:''}`}</div>
-    </div><div class="battery-track" ${percent==null?`aria-label="${nl?'Percentage niet beschikbaar':'Percentage unavailable'}"`:`role="progressbar" aria-label="Percentage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"`}><div class="battery-fill" style="width:${percent??0}%"></div></div></div>
-   </div>${config.show_field_1?`${this._field(1,nl)}`:''}</div>
-   ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:${fields.length}">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;
+   </div>${uiBar({value:percent,label:percent==null?(nl?'Percentage niet beschikbaar':'Percentage unavailable'):(nl?'Accuniveau':'Battery level'),attrs:{class:'battery-progress'}})}</div>
+   </div></div>
+   ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:2">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;
   const content=this.shadowRoot.querySelector('.content');content.style.setProperty('--evcc-image-scale',String(config.image_scale/100));content.style.setProperty('--evcc-image-offset-y',config.image_offset_y+'px');content.scrollTop=scroll;
   for(const button of this.shadowRoot.querySelectorAll('[data-entity]'))button.addEventListener('click',()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:button.dataset.entity},bubbles:true,composed:true})));
   if(focused)Array.from(this.shadowRoot.querySelectorAll('[data-entity]')).find(button=>button.dataset.entity===focused)?.focus({preventScroll:true});
@@ -2307,11 +2597,12 @@ class CarCard extends EvccCard {
   this._tabController=bindUITabs({tabs:this.shadowRoot.querySelectorAll('[data-ui-tab]'),panels:this.shadowRoot.querySelectorAll('[data-ui-tab-panel]'),onSelect:value=>{this._activeTab=value;}});
   if(focusedTab)(Array.from(this.shadowRoot.querySelectorAll('[data-ui-tab]')).find(tab=>tab.dataset.uiTab===focusedTab)??this.shadowRoot.querySelector('[role=tab][aria-selected=true]'))?.focus({preventScroll:true});
   this._applyPresentation();
+  this._fitCarReadings();
   const img=this.shadowRoot.querySelector('img');if(img)img.addEventListener('error',()=>{img.hidden=true;const hint=this.shadowRoot.querySelector('.picture small');if(hint)hint.hidden=false;},{once:true});
  }
 }
 
-if(!customElements.get('eleven-car-card-test'))customElements.define('eleven-car-card-test',withSharedCardBackground(CarCard));
+if(!customElements.get('eleven-car-card-test'))customElements.define('eleven-car-card-test',withCardBackground(CarCard));
 window.customCards=window.customCards||[];
 if(!window.customCards.some(card=>card.type==='eleven-car-card-test'))window.customCards.push({type:'eleven-car-card-test',name:'Eleven Car Test (beta)',description:'Vehicle image, percentage and configurable readings, with optional EVCC charging integration.',preview:true});
 })();
