@@ -20777,7 +20777,9 @@ class CarCard extends EvccCard {
   if(this._config.image_source!=='media'){
    const image=this._entityImage.image;
    if(placeholder&&image){image.alt=placeholder.alt;placeholder.replaceWith(image);}
-   root.querySelector('[data-car-image-retry]')?.addEventListener('click',()=>this._entityImage.retry());
+   const retry=root.querySelector('[data-car-image-retry]');
+   // EVCC can render again without replacing its DOM when nothing changed.
+   if(retry)retry.onclick=()=>this._entityImage.retry();
   }else if(placeholder)placeholder.onerror=()=>{placeholder.hidden=true;placeholder.nextElementSibling.hidden=false;};
  }
  static async getConfigElement(){
