@@ -65,6 +65,8 @@ The [calendar detail page](../../review/detail.html?card=calendar-card) shows th
 
 The selected Material treatment uses one recessed month grid and softly tinted appointment blocks with a fine calendar-colour rail and a soft outer shadow. Appointments on past dates have a lighter shadow. List and column views reuse the recessed day surfaces and the same appointment tint. Month chips separate time and title; full appointment details remain available from their native buttons. The [detail page](../../review/detail.html?card=calendar-card) shows Month, List and Columns with this production styling.
 
+Month appointment blocks are 40 px high, with the time above a single title line. Long titles use an ellipsis; their full text and details remain in the appointment popup. Standard density keeps three appointments per date, compact keeps two, and the existing +N more button exposes the complete day. Smaller date-cell padding keeps busy weeks shorter without changing list or column layouts.
+
 ## Shared card background
 
 The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.

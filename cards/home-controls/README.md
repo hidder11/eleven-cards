@@ -40,6 +40,8 @@ Controls derive from actual capabilities: thermostat single setpoint up/down, co
 
 No optimistic device-state changes; buttons show actual HA state. Requests are guarded against duplicates while pending, errors are shown inline. Unavailable data displays explicitly and never becomes zero.
 
+Controls uses the compact D2 list: rows grow individually, status icons change shape and theme colour with the confirmed device state, and all command buttons retain the shared application style. Custom entity icons remain supported. Percentages align before brightness/fan sliders; powered-off sliders become grey without losing their saved level. Thermostat setpoints sit between minus and plus in a fixed 64 px field with tabular digits, preserving button positions for values such as 11 and 19.5. The measured current temperature remains in the identity subtitle. Very narrow cards reflow the controls below the identity.
+
 Brightness and fan sliders use the same shared recessed 12px track and round thumb as EVCC's solar preference. Input previews update the filled track; the existing change handler sends the service request. Source steps, limits, pending/disabled behavior and native arrow-key operation are retained.
 
 ```yaml

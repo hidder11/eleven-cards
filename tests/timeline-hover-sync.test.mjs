@@ -18,3 +18,24 @@ test('timeline publishes and receives exact shared timestamps without echo, grou
  a.disconnectedCallback();assert.equal(b._cursor,null);for(const c of [b,separate,off])c.disconnectedCallback();
 });
 test('timeline editor exposes matching sync defaults and validates values',()=>{const {Card,make}=setup();const fields=Card.getConfigForm().schema.flatMap(x=>x.schema??[x]);assert.ok(fields.find(x=>x.name==='sync_hover'));assert.ok(fields.find(x=>x.name==='hover_sync_group'));assert.equal(Card.editorConfig({entities:['switch.a']}).sync_hover,true);assert.equal(Card.editorConfig({entities:['switch.a']}).hover_sync_group,'');assert.throws(()=>make({sync_hover:'yes'}));assert.throws(()=>make({hover_sync_group:12}));});
+
+test('only tracks start pointer hover or selection; leaving a track clears a pending frame',()=>{
+ const {make}=setup(),card=make({sync_hover:false});let shown=0,hidden=0;
+ const selection={hidden:true,style:{}},track={getBoundingClientRect:()=>({left:0,width:600})};
+ const chart={querySelector:()=>selection,getBoundingClientRect:()=>({left:0,right:600,width:600})};
+ card.shadowRoot={querySelector:s=>s==='.chart'?chart:s==='.track'?track:null,querySelectorAll:()=>[]};
+ card._showTooltip=()=>shown++;card._hideTooltip=()=>{hidden++;card._pinned=false;card._hoverTime=null;};
+ card._bindInteractions();
+ const target=selector=>({closest:s=>s===selector?{}:null});
+ const event=(selector,extra={})=>({target:target(selector),clientX:100,pointerId:1,pointerType:'mouse',...extra});
+ for(const place of ['[data-ui-legend]','.legend','h3','.row-label','.axis',null]){
+  chart.onpointermove(event(place));chart.onpointerdown(event(place));
+ }
+ assert.equal(shown,0);assert.equal(hidden,6);assert.equal(card._pinned,false);
+ chart.onpointermove(event('.track'));assert.equal(shown,1);
+ chart.onpointermove(event('.legend'));assert.equal(hidden,7);assert.equal(card._hoverTime,null);
+ chart.onpointerdown(event('.track',{pointerType:'touch'}));assert.equal(shown,2);assert.equal(card._touchPointer,1);
+ chart.onpointermove(event(null,{pointerType:'touch'}));assert.equal(shown,3,'an active touch may continue outside its initial track');
+ chart.onpointercancel(event(null,{pointerType:'touch'}));assert.equal(card._touchPointer,null);
+ card.disconnectedCallback();
+});

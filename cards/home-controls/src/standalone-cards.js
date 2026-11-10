@@ -2,6 +2,7 @@ import {withCardBackground} from '../../../shared/card-background.js';
 import {cardThemeStyles} from '../../../shared/card-theme.js';
 import {uiButton} from '../../../shared/ui-button.js';
 import {uiActionButtonStyles} from '../../../shared/ui-action-button.js';
+import {controlItemState,controlItemIcon,controlPowerIcon,controlsPresentationStyles} from './controls-presentation.js';
 import {uiSlider,syncUISlider,uiBarStyles} from '../../../shared/ui-bar.js';
 import {available,finite,actionRequest} from './control-utils.mjs';
 import {esc,icon,CSS,CSSescape} from './shared-ui.js';
@@ -16,34 +17,7 @@ const STYLES=`${CSS}
 :host{height:auto;container-type:inline-size}.content{padding:16px}.heading{margin-bottom:12px}.heading h2{overflow-wrap:anywhere}.empty{padding:8px 0;color:var(--secondary-text-color);font-size:13px}.device{padding:12px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.device+.device{border-top:1px solid var(--divider-color)}.device:first-child{padding-top:0}.device:last-child{padding-bottom:0}.device .identity{flex:1 1 84px}.device .identity span{font-size:14px}.device .identity small{font-size:12px}.device .identity ha-icon{color:var(--primary-color)}.device-controls{display:flex;align-items:center;gap:4px;max-width:100%;margin-left:auto}.device-controls .target{font-size:15px;min-width:42px}.level{flex:1 0 100%;display:flex;align-items:center;gap:10px}.level input{flex:1;min-width:0;min-height:44px;accent-color:var(--primary-color);cursor:pointer}.level output{font-size:12px;font-variant-numeric:tabular-nums;min-width:34px;text-align:right}.device .current{font-size:22px;font-weight:550;font-variant-numeric:tabular-nums;line-height:1.3}.device .current small{display:inline;font-size:13px}.upcoming{padding:2px 0 14px}.eyebrow{text-transform:uppercase;letter-spacing:.06em;font-size:10px;font-weight:650;color:var(--secondary-text-color);margin-bottom:4px}.pickup-date{font-size:24px;font-weight:600;letter-spacing:-.025em;line-height:1.25;overflow-wrap:anywhere}.pickup-meta{font-size:12px;color:var(--secondary-text-color);margin-top:3px}.waste-items{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px}.waste-item{display:flex;gap:7px;align-items:center;min-height:44px;padding:0;background:transparent;text-align:left;min-width:0;max-width:100%;font-size:14px}.waste-item span{overflow-wrap:anywhere}.waste-item ha-icon{color:var(--waste-color,var(--primary-color))}.pickup-row{padding:11px 0;border-top:1px solid var(--divider-color);display:flex;gap:8px;align-items:center}.pickup-row .waste-items{flex:1;margin:0;gap:0 14px}.pickup-row .when{font-size:12px;color:var(--secondary-text-color);text-align:right;max-width:42%}.unresolved{border-top:1px solid var(--divider-color);padding-top:10px;font-size:12px;color:var(--secondary-text-color)}.unresolved button[data-info]{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;background:transparent;width:100%;padding:5px 0;font-size:12px}.unresolved button[data-info] span:last-child{text-align:right}.retry{margin-top:8px}.collection-error{color:var(--error-color)}.actions{grid-template-columns:repeat(2,minmax(0,1fr))}.action span{max-width:100%;overflow-wrap:break-word;hyphens:none}@container(min-width:340px){.actions{grid-template-columns:repeat(3,minmax(0,1fr))}}@container(max-width:339px){.device:has(.target) .identity{flex-basis:100%}}@media(max-width:380px){.content{padding:var(--eleven-card-padding,16px)}.device{gap:8px}.pickup-date{font-size:22px}}
 `;
 // Controls-only geometry and semantic roles; theme owns optional paint/depth.
-const CONTROLS_STYLES=`
-.content{padding-bottom:8px}
-.heading{margin-bottom:16px}.heading h2{min-width:0;letter-spacing:normal;hyphens:auto;overflow-wrap:break-word}
-.devices{display:grid;grid-auto-rows:1fr}
-.devices .device{display:grid;grid-template-columns:minmax(0,1fr) minmax(158px,1.4fr);gap:10px;align-items:center;min-height:64px;box-sizing:border-box;padding:10px 0}
-.device .identity{min-width:0;max-width:100%;min-height:44px;gap:9px;background:transparent;box-shadow:none;border-radius:0}
-.device .identity:hover:not(:disabled){background:transparent}
-.device .identity ha-icon{color:var(--secondary-text-color)}
-.device .identity span{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4}
-.device .identity small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.5}
-.device-controls{width:calc(100% + 12px);max-width:none;box-sizing:border-box;padding:6px;margin:-6px;min-width:0;gap:8px;flex-wrap:nowrap;justify-content:safe flex-end;overflow-x:auto;scrollbar-width:thin}
-.device-controls .toggle{flex:none}
-.device-controls .target{flex:none;white-space:nowrap;font-size:15px;min-width:54px;line-height:1.4}
-.device-controls .target small{font-size:12px;line-height:1.5}
-
-
-
-
-.device .identity:focus-visible,.level input:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:3px}
-.device-controls input:focus-visible{outline-offset:-2px}
-.level{box-sizing:border-box;flex:1 1 auto;min-width:86px;gap:8px;padding:0;margin:0}
-.level input{flex:0 1 276px;width:0;min-width:44px}
-.level input::-webkit-slider-runnable-track{height:8px;box-shadow:var(--eleven-material-well,none)}
-.level input::-webkit-slider-thumb{margin-top:-5px}
-.level input::-moz-range-track{height:8px;box-shadow:var(--eleven-material-well,none)}
-.level input::-moz-range-progress{height:8px}
-.level output{flex:none;line-height:1.5}
-`;
+const CONTROLS_STYLES=controlsPresentationStyles;
 // Calendar anatomy is Waste-only; concurrent Actions/Controls output is retained.
 const WASTE_STYLES=`
 .content{padding:16px}.heading{margin-bottom:12px}
@@ -202,7 +176,7 @@ class StandaloneCard extends HTMLElement{
   const request=(act,v)=>controlRequest(s,e.entity,act,v),btn=(act,label,ico)=>this.button(i,act,`${name}: ${label}`,ico,request(act));
   if(domain==='climate'){
    status=ok?`${this.number(a.current_temperature)} ${this._hass?.config?.unit_system?.temperature||'°C'} · ${a.hvac_action==='heating'?this.t('Verwarmen','Heating'):a.hvac_action==='cooling'?this.t('Koelen','Cooling'):this.t('Huidig','Current')}`:status;
-   if(Number(a.supported_features)&1)controls=btn('down',this.t('Lager','Decrease'),'mdi:minus')+`<span class="target">${ok?this.number(a.temperature)+' '+esc(this._hass?.config?.unit_system?.temperature||'°C'):'—'}<small>${this.t('ingesteld','target')}</small></span>`+btn('up',this.t('Hoger','Increase'),'mdi:plus');
+   if(Number(a.supported_features)&1)controls=btn('down',this.t('Lager','Decrease'),'mdi:minus')+`<span class="target" title="${this.t('Ingestelde temperatuur','Target temperature')}">${ok?this.number(a.temperature)+' '+esc(this._hass?.config?.unit_system?.temperature||'°C'):'—'}</span>`+btn('up',this.t('Hoger','Increase'),'mdi:plus');
   }else if(domain==='cover'){
    status=ok&&finite(a.current_position)?`${a.current_position}% · ${status}`:status;
    controls=btn('open',this.t('Openen','Open'),'mdi:arrow-up')+btn('stop',this.t('Stoppen','Stop'),'mdi:stop')+btn('close',this.t('Sluiten','Close'),'mdi:arrow-down');
@@ -210,11 +184,12 @@ class StandaloneCard extends HTMLElement{
    status=ok?`${this.number(s.state)} ${a.unit_of_measurement||''}`:status;
    controls=btn('down',this.t('Lager','Decrease'),'mdi:minus')+btn('up',this.t('Hoger','Increase'),'mdi:plus');
   }else if(['light','fan','switch','input_boolean'].includes(domain)){
-   controls=uiButton({variant:'action',className:`toggle ${s?.state==='on'?'on':''}`,label:name+': '+this.t('Schakelen','Toggle'),text:s?.state==='on'?this.t('Uit','Off'):this.t('Aan','On'),disabled:!request('toggle')||this._pending,attrs:{'data-index':i,'data-action':'toggle','data-key':`${i}-toggle`,'aria-pressed':s?.state==='on'}});
+   controls=uiButton({variant:'action-icon',className:'toggle',label:name+': '+(s?.state==='on'?this.t('Uitschakelen','Turn off'):this.t('Inschakelen','Turn on')),content:controlPowerIcon,disabled:!request('toggle')||this._pending,attrs:{'data-index':i,'data-action':'toggle','data-key':`${i}-toggle`,'aria-pressed':s?.state==='on'}});
   }
   const level=domain==='light'&&finite(a.brightness)?Math.round(Number(a.brightness)/255*100):domain==='fan'?a.percentage:domain==='cover'?a.current_position:null;
   if(domain!=='cover'&&request('level',50))extra=`<label class="level">${uiSlider({value:finite(level)?Number(level):0,step:domain==='fan'&&finite(a.percentage_step)&&Number(a.percentage_step)>0?Number(a.percentage_step):1,disabled:this._pending,attrs:{'data-key':`${i}-level`,'data-level':String(i),'aria-label':name+': '+this.t('Niveau','Level')}})}<output>${finite(level)?esc(level)+'%':'—'}</output></label>`;
-  return `<div class="device"><button type="button" class="identity" data-info="${esc(e.entity)}" data-key="${i}-info" title="${esc(name+': '+status)}" aria-label="${esc(name+': '+status)}">${icon(e.icon||GLYPHS[domain]||'mdi:tune')}<span>${esc(name)}<small>${esc(status)}</small></span></button><div class="device-controls">${extra}${controls}</div></div>`;
+  const itemState=controlItemState(domain,s);
+  return `<div class="device" data-domain="${esc(domain)}" data-item-state="${itemState}" data-power="${s?.state==='off'?'off':'on'}"><button type="button" class="identity" data-info="${esc(e.entity)}" data-key="${i}-info" title="${esc(name+': '+status)}" aria-label="${esc(name+': '+status)}">${controlItemIcon(domain,s,itemState,e.icon)}<span>${esc(name)}<small>${esc(status)}</small></span></button><div class="device-controls">${extra}${controls}</div></div>`;
  }).join('')}</div>`;}
  _waste(items){
   const rows=wasteRows(items,this._hass?.states,this._cache,{locale:this._hass?.locale?.language,timeZone:this._hass?.config?.time_zone}),groups=groupWaste(rows),unresolved=rows.filter(e=>!e.date);

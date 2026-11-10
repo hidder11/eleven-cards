@@ -27,19 +27,20 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .toolbar .view-period .period-trigger svg{width:14px;height:14px}
 .circle-flow{grid-column:1/-1;min-width:0}
 .circle-flow *{box-sizing:border-box}
-/* Only routes scale. HTML rows grow with localized values and enlarged text.
-   The first half of the node row ends at SVG y=104, keeping the original
-   horizontal routes through the button centers without a resize observer. */
-.circle-scene{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:minmax(40px,auto) auto minmax(36px,1fr) minmax(36px,1fr);width:100%;margin:0 auto}
-.flow-routes{position:relative;grid-area:1/1/4/-1;min-width:0;pointer-events:none}
-.flow-routes>svg{position:absolute;inset:0 auto auto 0;display:block;width:100%;height:calc(100% * 164 / 104);overflow:visible}
-.circle-scene>[data-node]{grid-row:3/5;z-index:1;align-self:stretch;justify-self:center}
-.circle-scene>[data-node=sun]{grid-column:1;justify-self:start}
-.circle-scene>[data-node=home]{grid-column:2/4}
-.circle-scene>[data-node=grid]{grid-column:4;justify-self:end}
-.circle-scene>[data-flow-value=return]{grid-area:1/1/2/-1;padding-top:16px;padding-bottom:8px}
-.circle-scene>[data-flow-value=solar]{grid-area:2/1/3/3}
-.circle-scene>[data-flow-value=grid]{grid-area:2/3/3/5}
+/* Native labels and SVG routes use the same node size and gap geometry. */
+.circle-scene{--flow-node-size:72px;position:relative;display:block;width:100%;height:calc(112px + var(--flow-node-size));margin:0 auto}
+.flow-routes{position:absolute;inset:0;pointer-events:none}
+.flow-routes>svg{position:absolute;inset:0;display:block;width:100%;height:100%;overflow:visible}
+.circle-scene>.circle-node[data-ui-metric]{position:absolute;top:104px;z-index:1;width:var(--flow-node-size);min-width:var(--flow-node-size);max-width:var(--flow-node-size);height:var(--flow-node-size);min-height:var(--flow-node-size)}
+.circle-scene>[data-node=sun]{left:0}
+.circle-scene>[data-node=home]{left:calc(50% - var(--flow-node-size)/2)}
+.circle-scene>[data-node=grid]{right:0}
+.circle-scene>[data-flow-value]{position:absolute;padding:0 2px;overflow-wrap:normal}
+.circle-scene>[data-flow-value=return]{top:4px;left:calc(var(--flow-node-size)/2);right:calc(var(--flow-node-size)/2)}
+.circle-scene>[data-flow-value=solar],.circle-scene>[data-flow-value=grid]{bottom:calc(20px + var(--flow-node-size)/2);width:calc(50% - var(--flow-node-size)*1.5)}
+.circle-scene>[data-flow-value=solar]{left:var(--flow-node-size)}
+.circle-scene>[data-flow-value=grid]{right:var(--flow-node-size)}
+@container(max-width:340px){.circle-scene{--flow-node-size:60px}.circle-scene .flow-reading{font-size:14px}.circle-scene .flow-reading[data-long=true]{font-size:11px}.circle-scene .flow-unit{font-size:11px}}
 .flow-route[data-route=solar]{color:var(--solar)}
 .flow-route[data-route=return]{color:var(--return)}
 .flow-route[data-route=grid]{color:var(--grid)}
@@ -52,7 +53,7 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .circle-node[data-ui-metric][data-density] .ui-metric-icon,.circle-node[data-ui-metric][data-density] .ui-metric-icon svg,.circle-node[data-ui-metric][data-density] .ui-metric-icon ha-icon{width:22px;height:22px;--mdc-icon-size:22px}
 .circle-node .ui-metric-value{display:none}.circle-node[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:2;justify-self:center;text-align:center;font-size:12px;font-weight:500;line-height:1.35;white-space:nowrap;overflow-wrap:normal;word-break:normal}
 .circle-node[data-ui-metric][data-density] .ui-metric-icon{position:relative;grid-row:1;grid-column:1;justify-self:center;align-self:center;transform:none;color:var(--node-ink);overflow:visible}
-.flow-reading{position:relative;z-index:1;min-width:0;padding:0 4px 8px;color:var(--primary-text-color,#20252b);font-family:inherit;font-size:18px;line-height:1.35;font-weight:600;letter-spacing:-.4px;text-align:center;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.flow-reading[data-long=true]{font-size:12px}.flow-unit{color:var(--secondary-text-color,#626a78);font-size:12px;font-weight:400;letter-spacing:0;white-space:nowrap}
+.flow-reading{position:relative;z-index:1;min-width:0;color:var(--primary-text-color,#20252b);font-family:inherit;font-size:16px;line-height:1.35;font-weight:600;letter-spacing:-.4px;text-align:center;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.flow-reading[data-long=true]{font-size:12px}.flow-unit{display:inline-block;color:var(--secondary-text-color,#626a78);font-size:12px;font-weight:400;letter-spacing:0;white-space:nowrap}
 .flow-arrow{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.flow-route[data-active=false] .flow-arrow{opacity:.24}
 .header-region>[data-ui-metric]{grid-column:1/-1}
 .flow-secondary{margin-top:12px}

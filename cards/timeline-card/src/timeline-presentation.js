@@ -27,9 +27,17 @@ export const TimelinePresentation={
   this._hideTooltip();this._render();focusUILegend(this,key);
  },
  _bindTimelineLegend(){bindUILegend(this,{hint:this._nl()?'Dubbelklik of Shift+Enter om alleen deze status te tonen.':'Double-click or Shift+Enter to show only this state.',toggle:key=>this._toggleTimelineState(key),isolate:key=>this._toggleTimelineState(key,true)});},
+ _timelineCurrentValue(id){
+  const entity=this._hass?.states?.[id];
+  if(entity?.state==null||entity.state==='')return '\u2014';
+  const state=String(entity.state),appearance=this._appearance(state,id);
+  const rule=this._config.state_colors.find(row=>String(row.state)===state&&row.entity===id)??this._config.state_colors.find(row=>String(row.state)===state&&!row.entity);
+  if(rule?.label!=null||['unknown','unavailable'].includes(state))return appearance.label;
+  return this._hass?.formatEntityState?.(entity)??appearance.label;
+ },
  _timelineRow(i){
   if(!this._isSeriesVisible(i))return '';
-  const c=this._config,id=c.entities[i],name=this._name(id),label=`<button type="button" class="row-label" data-series="${escapeTimelinePresentation(id)}">${escapeTimelinePresentation(name)}</button>`;
+  const c=this._config,id=c.entities[i],name=this._name(id),label=`<button type="button" class="row-label" data-series="${escapeTimelinePresentation(id)}"><span>${escapeTimelinePresentation(name)}</span><strong>${escapeTimelinePresentation(this._timelineCurrentValue(id))}</strong></button>`;
   if(this._stateLimits?.[i])return `<div class="row">${label}<div class="state-limit" role="status">${escapeTimelinePresentation(this._stateLimitMessage())}</div></div>`;
   const a=this._viewStart,b=this._viewEnd;
   const bars=(this._series[i]??[]).filter(s=>s.end>a&&s.start<b).map(s=>{

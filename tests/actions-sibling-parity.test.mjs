@@ -24,11 +24,13 @@ for(const language of ['nl','en'])for(const unavailable of [false,true])test(`Co
   const a=before(tag),b=after(tag);for(const c of [a,b]){c.setConfig(config);c.hass=hass;}
   // Preserve every functional attribute; the concurrent Controls task added
   // the target unit explicitly. Assert it before normalizing that text delta.
-  if(!unavailable)assert.match(b.shadowRoot.innerHTML,/<span class="target">20 °C<small>/);
+  if(!unavailable)assert.match(b.shadowRoot.innerHTML,/<span class="target"[^>]*>20 °C<\/span>/);
   const semanticControls=html=>[...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g),...html.matchAll(/<input\b([^>]*)>/g)].map(m=>{
    let attrs=m[1].replace(/\sdata-ui-button="action(?:-icon)?"/g,'').replace(/\sdata-ui-slider=""/g,'').replace(/\sstyle="--ui-bar-position:[^"]*"/g,'');
-   if(/class="identity"/.test(attrs))attrs=attrs.replace(/\s(?:title|aria-label)="[^"]*"/g,'');
-   return (attrs.match(/[^\s=]+(?:="[^"]*")?/g)||[]).sort().join(' ')+'|'+(m[2]||'');
+   const visualChange=/class="identity"|data-action="toggle"/.test(attrs);
+   if(visualChange)attrs=attrs.replace(/\s(?:title|aria-label)="[^"]*"/g,'');
+   if(/data-action="toggle"/.test(attrs))attrs=attrs.replace(/\sclass="[^"]*"/g,'');
+   return (attrs.match(/[^\s=]+(?:="[^"]*")?/g)||[]).sort().join(' ')+'|'+(visualChange?'':m[2]||'');
   }).sort();
   assert.deepEqual(semanticControls(b.shadowRoot.innerHTML),semanticControls(a.shadowRoot.innerHTML),tag);
  }

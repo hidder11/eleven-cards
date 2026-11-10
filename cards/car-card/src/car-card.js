@@ -2,22 +2,38 @@ import {cardThemeStyles} from '../../../shared/card-theme.js';
 import {uiPrimaryValue} from '../../../shared/ui-primary-value.js';
 import {uiMetric} from '../../../shared/ui-metric.js';
 import {uiBar} from '../../../shared/ui-bar.js';
-import {uiEscape} from '../../../shared/ui-button.js';
+import {uiEscape,uiButton} from '../../../shared/ui-button.js';
 import {uiButtonStyles} from '../../../shared/ui-button.js';
 import {uiTabsStyles,bindUITabs,uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';
 import {evccCardStyles} from './evcc/evcc-styles.js';
 import {EvccCard} from './evcc/evcc-card.js';
 import {CarEditor} from './car-editor.js';
-import {normalizeCarConfig,carPercentage,carReading,carImageUrl,carFieldReading,carRange} from './car-utils.js';
+import {normalizeCarConfig,carPercentage,carReading,carFieldReading,carRange} from './car-utils.js';
 import {headerAtmosphere} from '../../../shared/header-atmosphere.js';
 import {CarMediaImage} from './car-media-image.js';
+import {CarEntityImage} from './car-entity-image.js';
 const carDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
 
 export class CarCard extends EvccCard {
- constructor(){super();this._mediaImage=new CarMediaImage(()=>{this._signature=null;this._render();});}
- disconnectedCallback(){this._carLayoutObserver?.disconnect();this._mediaImage.reset();super.disconnectedCallback();}
+ constructor(){super();const changed=()=>{this._signature=null;this._render();};this._mediaImage=new CarMediaImage(changed);this._entityImage=new CarEntityImage(changed);}
+ disconnectedCallback(){this._carLayoutObserver?.disconnect();this._mediaImage.reset();this._entityImage.reset();super.disconnectedCallback();}
  _hasVehicleImage(){return this._config.image_source==='media'?!!this._config.image_media?.media_content_id:!!this._config.image_entity;}
- _vehicleImage(){return this._config.image_source==='media'?this._mediaImage.url:carImageUrl(this._hass?.states?.[this._config.image_entity],this._hass);}
+ _vehicleImage(){return this._config.image_source==='media'?this._mediaImage.url:this._entityImage.image?.src;}
+ _vehicleImageMarkup(title,nl){
+  const image=this._vehicleImage(),entity=this._config.image_source!=='media',failed=entity&&this._entityImage.status==='error';
+  if(image&&!failed)return `<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`;
+  if(!this._hasVehicleImage())return '<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>';
+  const loading=entity&&!failed;
+  return `<div class="car-image-message" role="status"><small>${loading?(nl?'Autoafbeelding laden…':'Loading vehicle image…'):(nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable')}</small>${failed?uiButton({variant:'text',text:nl?'Opnieuw proberen':'Retry',attrs:{'data-car-image-retry':true}}):''}</div>`;
+ }
+ _bindVehicleImage(){
+  const root=this.shadowRoot,placeholder=root.querySelector('.picture img');
+  if(this._config.image_source!=='media'){
+   const image=this._entityImage.image;
+   if(placeholder&&image){image.alt=placeholder.alt;placeholder.replaceWith(image);}
+   root.querySelector('[data-car-image-retry]')?.addEventListener('click',()=>this._entityImage.retry());
+  }else if(placeholder)placeholder.onerror=()=>{placeholder.hidden=true;placeholder.nextElementSibling.hidden=false;};
+ }
  static async getConfigElement(){
   if(!customElements.get('ha-form')){const helpers=await window.loadCardHelpers();const card=await helpers.createCardElement({type:'entities',entities:[]});await card.constructor.getConfigElement();await customElements.whenDefined('ha-form');}
   if(!customElements.get('eleven-car-editor'))customElements.define('eleven-car-editor',CarEditor);
@@ -40,8 +56,11 @@ export class CarCard extends EvccCard {
  _carReading(id,value,label,unit=''){
   const markup=unit&&value.endsWith(' '+unit)?uiEscape(value.slice(0,-unit.length).trimEnd())+' <span class="ui-metric-unit">'+uiEscape(unit)+'</span>':uiEscape(value);
   return id?`<button type="button" data-entity="${uiEscape(id)}" aria-label="${uiEscape(label+': '+value)}">${markup}</button>`:markup;}
- _extraSignature(){return this._config.custom_tabs.flatMap(tab=>tab.entities.map(row=>this._hass?.states?.[row.entity]));}
+ _extraSignature(){return [this._entityImage.version,this._entityImage.status,...this._config.custom_tabs.flatMap(tab=>tab.entities.map(row=>this._hass?.states?.[row.entity]))];}
  _extraStyles(){return `
+  .car-stage .picture:has(.car-image-message){min-height:88px;aspect-ratio:auto}
+  .car-image-message{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:8px;text-align:center}
+  .car-image-message small{font-size:12px;line-height:1.4}
   .hero>.battery-progress{margin-top:10px}
   .content[data-battery-style=slim] .battery-progress{--ui-bar-height:8px}
   .content[data-battery-style=line] .battery-progress{--ui-bar-height:4px}
@@ -117,13 +136,14 @@ export class CarCard extends EvccCard {
  _render(){
   if(!this._config)return;
   if(this.isConnected)this._mediaImage.update(this._hass,this._config.image_source==='media'?this._config.image_media:null);
-  if(this._config.evcc_enabled){this._carLayoutObserver?.disconnect();super._render();this._applyPresentation();return;}
+  this._entityImage.update(this._hass,this._config.image_source==='entity'?this._config.image_entity:'',this.isConnected===true);
+  if(this._config.evcc_enabled){this._carLayoutObserver?.disconnect();super._render();this._applyPresentation();this._bindVehicleImage();return;}
   const config=this._config,hass=this._hass,states=hass?.states??{},nl=carDutch(hass),percent=carPercentage(config,states);
   const offline=hass?.connected===false||hass?.connection?.connected===false;
   const signature=JSON.stringify([config,hass?.themes?.darkMode,hass?.locale,hass?.language,offline,...[config.percentage_entity,config.range_entity,config.image_entity,config.field_1_entity,config.field_2_entity,config.field_3_entity].map(id=>states[id]),this._extraSignature()]);
   if(signature===this._signature)return;this._signature=signature;
   const scroll=this.shadowRoot.querySelector('.content')?.scrollTop??0,focused=this.shadowRoot.activeElement?.dataset.entity,focusedTab=this.shadowRoot.activeElement?.dataset.uiTab;
-  const title=config.title||(nl?'Mijn auto':'My car'),image=this._vehicleImage(),percentage=percent==null?'\u2014':carReading({state:String(percent),attributes:{unit_of_measurement:'%'}},hass);
+  const title=config.title||(nl?'Mijn auto':'My car'),percentage=percent==null?'\u2014':carReading({state:String(percent),attributes:{unit_of_measurement:'%'}},hass);
   const fields=[1,2,3].filter(i=>config['show_field_'+i]);
   this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${evccCardStyles()}${this._extraStyles()}
    /* Regular Auto only: EVCC keeps its independent presentation. */
@@ -160,7 +180,7 @@ export class CarCard extends EvccCard {
     ${offline?`<p class="notice warning" role="status">${nl?'Geen verbinding met Home Assistant. Getoonde waarden zijn de laatst ontvangen gegevens.':'Disconnected from Home Assistant. Values shown are the last received readings.'}</p>`:''}
     <div class="hero"><div class="car-stage"><div class="battery-row">${uiPrimaryValue({layout:'uniform',value:percent==null?null:percentage.replace(/\s*%$/,''),unit:'%',...this._rangePrimary(config,states,nl),entity:config.percentage_entity,compact:config.compact,attrs:{class:'battery-value'}})}
     </div>
-     <div class="picture">${image?`<img src="${uiEscape(image)}" alt="${uiEscape(title)}"><small hidden>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:`<ha-icon icon="mdi:car" aria-hidden="true"></ha-icon>${this._hasVehicleImage()?`<small>${nl?'Autoafbeelding niet beschikbaar':'Vehicle image unavailable'}</small>`:''}`}</div>
+     <div class="picture">${this._vehicleImageMarkup(title,nl)}</div>
    </div>${uiBar({value:percent,label:percent==null?(nl?'Percentage niet beschikbaar':'Percentage unavailable'):(nl?'Accuniveau':'Battery level'),attrs:{class:'battery-progress'}})}</div>
    </div></div>
    ${fields.length?`<div class="car-readings" data-ui-metric-grid style="--ui-metric-columns:2">${fields.map(i=>this._field(i,nl)).join('')}</div>`:''}</div>${this._tabsMarkup(nl)}</div></ha-card>`;
@@ -172,6 +192,6 @@ export class CarCard extends EvccCard {
   if(focusedTab)(Array.from(this.shadowRoot.querySelectorAll('[data-ui-tab]')).find(tab=>tab.dataset.uiTab===focusedTab)??this.shadowRoot.querySelector('[role=tab][aria-selected=true]'))?.focus({preventScroll:true});
   this._applyPresentation();
   this._fitCarReadings();
-  const img=this.shadowRoot.querySelector('img');if(img)img.addEventListener('error',()=>{img.hidden=true;const hint=this.shadowRoot.querySelector('.picture small');if(hint)hint.hidden=false;},{once:true});
+  this._bindVehicleImage();
  }
 }
