@@ -1,10 +1,11 @@
 import {uiEscape} from './ui-button.js';
-import {CARD_BACKGROUNDS,normalizeCardBackground,uiCardBackground,uiCardBackgroundStyles,observeCardBackgroundMotion} from './ui-card-background.js';
+import {CARD_BACKGROUNDS,CARD_BACKGROUND_CHOICES,normalizeCardBackground,uiCardBackground,uiCardBackgroundStyles,observeCardBackgroundMotion} from './ui-card-background.js';
 
 // Retain legacy YAML when the new object is absent. Unsupported legacy designs
 // continue to use their original renderer until the user chooses a shared style.
-export function cardBackgroundSettings(config={}){
+export function cardBackgroundSettings(config={}, {preserveNative=false}={}){
  const input=config.card_background;
+ if(preserveNative&&input===undefined)return {...normalizeCardBackground({variant:config.background,coverage:'header'}),enabled:config.background!=='none',legacy:true};
  if(input===false)return {...normalizeCardBackground({variant:'isobars',coverage:'header'}),enabled:false,legacy:false};
  if(input&&typeof input==='object'&&!Array.isArray(input))return {...normalizeCardBackground({variant:'isobars',coverage:'header',...input}),enabled:input.enabled!==false,legacy:false};
  const legacy=typeof config.background==='string'&&!CARD_BACKGROUNDS.some(row=>row.value===config.background)&&config.background!=='none';
@@ -45,7 +46,7 @@ export function cardBackgroundCutoutRects(rectangles,box,width,height){
 
 // Wrap registrations rather than replacing each card's renderer. The original
 // class retains its DOM patching, subscriptions, action handlers and editor.
-export const withCardBackground=Base=>class extends Base{
+export const withCardBackground=(Base,options={})=>class extends Base{
  static get backgroundBaseCard(){return Base;}
  set hass(hass){this._captureElevenBackgroundPlayback();super.hass=hass;this._syncElevenBackground();}
  get hass(){return super.hass;}
@@ -141,7 +142,7 @@ export const withCardBackground=Base=>class extends Base{
  }
  _syncElevenBackground(){
   const root=this.shadowRoot,host=root?.querySelector('ha-card');if(!host||!this._elevenBackgroundConfig)return;
-  const settings=cardBackgroundSettings(this._elevenBackgroundConfig);
+  const settings=cardBackgroundSettings(this._elevenBackgroundConfig,options);
   if(settings.legacy){
    host.removeAttribute('data-ui-background-host');
    this._elevenBackgroundLayer?.remove();this._elevenBackgroundLayer=null;
@@ -188,7 +189,7 @@ export const withCardBackground=Base=>class extends Base{
  }
  static async getConfigElement(){
   if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);
-  const editor=document.createElement('eleven-card-background-editor');
+  const editor=document.createElement('eleven-card-background-editor');editor.backgroundOptions=options;
   if(super.getConfigElement)editor.nativeEditor=await super.getConfigElement();
   else if(super.getConfigForm){
    if(!customElements.get('ha-form')&&window.loadCardHelpers){
@@ -243,7 +244,7 @@ export class ElevenCardBackgroundEditor extends HTMLElement{
  }
  _syncNativeBackgroundFields(){
   if(!this._config)return;
-  const legacy=cardBackgroundSettings(this._config).legacy;this._nativeBackgroundSchemas??=new WeakMap();
+  const legacy=cardBackgroundSettings(this._config,this.backgroundOptions).legacy;this._nativeBackgroundSchemas??=new WeakMap();
   const forms=this._nativeEditor?.shadowRoot?.querySelectorAll('ha-form')??[];
   for(const form of [...forms,...(this._nativeEditor?.tagName==='HA-FORM'?[this._nativeEditor]:[])]){
    const saved=this._nativeBackgroundSchemas.get(form);
@@ -253,7 +254,16 @@ export class ElevenCardBackgroundEditor extends HTMLElement{
    if(filtered!==form.schema){this._nativeBackgroundSchemas.set(form,{original:form.schema,filtered});form.schema=filtered;}
   }
  }
- set nativeEditor(editor){this._nativeEditor=editor;this.shadowRoot.querySelector('.native').replaceChildren(editor);if(this._hass)editor.hass=this._hass;if(this._config)editor.setConfig(this._config);this._observeNativeBackgroundFields();}
+ set nativeEditor(editor){
+  this._nativeEditor=editor;this.shadowRoot.querySelector('.native').replaceChildren(editor);
+  // Opt-in placement: keep the shared controls/events in this shadow tree while
+  // the card editor slots them into its own Appearance group.
+  if(editor.cardBackgroundSlot){
+   const section=this.shadowRoot.querySelector('details');section.slot=editor.cardBackgroundSlot;editor.append(section);
+   const style=document.createElement('style');style.textContent='details[slot]{border:0;border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px));background:var(--secondary-background-color);box-shadow:var(--eleven-material-well,none);margin:0;min-width:0}details[slot]>summary{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;align-items:center;list-style:none;min-height:52px;padding:12px;font-size:13px}details[slot]>summary::-webkit-details-marker{display:none}details[slot]>summary::before{content:"";width:7px;height:7px;border-right:2px solid var(--secondary-text-color);border-bottom:2px solid var(--secondary-text-color);transform:rotate(-45deg)}details[slot][open]>summary::before{transform:rotate(45deg)}details[slot]>.settings{padding:0 12px 12px 32px}';this.shadowRoot.append(style);
+  }
+  if(this._hass)editor.hass=this._hass;if(this._config)editor.setConfig(this._config);this._observeNativeBackgroundFields();
+ }
  set nativeForm(form){
   // Cards using Home Assistant's schema-only editor retain all native fields.
   const editor=document.createElement('ha-form');editor.schema=form.schema;editor.computeLabel=form.computeLabel;editor.computeHelper=form.computeHelper;
@@ -267,8 +277,8 @@ export class ElevenCardBackgroundEditor extends HTMLElement{
  _emitBackgroundConfig(){this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:{...this._config}},bubbles:true,composed:true}));}
  _renderBackgroundSettings(){
   if(!this._config)return;
-  const nl=this._language==='nl',s=cardBackgroundSettings(this._config),t=(d,e)=>nl?d:e;
-  const choices=['aurora','ribbon','isobars','ink-bloom','hologram'].map(value=>CARD_BACKGROUNDS.find(row=>row.value===value));
+  const nl=this._language==='nl',s=cardBackgroundSettings(this._config,this.backgroundOptions),t=(d,e)=>nl?d:e;
+  const choices=[...CARD_BACKGROUND_CHOICES];
   if(!s.legacy&&!choices.some(row=>row.value===s.variant))choices.push(CARD_BACKGROUNDS.find(row=>row.value===s.variant));
   this.shadowRoot.querySelector('summary').textContent=t('Kaartachtergrond','Card background');
   const pickerColor=index=>{const color=(s.colors.length?s.colors[index%s.colors.length]:['#4db6ac','#7287ed','#c77dbd'][index]);return color.length<=5?'#'+color.slice(1,4).split('').map(c=>c+c).join(''):color.slice(0,7);};
@@ -286,7 +296,7 @@ export class ElevenCardBackgroundEditor extends HTMLElement{
  }
  _changeBackground(event){
   const field=event.target.dataset.bg;if(!field)return;
-  const current=cardBackgroundSettings(this._config),next={...current};delete next.legacy;
+  const current=cardBackgroundSettings(this._config,this.backgroundOptions),next={...current};delete next.legacy;
   if(field.startsWith('color-'))next.colors=[...this.shadowRoot.querySelectorAll('input[type=color]')].map(input=>input.value);
   else next[field]=event.target.type==='checkbox'?event.target.checked:['height','transparency'].includes(field)?Number(event.target.value):event.target.value;
   if(field==='colorMode'&&next.colorMode==='custom'&&!next.colors.length)next.colors=[...this.shadowRoot.querySelectorAll('input[type=color]')].map(input=>input.value);

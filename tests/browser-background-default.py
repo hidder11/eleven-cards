@@ -43,7 +43,8 @@ class BackgroundDefault(unittest.TestCase):
                             ('home-controls', 'eleven-home-controls-card.js'),
                             ('appliance-planner', 'eleven-appliance-planner.js'),
                             ('room-card', 'eleven-room-card.js'),
-                            ('scene-engine-card', 'eleven-scene-engine-card.js')]]
+                            ('scene-engine-card', 'eleven-scene-engine-card.js'),
+                            ('camera-card', 'eleven-camera-card.js')]]
                     for path in paths:
                         harness.load(page, path)
                     # Remove preview overrides: verify the real production default.
@@ -79,7 +80,7 @@ class BackgroundDefault(unittest.TestCase):
                                 }''')
                                 for key, value in result.items():
                                     harness.check(label+' '+key, value)
-                                if artifact == 'collection' and name in ['weather-card', 'controls-card']:
+                                if helpers.SCREENSHOTS and artifact == 'collection' and name in ['weather-card', 'controls-card']:
                                     page.locator('eleven-'+name).screenshot(path=str(helpers.OUT/(name+('-dark' if dark else '-light')+'.png')))
                     aliases = page.evaluate('''()=>{
                         const results=[];

@@ -35,6 +35,7 @@ Use `card_background: false` to turn it off. Dynamic colours use the calling car
 | **Car (beta)** | Vehicle image, percentage and custom readings, with optional EVCC charging integration and selectable tabs. | [Car documentation](cards/car-card/README.md) |
 | **Weather (beta)** | Compact current weather and a short hourly or daily forecast, with state-colored artwork. | [Weather documentation](cards/weather-card/README.md) |
 | **Energy Flow (beta)** | Solar, grid and home distribution using Home Assistant Energy configuration and Recorder, with live/history buttons. | [Energy Flow documentation](cards/energy-flow-card/README.md) |
+| **Camera (beta)** | Camera feeds, alarm controls, doors/windows and paginated activity. | [Camera documentation](cards/camera-card/README.md) |
 | **Calendar (beta)** | Calendar events in a day list, day columns or month view, with optional weather. | [Calendar documentation](cards/calendar-card/README.md) |
 | **House (beta)** | Configurable transparent house rendering, lighting, people and optional current-weather decoration. | [House documentation](cards/house-card/README.md) |
 | **Shopping** | Any to-do list, with non-blocking additions, integrated saving/retry rows and provider-driven editing. | [Shopping documentation](cards/shopping-card/README.md) |

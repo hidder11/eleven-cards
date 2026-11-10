@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
 import vm from 'node:vm';
 
-const slugs=['dynamic-energy-price-card','history-graph-card','timeline-card','overview-card','bar-chart','heatmap-card','calendar-card','weather-card','car-card','energy-flow-card','shopping-card'];
+const slugs=['dynamic-energy-price-card','history-graph-card','timeline-card','overview-card','bar-chart','heatmap-card','calendar-card','weather-card','car-card','energy-flow-card','camera-card','shopping-card'];
 test('chart/status cards offer Sections sizing and a finite masonry size before configuration',()=>{
  const registry=new Map(),context=vm.createContext({HTMLElement:class{},window:{},customElements:{get:n=>registry.get(n),define:(n,c)=>registry.set(n,c)}});
  vm.runInContext(readFileSync(new URL('../dist/eleven-cards.js',import.meta.url),'utf8'),context);

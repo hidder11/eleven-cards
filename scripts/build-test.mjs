@@ -1,13 +1,13 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 const root=new URL('../',import.meta.url),directory=new URL('.cache/home-assistant-test/',root);
 let source=await readFile(new URL('dist/eleven-cards.js',root),'utf8');
-const names=['eleven-energy-flow-card','eleven-energy-flow-editor','eleven-car-card','eleven-car-editor','eleven-dynamic-energy-price-card','eleven-history-graph-card','eleven-timeline-card','eleven-overview-card','eleven-bar-chart','eleven-heatmap-card','eleven-calendar-card','eleven-weather-card','eleven-weather-editor','eleven-energy-editor','eleven-history-graph-editor','eleven-timeline-editor','eleven-overview-editor','eleven-heatmap-editor','eleven-calendar-editor'];
+const names=['eleven-card-background-editor','eleven-camera-card','eleven-camera-editor','eleven-energy-flow-card','eleven-energy-flow-editor','eleven-car-card','eleven-car-editor','eleven-dynamic-energy-price-card','eleven-history-graph-card','eleven-timeline-card','eleven-overview-card','eleven-bar-chart','eleven-heatmap-card','eleven-calendar-card','eleven-weather-card','eleven-weather-editor','eleven-energy-editor','eleven-history-graph-editor','eleven-timeline-editor','eleven-overview-editor','eleven-heatmap-editor','eleven-calendar-editor'];
 for(const name of names)source=source.replaceAll(name,name+'-test');
 // Bar Chart's editor contains its card name and was renamed with it above.
 source=source.replaceAll("name:'Eleven ","name:'Eleven Test ").replaceAll("name: 'Eleven ","name: 'Eleven Test ");
 await mkdir(directory,{recursive:true});
 await writeFile(new URL('eleven-cards-test.js',directory),'// Local test collection with separate card/editor names.\n'+source);
-await writeFile(new URL('LEESMIJ.md',directory),'# Eleven Cards lokaal testen\n\nLees LEESMIJ-TIJDVAK.md voor de actuele testcollectie met tien kaarten en de installatie-instructies.\n');
+await writeFile(new URL('LEESMIJ.md',directory),'# Eleven Cards lokaal testen\n\nLees LEESMIJ-TIJDVAK.md voor de actuele testcollectie met de geselecteerde kaarten en de installatie-instructies.\n');
 await writeFile(new URL('LEESMIJ-TIJDVAK.md',directory),`# Tijdvaksynchronisatie testen
 
 1. Kopieer eleven-cards-test.js naar /config/www/eleven-cards-test.js in Home Assistant.
@@ -20,6 +20,7 @@ await writeFile(new URL('LEESMIJ-TIJDVAK.md',directory),`# Tijdvaksynchronisatie
     custom:eleven-heatmap-card-test
     custom:eleven-car-card-test
     custom:eleven-energy-flow-card-test
+    custom:eleven-camera-card-test
     custom:eleven-weather-card-test
     custom:eleven-calendar-card-test
     custom:eleven-overview-card-test
@@ -64,4 +65,4 @@ Het losse heatmap-testbestand is niet daarnaast nodig: deze testcollectie bevat 
 
 Opruimen: verwijder de testkaarten en testresource. De normale kaarten blijven hun bestaande types gebruiken.
 `);
-console.log('Built ten test cards and LEESMIJ-TIJDVAK.md.');
+console.log('Built selected test cards and LEESMIJ-TIJDVAK.md.');

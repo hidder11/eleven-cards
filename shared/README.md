@@ -223,3 +223,11 @@ Run `node tests/browser-card-backgrounds.mjs` with Node.js 22+ and Chrome/Chromi
 ### Graph hover placement
 
 `SharedGraph.rememberTooltipPointer(host, event)` records the active pointer locally. `SharedGraph.positionTooltip(host, {chart, tooltip, x, y, markers, local})` places a visible tooltip six CSS pixels from its anchor, flips at boundaries, avoids hovered markers where possible, and constrains its size to the visible card, viewport and clipping ancestors. Supply chart-relative rendered coordinates for the fallback anchor and markers. Set `local: false` when receiving a synchronized timestamp: receiving cards use their own data anchor, never the originating mouse coordinates. Clear the remembered pointer on keyboard interaction and tooltip dismissal. Timeline, History, Bar, Energy, Heatmap and EVCC history use this shared placement.
+
+## Camera integration and shared backgrounds
+
+The camera card adds a collapsible editor with a `cardBackgroundSlot` under Appearance, alarm/contact status, activity pagination and theme-owned camera surfaces. The shared background wrapper retains editor events and optionally supports native-background preservation for older adapters. The current develop cards already install this wrapper directly, so no additional build-time decoration is applied.
+
+`CARD_BACKGROUND_CHOICES` in [ui-card-background.js](ui-card-background.js) lists the nine approved editor choices, including Satin waves, Isometric depth, Comet trails and Lenticular glow. All support the common colour, transparency, coverage and motion settings. Top-section backgrounds fade from 45% via 78% to transparent at 100%. Legacy catalog identifiers remain supported.
+
+The standard and balanced tabs share `uiTabIndicatorStyles()` in [ui-tabs.js](ui-tabs.js): a 2 px underline above a separate 1 px divider without overlap. The camera card uses this same generic component.

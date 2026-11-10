@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Eleven Security · raster en alarmbediening</title>
+  <link rel="stylesheet" href="security-designs.css">
+  <script type="module" src="security-refinements.js"></script>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <span class="eyebrow">ELEVEN CARDS / SECURITY</span>
+      <h1>Rustiger camerabeeld. Duidelijkere bediening.</h1>
+      <p>Drie ontwerpen voor de camerategels, elk gecombineerd met een andere eigen alarmbediening. De combinaties zijn vrij te mengen.</p>
+    </header>
+    <form class="toolbar" aria-label="Ontwerpen vergelijken" onsubmit="return false">
+      <label>Situatie<select id="scenario"><option value="person">Persoon bij voordeur</option><option value="quiet">Rust</option><option value="open">Raam open</option><option value="unknown">Niet beschikbaar</option><option value="error">Alarmopdracht mislukt</option></select></label>
+      <label>Kaartbreedte<select id="width"><option value="standard">Standaard · 440 px</option><option value="narrow">Smal · 280 px</option><option value="wide">Breed · 560 px</option></select></label>
+      <label>Thema<select id="theme"><option value="dark">Donker</option><option value="light">Licht</option></select></label>
+      <label>Achtergrond<select id="background"></select></label>
+      <label>Pincode<select id="pin"><option value="yes">Vragen · demo 1234</option><option value="no">Geen pincode</option></select></label>
+      <span class="fixture-note">Fictieve gegevens · geen verbinding met Home Assistant</span>
+    </form>
+    <section class="examples" aria-label="Camera- en alarmontwerpen">
+      <article>
+        <div class="study-heading"><span class="number">01</span><div><h2>Rustige onderbalk</h2><p>Beeld zonder overlays. Naam, detectie-iconen en vergroten in één smalle balk. Alarm met drie direct herkenbare standen.</p></div></div>
+        <security-refinement variant="rail"></security-refinement>
+        <p class="try">Mijn voorkeur voor het raster: overzichtelijk bij meerdere camera’s. De alarmknoppen zijn meteen zichtbaar.</p>
+        <p class="demo-actions"><button data-demo-alarm="rail">Alarm proberen · 01</button> <button data-demo-camera="rail">Camera openen · 01</button></p>
+      </article>
+      <article>
+        <div class="study-heading"><span class="number">02</span><div><h2>Beeld centraal</h2><p>Naam en iconen op een donkere strook over het beeld. Kies een alarmstand en gebruik één duidelijke actieknop.</p></div></div>
+        <security-refinement variant="overlay"></security-refinement>
+        <p class="try">Mijn voorkeur voor het alarm: kies Thuis, Afwezig of Nacht en schakel in. Bij een actief alarm wordt de hoofdactie Uitschakelen.</p>
+        <p class="demo-actions"><button data-demo-alarm="overlay">Alarm proberen · 02</button> <button data-demo-camera="overlay">Camera openen · 02</button></p>
+      </article>
+      <article>
+        <div class="study-heading"><span class="number">03</span><div><h2>Ruimere detailtegels</h2><p>Hogere beelden met een rustige naamregel en eigen rij voor detectie-iconen. Een compacte alarmbalk opent een venster met de standen.</p></div></div>
+        <security-refinement variant="detail"></security-refinement>
+        <p class="try">Geschikt als je meer van het camerabeeld wilt zien. Alarmbediening blijft compact tot je die nodig hebt.</p>
+        <p class="demo-actions"><button data-demo-alarm="detail">Alarm proberen · 03</button> <button data-demo-camera="detail">Camera openen · 03</button></p>
+      </article>
+    </section>
+    <footer>Interactieve voorstellen met getekende camerabeelden en gesimuleerde alarmopdrachten. Probeer ook een verkeerde pincode, een mislukte opdracht en de smalle weergave. <a href="security.html">Huidige kaart</a></footer>
+  </main>
+  <style>.demo-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.demo-actions button{font:inherit;font-size:11px;min-height:36px;padding:6px 10px;border:1px solid var(--divider-color);border-radius:6px;color:var(--primary-text-color);background:var(--ha-card-background);cursor:pointer}.demo-actions button:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}footer a{color:var(--primary-color)}</style>
+</body>
+</html>

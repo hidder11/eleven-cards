@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 
 const root = new URL('../', import.meta.url);
-const workflow = readFileSync(new URL('.github/workflows/release.yml', root), 'utf8');
+const workflow = readFileSync(new URL('.github/workflows/release.yml', root), 'utf8').replace(/\r\n/g, '\n');
 function step(name) {
   const block = workflow.split(`      - name: ${name}\n`)[1]?.split('\n      - ')[0];
   assert.ok(block, `Missing workflow step: ${name}`);
@@ -53,7 +53,7 @@ test('provenance records current bundle and theme checksums, not fixed hashes', 
   assert.match(result.stdout, /^Version: v9\.8\.7\nCommit: selected-commit\n/);
   for (const path of ['dist/eleven-cards.js', 'themes/eleven_material.yaml']) {
     const hash = createHash('sha256').update(readFileSync(new URL(path, root))).digest('hex');
-    assert.ok(result.stdout.split('\n').includes(`${hash}  ${path}`), `Missing checksum for ${path}`);
+    assert.ok(result.stdout.split('\n').some(line => line === `${hash}  ${path}` || line === `${hash} *${path}`), `Missing checksum for ${path}`);
   }
 });
 

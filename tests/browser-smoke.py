@@ -11,7 +11,7 @@ CARDS = [
     'eleven-timeline-card', 'eleven-overview-card', 'eleven-bar-chart',
     'eleven-heatmap-card', 'eleven-calendar-card',
     'eleven-car-card', 'eleven-weather-card', 'eleven-energy-flow-card',
-    'eleven-shopping-card', 'eleven-house-card',
+    'eleven-camera-card', 'eleven-shopping-card', 'eleven-house-card',
     'eleven-actions-card', 'eleven-controls-card', 'eleven-waste-card',
     'eleven-room-card', 'eleven-appliance-planner',
     'eleven-scene-engine-card', 'eleven-material-house',
@@ -98,6 +98,61 @@ class CollectionSmokeTest(unittest.TestCase):
             finally:
                 browser.close()
 
+
+
+    def test_camera_editor_title_changes_preserve_background_opt_in(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(**({'executable_path': os.environ['BROWSER_EXECUTABLE']} if os.getenv('BROWSER_EXECUTABLE') else {}))
+            try:
+                page = browser.new_page()
+                page.set_content('<!doctype html><html><body></body></html>')
+                page.add_script_tag(content="customElements.define('ha-form', class extends HTMLElement {});")
+                page.add_script_tag(path=str(ROOT / 'dist/eleven-cards.js'))
+                cases = [({}, False), ({'background':'none'}, False), ({'background':'lanes'}, True),
+                         ({'card_background':False}, False),
+                         ({'card_background':{'enabled':True,'variant':'satin-waves'}}, True)]
+                for settings, enabled in cases:
+                    with self.subTest(settings=settings):
+                        results = page.evaluate('''async settings => {
+                          const Class=customElements.get('eleven-camera-card');
+                          const card=document.createElement('eleven-camera-card');
+                          const editor=await Class.getConfigElement();
+                          const config={cameras:[],...settings};
+                          const hass={language:'en',states:{},config:{time_zone:'UTC'}};
+                          card.setConfig(config);card.hass=hass;
+                          editor.setConfig(config);editor.hass=hass;
+                          document.body.replaceChildren(card,editor);
+                          const results=[];
+                          for(let i=0;i<2;i++){
+                            const before=!!card.shadowRoot.querySelector('[data-ui-card-background]');
+                            let emitted;
+                            editor.addEventListener('config-changed',event=>{emitted=event.detail.config;},{once:true});
+                            const native=editor._nativeEditor;
+                            native._form.dispatchEvent(new CustomEvent('value-changed',{
+                              detail:{value:{...native._form.data,title:'Updated '+i}},bubbles:true,composed:true
+                            }));
+                            card.setConfig(emitted);editor.setConfig(emitted);editor.hass=hass;
+                            results.push({before,after:!!card.shadowRoot.querySelector('[data-ui-card-background]'),
+                              checked:editor.shadowRoot.querySelector('[data-bg=enabled]').checked,
+                              hasBackground:Object.hasOwn(emitted,'background'),background:emitted.background,
+                              hasShared:Object.hasOwn(emitted,'card_background'),shared:emitted.card_background,
+                              title:emitted.title});
+                          }
+                          return results;
+                        }''', settings)
+                        for i, result in enumerate(results):
+                            self.assertEqual(result['before'], enabled)
+                            self.assertEqual(result['after'], enabled)
+                            self.assertEqual(result['checked'], enabled)
+                            self.assertEqual(result['hasBackground'], 'background' in settings)
+                            if 'background' in settings:
+                                self.assertEqual(result['background'], settings['background'])
+                            self.assertEqual(result['hasShared'], 'card_background' in settings)
+                            if 'card_background' in settings:
+                                self.assertEqual(result['shared'], settings['card_background'])
+                            self.assertEqual(result['title'], 'Updated '+str(i))
+            finally:
+                browser.close()
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

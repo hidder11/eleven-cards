@@ -32,11 +32,19 @@ export function bindUITabs({tabs,panels,onSelect=()=>{}}){
  }
  return {select,disconnect(){cleanups.splice(0).forEach(remove=>remove());}};
 }
+// One underline recipe for standard and balanced card tabs. Keep the accent
+// above the divider; a negative margin would make the two lines overlap.
+export function uiTabIndicatorStyles({strip='[data-ui-tabs]',tab=strip+' [role=tab]',color='var(--primary-color,#2196f3)'}={}){return `
+${strip}{border-bottom:1px solid var(--divider-color,#ddd)}
+${tab}{margin-bottom:0;border-bottom:2px solid transparent}
+${tab}[aria-selected=true]{border-bottom-color:${color}}
+`;}
 export function uiTabsStyles(){return `
-[data-ui-tabs]{display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid var(--divider-color,#ddd)}
-[data-ui-tabs] [role="tab"]{flex:1;justify-content:center;min-width:0;min-height:36px;padding:8px 3px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--secondary-text-color,#666);white-space:nowrap}
+[data-ui-tabs]{display:flex;align-items:flex-end;gap:8px}
+[data-ui-tabs] [role="tab"]{flex:1;justify-content:center;min-width:0;min-height:36px;padding:8px 3px;border:0;border-radius:0;background:transparent;color:var(--secondary-text-color,#666);white-space:nowrap}
 [data-ui-tabs] [role="tab"]:hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,var(--ha-card-background,var(--card-background-color,#fff)));color:var(--primary-text-color,#20252b)}
-[data-ui-tabs] [role="tab"][aria-selected="true"]{border-bottom-color:var(--primary-color,#2196f3);color:var(--primary-color,#2196f3);font-weight:600}
+[data-ui-tabs] [role="tab"][aria-selected="true"]{color:var(--primary-color,#2196f3);font-weight:600}
+${uiTabIndicatorStyles()}
 [data-ui-tab-panel][hidden]{display:none!important}
 [data-ui-tabs][data-ui-card-tabs]{margin-top:16px;overflow-x:auto;scrollbar-width:thin}
 [data-ui-tabs][data-ui-card-tabs] [role=tab]{flex:1 0 auto;min-width:64px;max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;text-align:center;font:inherit;line-height:inherit;border-radius:0}
@@ -44,18 +52,18 @@ export function uiTabsStyles(){return `
 [data-ui-card-tab-panel]{margin:0;padding:16px 0 0;border:0;min-width:0}
 `;}
 
-// Approved 2A-1 appearance. Retain the existing helper name for consumers.
 export function uiBalancedTabsStyles(){
  const strip=':host [data-ui-tabs][role=tablist]';
  const tab=strip+' [role=tab][data-ui-tab]';
  return `
-${strip}{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:stretch;gap:0;width:100%;box-sizing:border-box;padding:0;border:0;border-bottom:1px solid var(--divider-color,#ddd);background:transparent;box-shadow:none;overflow:visible}
+${strip}{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:stretch;gap:0;width:100%;box-sizing:border-box;padding:0;border:0;background:transparent;box-shadow:none;overflow:visible}
 ${strip}:has(>[role=tab]:nth-child(4)){display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
 ${strip}::-webkit-scrollbar{display:none}
 ${strip}:has(>[role=tab]:nth-child(4)) [role=tab][data-ui-tab]{flex:1 0 88px}
-${tab}{display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:44px;max-width:none;min-height:44px;height:auto;margin:0 0 -1px;padding:5px 6px 3px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--secondary-text-color,#666);font-family:inherit;font-size:13px;font-weight:400;line-height:1.3;text-align:center;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;text-decoration:none;transform:none}
+${tab}{display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:44px;max-width:none;min-height:44px;height:auto;margin:0;padding:5px 6px 3px;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--secondary-text-color,#666);font-family:inherit;font-size:13px;font-weight:400;line-height:1.3;text-align:center;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip;text-decoration:none;transform:none}
 ${tab}:not(:disabled):hover{color:var(--primary-text-color,#20252b);background:color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent);box-shadow:none;transform:none}
-${tab}[aria-selected=true],${tab}[aria-selected=true]:not(:disabled):hover{color:var(--primary-text-color,#20252b);font-weight:400;background:transparent;box-shadow:none;border-bottom:2px solid var(--accent-color,var(--primary-color));text-decoration:none;transform:none}
+${tab}[aria-selected=true],${tab}[aria-selected=true]:not(:disabled):hover{color:var(--primary-text-color,#20252b);font-weight:400;background:transparent;box-shadow:none;text-decoration:none;transform:none}
+${uiTabIndicatorStyles({strip,tab,color:'var(--accent-color,var(--primary-color))'})}
 ${tab}:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
 ${strip}~[data-ui-tab-panel]{border:0;padding-block-start:12px;background:transparent}
 @media(forced-colors:active){${strip}{border-bottom-color:CanvasText}${tab}[aria-selected=true]{border-bottom-color:Highlight;outline:1px solid Highlight;outline-offset:-2px;box-shadow:none}${tab}:focus-visible{outline:2px solid CanvasText;outline-offset:-4px}}
