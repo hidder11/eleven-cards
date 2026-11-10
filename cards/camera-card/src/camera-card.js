@@ -23,7 +23,7 @@ class CameraCardBase extends HTMLElement{
  getCardSize(){const count=this._config?visibleCameras(this._config).length:0,layout=this._config?this._layout():'grid',rows=['grid','wall'].includes(layout)?Math.ceil(count/(this._config?.columns==='auto'?2:this._config?.columns||1)):layout==='sidebar'?Math.max(1,count-1):1;return Math.max(3,1+rows*4);}
  getGridOptions(){return {columns:12,min_columns:6,rows:this.getCardSize(),min_rows:3};}
  _layout(){return this._config.layout;}
- _advanceCycle(){if(this.shadowRoot.activeElement||this._hovered||this._focused||this.hasAttribute('data-motion-paused')||document.hidden||this.shadowRoot.fullscreenElement){this._syncCycle();return;}this._selectCamera(nextCamera(this._config,this._activeCamera,1,this._hass,true),false);}
+ _advanceCycle(){if(this.shadowRoot.activeElement||this._hovered||this._focused||this.hasAttribute('data-motion-paused')||document.hidden||this.shadowRoot.fullscreenElement){this._syncCycle();return;}this._selectCamera(nextCamera({...this._config,cameras:this._cycleCameras()},this._activeCamera),false);}
  _feedVisible(row){return !['focus','tabs'].includes(this._layout())||row.entity===this._activeCamera;}
  _playbackBlocked(row){return cameraUnavailable(this._hass,row.entity);}
  _syncTile(tile,row,active){tile.player.update(this._hass,cameraPictureConfig(row.entity,this._config),active);}
@@ -121,9 +121,10 @@ class CameraCardBase extends HTMLElement{
   const formatted=last===null?'—':new Intl.DateTimeFormat(nl?'nl-NL':'en-GB',{timeZone:this._hass?.config?.time_zone,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(last));
   detection.textContent=t('Laatste detectie: ','Last detection: ')+formatted;
  }
+ _cycleCameras(){return visibleCameras(this._config).filter(row=>!this._playbackBlocked(row));}
  _syncCycle(){
   if(!this._config)return;
-  const eligible=visibleCameras(this._config).filter(row=>!this._playbackBlocked(row));
+  const eligible=this._cycleCameras();
   const enabled=this._attached&&!this.hasAttribute('data-motion-paused')&&!this._hovered&&!this._focused&&!this.shadowRoot.activeElement&&!this.shadowRoot.fullscreenElement&&['tabs','focus'].includes(this._layout())&&this._config.auto_cycle&&!this._cyclePaused&&!this._temporary&&(eligible.length>1||(eligible.length===1&&eligible[0].entity!==this._activeCamera));
   this._cycle.sync(enabled,this._config.cycle_interval);
  }

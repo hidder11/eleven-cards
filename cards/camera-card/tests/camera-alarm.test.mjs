@@ -16,7 +16,7 @@ test('alarm actions map every supported mode to its HA service and entity',()=>{
  assert.throws(()=>cameraAlarmRequest(hass('disarmed',{supported_features:2}),entity,'armed_night'),/unsupported/);
  assert.throws(()=>cameraAlarmRequest(hass(),entity,'armed_away'),/unchanged/);
 });
-test('only disarming can ask for a code, with an explicit opt-out; arming never sends a code',()=>{
+test('disarming supports an optional code; code-required arming uses native HA instead of an incomplete request',()=>{
  const secured=hass('armed_away',{supported_features:55,code_format:'number',code_arm_required:false});
  assert.ok(cameraAlarmNeedsCode(secured.states[entity],'disarmed'));
  assert.ok(!cameraAlarmNeedsCode(secured.states[entity],'armed_home'));
@@ -26,7 +26,7 @@ test('only disarming can ask for a code, with an explicit opt-out; arming never 
  assert.ok(!('code' in cameraAlarmRequest(secured,entity,'disarmed','',false).data));
  assert.ok(!('code' in cameraAlarmRequest(secured,entity,'armed_home','1234').data));
  const text=hass('disarmed',{supported_features:1,code_format:'text',code_arm_required:true});
- assert.ok(!('code' in cameraAlarmRequest(text,entity,'armed_home','secret phrase').data));
+ assert.throws(()=>cameraAlarmRequest(text,entity,'armed_home','secret phrase'),/native/);
  text.states[entity].state='armed_home';
  assert.equal(cameraAlarmRequest(text,entity,'disarmed','secret phrase').data.code,'secret phrase');
 });

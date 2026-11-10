@@ -2,7 +2,7 @@
 
 Home Assistant camera feeds with a security overview, Grid and Focus layouts, detection activity, managed snapshots and alarm/door/window status. The UI follows Eleven Cards v0.3.3: the active Home Assistant theme owns surfaces, shadows and corner radii; the optional Eleven Material theme adds inset wells and raised controls. Tabs, focus indicators and selected actions use the theme accent. Functional alarm/detection colours retain their meaning. No runtime dependencies.
 
-The compact camera footer, edge-to-edge feed and camera popup with thumbnail selection remain available. Camera tiles use the theme's inset well, drawn above the image without adding padding or blocking controls. Alarm modes act immediately; disarming can optionally require a code. New configurations have no decorative background. The visual editor and preview offer the nine shared backgrounds: Aurora sky, Silk Flow, Atmospheric flow, Ink bloom, Holographic grid, Satin waves, Isometric depth, Comet trails and Lenticular glow, with transparency, motion, coverage and custom colours through `card_background`. Older background variants remain supported for existing YAML; the editor retains a configured older variant as an extra choice.
+The compact camera footer, edge-to-edge feed and camera popup with thumbnail selection remain available. Camera tiles use the theme's inset well, drawn above the image without adding padding or blocking controls. Alarm modes act immediately; disarming can optionally require a code. If the integration requires a code to arm, the mode buttons open native Home Assistant alarm controls instead of sending an incomplete command. An explanation and an Open alarm controls button are shown in that case. New configurations have no decorative background. The visual editor and preview offer the nine shared backgrounds: Aurora sky, Silk Flow, Atmospheric flow, Ink bloom, Holographic grid, Satin waves, Isometric depth, Comet trails and Lenticular glow, with transparency, motion, coverage and custom colours through `card_background`. Older background variants remain supported for existing YAML; the editor retains a configured older variant as an extra choice.
 
 ```yaml
 card_background:
@@ -75,7 +75,7 @@ cameras:
 | `show_status` | `true` | Camera availability/streaming/recording and configured detection badges |
 | `show_last_detection` | `true` | Last detection timestamp for cameras with detector mappings |
 | `show_navigation` | `true` | Previous/next buttons and camera position in tabs/focus |
-| `auto_cycle` | `false` | Automatically switch cameras in tabs/focus; unavailable cameras are skipped |
+| `auto_cycle` | `false` | Automatically switch cameras in tabs/focus; unavailable, private and unknown-privacy cameras are skipped |
 | `cycle_interval` | `10` | Seconds between switches, 5–3600 |
 | `compact` | `false` | Reduced header and grid spacing |
 | `color` | `charging` | Same gold/blue/green/purple/grey presets as Car |
@@ -84,7 +84,7 @@ cameras:
 | `background_strength` | `100` | Decorative header intensity, 0–100 |
 | `animate_background` | `true` | Header motion; respects reduced motion and off-screen pausing |
 
-The native Home Assistant `picture-entity` card handles normal live playback, native snapshots and media controls. Live requires streaming supported/configured in Home Assistant. Managed snapshots use the authenticated HA camera image API when a refresh interval is set or Refresh is clicked. Tap a feed/name for camera details. Only explicitly applied alarm actions and confirmed privacy actions issue service calls. Choosing another alarm mode sends its command immediately. Opening a card or receiving a detection never sends control commands.
+The native Home Assistant `picture-entity` card handles normal live playback, native snapshots and media controls. Live requires streaming supported/configured in Home Assistant. Managed snapshots use the authenticated HA camera image API when a refresh interval is set or Refresh is clicked. Tap a feed/name for camera details. Only explicitly applied alarm actions and confirmed privacy actions issue service calls. Choosing another alarm mode sends its command immediately when the integration allows code-free arming. A code-required alarm opens native HA controls instead. Opening a card or receiving a detection never sends control commands.
 
 Grid loads all available visible feeds. Tabs only load the selected camera. Native players are preserved on sensor and cosmetic configuration updates, and removed on unavailable/off states, leaving a tab, hiding the card/page or removing the card. Reconnection recreates players. Initial player/helper failures offer Retry; playback errors inside the native player remain handled by Home Assistant. Offline, missing, off and unavailable cameras have distinct Dutch/English messages. Custom names entered in YAML are preserved by the visual picker.
 

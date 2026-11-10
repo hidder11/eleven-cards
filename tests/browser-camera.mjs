@@ -22,7 +22,7 @@ const server = createServer(async (request, response) => {
  catch { response.writeHead(404).end(); }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const browser = spawn(chrome, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', 'about:blank'], {windowsHide: true, stdio: 'ignore'});
+const browser = spawn(chrome, ['--headless=new', ...(process.platform==='linux'?['--no-sandbox']:[]), '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', 'about:blank'], {windowsHide: true, stdio: 'ignore'});
 const watchdog = setTimeout(() => { browser.kill(); server.closeAllConnections(); console.error('Browser verification timed out'); process.exit(1); }, 60000);
 let socket;
 try {
@@ -57,7 +57,7 @@ try {
  let result;
  for(let attempt=0;attempt<150;attempt++){
   result=await evaluate("(()=>{try{return JSON.parse(document.querySelector('#checks')?.textContent||'null')}catch{return null}})()");
-  if(result?.pass===false||result?.checks?.length>=117)break;await delay(100);
+  if(result?.pass===false||result?.complete===true)break;await delay(100);
  }
  assert.equal(result?.pass,true,JSON.stringify(result));assert.ok(result.checks.length>=117,JSON.stringify(result));
  assert.deepEqual(exceptions,[],'no runtime errors');console.log('PASS: '+result.checks.length+' rendered Camera checks.');

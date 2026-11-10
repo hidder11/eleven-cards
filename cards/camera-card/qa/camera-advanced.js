@@ -1,3 +1,4 @@
+import {runCameraReviewChecks} from './camera-review-checks.js';
 // Integration checks with synthetic HA state, history, images and action handlers.
 const checks=JSON.parse(document.querySelector('#checks').textContent).checks;
 const tick=(ms=60)=>new Promise(resolve=>setTimeout(resolve,ms)),check=(name,ok)=>{if(!ok)throw Error(name);checks.push(name);};
@@ -27,9 +28,9 @@ try{
  alarmReject=false;alarmAcknowledge=false;alarmPanel.querySelector('[data-alarm-mode="disarmed"]').click();await tick();
  check('Successful request without HA state acknowledgement never reports disarmed',!!alarmControls.pending&&hass.states['alarm_control_panel.home'].state==='armed_away'&&alarmPanel.querySelector('[data-alarm-mode]').disabled);
  state('alarm_control_panel.home','disarmed');alarmAcknowledge=true;
- hass.states['alarm_control_panel.home'].attributes={...hass.states['alarm_control_panel.home'].attributes,code_format:'number',code_arm_required:true};card.hass={...hass};
+ hass.states['alarm_control_panel.home'].attributes={...hass.states['alarm_control_panel.home'].attributes,code_format:'number',code_arm_required:false};card.hass={...hass};
  alarmPanel.querySelector('[data-alarm-mode="armed_away"]').click();await tick();
- check('Arming never asks for or sends a code, even with a code-capable entity',hass.states['alarm_control_panel.home'].state==='armed_away'&&!alarmPanel.querySelector('input')&&!('code' in calls.at(-1)[2]));
+ check('Arming sends no code when the integration allows code-free arming',hass.states['alarm_control_panel.home'].state==='armed_away'&&!alarmPanel.querySelector('input')&&!('code' in calls.at(-1)[2]));
  const beforeCode=calls.length;alarmPanel.querySelector('[data-alarm-mode="disarmed"]').click();const codeInput=alarmPanel.querySelector('input');
  const press=key=>alarmPanel.querySelector('[data-alarm-key="'+key+'"]').click();
  press('9');press('clear');press('backspace');
@@ -159,9 +160,10 @@ try{
  editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{door_entities:['binary_sensor.extra'],window_entities:[]}}}));
  check('Removing contacts removes their name editors',!editor._contactRows.has('door_sensors:binary_sensor.door')&&!editor._contactRows.has('window_sensors:binary_sensor.window'));
  card.setConfig({...base,auto_focus:false,layout:'sidebar',activity_source:'session'});card.hass=hass;
+ await runCameraReviewChecks(card,hass,calls,check);
  const controls=document.createElement('div');controls.className='controls';controls.innerHTML='<label>Indeling <select id="advanced-layout"><option value="sidebar">Groot + klein</option><option value="wall">Camerawand</option><option value="filmstrip">Filmstrip</option><option value="grid">Raster</option><option value="tabs">Tabbladen</option></select></label><button id="advanced-person">Persoonsdetectie wisselen</button><button id="advanced-ring">Aanbellen</button><button id="advanced-privacy">Privacy wisselen</button><button id="advanced-alarm">Alarm wisselen</button>';
  article.prepend(controls);controls.querySelector('#advanced-layout').onchange=event=>card.setConfig({...card._baseConfig,layout:event.target.value,auto_focus:true});controls.querySelector('#advanced-person').onclick=()=>state('binary_sensor.person',hass.states['binary_sensor.person'].state==='on'?'off':'on');controls.querySelector('#advanced-ring').onclick=()=>{card.setConfig({...card._baseConfig,auto_focus:true});state('event.bell',new Date().toISOString());};controls.querySelector('#advanced-privacy').onclick=()=>state('switch.privacy',hass.states['switch.privacy'].state==='on'?'off':'on');controls.querySelector('#advanced-alarm').onclick=()=>state('alarm_control_panel.home',hass.states['alarm_control_panel.home'].state==='triggered'?'disarmed':'triggered');
  window.cameraQA.advanced=card;
  window.cameraQA.cards.push(card);
- document.querySelector('#checks').textContent=JSON.stringify({pass:true,checks},null,2);
+ document.querySelector('#checks').textContent=JSON.stringify({pass:true,complete:true,checks},null,2);
 }catch(error){document.querySelector('#checks').textContent=JSON.stringify({pass:false,error:String(error),stack:error.stack,checks},null,2);}
