@@ -20,8 +20,22 @@ test('leaving the chart cancels a queued hover update',()=>{
  const chart={querySelector:()=>({hidden:true,style:{}}),getBoundingClientRect:()=>({left:0,right:100,width:100})};
  card.shadowRoot.querySelector=selector=>selector==='.chart'?chart:null;
  card.shadowRoot.querySelectorAll=()=>[];card._showTooltip=time=>shown.push(time);
- card._bindInteractions();chart.onpointermove({clientX:50,pointerType:'mouse'});
+ card._bindInteractions();chart.onpointermove({clientX:50,pointerType:'mouse',target:{closest:selector=>selector==='.track'?{}:null}});
  assert.equal(pending.size,1);chart.onpointerleave();assert.equal(pending.size,0);
+ queued();assert.deepEqual(shown,[]);
+});
+
+test('moving from a track to a group legend cancels a queued tooltip and guide',()=>{
+ const pending=new Map(),shown=[];let nextId=0,queued;
+ const {Card}=load({requestAnimationFrame:callback=>{queued=callback;pending.set(++nextId,callback);return nextId;},cancelAnimationFrame:id=>pending.delete(id)});
+ const card=new Card();card.setConfig({entities:['switch.a']});card._viewStart=0;card._viewEnd=100;
+ const tooltip={hidden:false},guide={hidden:false},chart={querySelector:()=>({hidden:true,style:{}}),getBoundingClientRect:()=>({left:0,right:100,width:100})};
+ card.shadowRoot.querySelector=selector=>selector==='.chart'?chart:selector==='.tooltip'?tooltip:selector==='.guide'?guide:null;
+ card.shadowRoot.querySelectorAll=()=>[];card._showTooltip=time=>shown.push(time);card._bindInteractions();
+ chart.onpointermove({clientX:50,pointerType:'mouse',target:{closest:selector=>selector==='.track'?{}:null}});
+ assert.equal(pending.size,1);
+ chart.onpointermove({clientX:50,pointerType:'mouse',target:{closest:selector=>selector==='[data-ui-legend]'?{}:null}});
+ assert.equal(pending.size,0);assert.equal(tooltip.hidden,true);assert.equal(guide.hidden,true);
  queued();assert.deepEqual(shown,[]);
 });
 test('unrelated Home Assistant updates do not rebuild the timeline',()=>{

@@ -821,6 +821,60 @@ function wasteRows(entries,states={},calendars={},options={}){
 function groupWaste(rows){const groups=[];for(const row of rows){if(!row.date)continue;let g=groups.find(g=>g.date===row.date);if(!g){g={date:row.date,label:row.label,days:row.days,items:[]};groups.push(g);}if(!g.items.some(e=>e.entity===row.entity&&e.name===row.name))g.items.push(row);}return groups;}
 
 
+function controlItemState(domain,state){
+ if(!state||['unknown','unavailable'].includes(state.state))return 'unavailable';
+ if(domain==='climate')return ({heating:'heating',cooling:'cooling',drying:'active',fan:'active'})[state.attributes?.hvac_action]??'idle';
+ if(['opening','closing'].includes(state.state))return 'moving';
+ return ['on','open'].includes(state.state)?'active':'idle';
+}
+
+// Only fixed geometry enters SVG; caller-provided icons use escaped HA markup.
+function controlItemIcon(domain,state,status,customIcon){
+ if(customIcon)return `<span class="item-state-icon" aria-hidden="true"><ha-icon icon="${uiEscape(customIcon)}"></ha-icon></span>`;
+ const parts=[],active=['active','moving','heating','cooling'].includes(status);
+ const add=(tag,attrs)=>parts.push(`<${tag} ${Object.entries(attrs).map(([key,value])=>`${key}="${uiEscape(value)}"`).join(' ')}></${tag}>`);
+ const line=d=>add('path',{d,fill:'none',stroke:'currentColor','stroke-width':1.7,'stroke-linecap':'round','stroke-linejoin':'round'});
+ if(domain==='light'){add('path',{d:'M8 16v-1.5a6 6 0 1 1 8 0V16Z',fill:active?'currentColor':'none','fill-opacity':active?.2:1,stroke:'currentColor','stroke-width':1.7});line('M9 19h6M10 22h4');if(active)line('M12 1v1M2 8H1M23 8h-1M4 3l1 1M20 3l-1 1');}
+ else if(domain==='fan'){add('circle',{cx:12,cy:12,r:2,fill:'currentColor'});for(const angle of [0,120,240])add('path',{d:'M12 9C7 5 12 0 16 3c3 2 0 7-4 6Z',fill:active?'currentColor':'none','fill-opacity':active?.22:1,stroke:'currentColor','stroke-width':1.5,transform:`rotate(${angle} 12 12)`});}
+ else if(domain==='cover'){line('M4 3h16v18H4Z');for(const y of state?.state==='closed'?[6,9,12,15,18]:[6,9])line(`M5 ${y}h14`);if(state?.state!=='closed')line('M12 12v6m-2-2 2 2 2-2');}
+ else if(domain==='climate'){line('M9 14V5a3 3 0 0 1 6 0v9a5 5 0 1 1-6 0Z');add('circle',{cx:12,cy:18,r:2.2,fill:'currentColor'});line(`M12 17V${active?7:12}`);}
+ else if(['number','input_number'].includes(domain)){line('M4 6h16M4 12h16M4 18h16');for(const [cx,cy]of [[8,6],[16,12],[10,18]])add('circle',{cx,cy,r:2,fill:'var(--card-background-color)',stroke:'currentColor','stroke-width':1.5});}
+ else if(domain==='input_boolean'){add('rect',{x:3,y:6,width:18,height:12,rx:6,fill:'none',stroke:'currentColor','stroke-width':1.7});add('circle',{cx:active?16:8,cy:12,r:3,fill:'currentColor'});}
+ else {line('M5 4h14v16H5Z');add('circle',{cx:9,cy:10,r:1,fill:'currentColor'});add('circle',{cx:15,cy:10,r:1,fill:'currentColor'});line('M10 15h4');if(active)add('circle',{cx:18,cy:5,r:3,fill:'currentColor',stroke:'var(--card-background-color)','stroke-width':1.5});}
+ if(status==='idle'&&domain==='fan')line('M4 20 20 4');
+ if(status==='unavailable')line('M3 21 21 3');
+ return `<svg class="item-state-icon" viewBox="0 0 24 24" aria-hidden="true">${parts.join('')}</svg>`;
+}
+
+const controlPowerIcon='<svg class="power-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5a8 8 0 1 0 10 0M12 3v9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>';
+
+const controlsPresentationStyles=`
+.content{container-type:inline-size;--control-width:clamp(172px,55cqw,320px);padding:16px}
+.heading{margin-bottom:8px}.heading h2{min-width:0;letter-spacing:normal;overflow-wrap:anywhere}
+.devices{display:grid;grid-auto-rows:auto;gap:0}
+.devices .device{position:relative;display:grid;grid-template-columns:minmax(0,1fr) var(--control-width);align-items:center;min-height:54px;gap:8px;box-sizing:border-box;padding:5px 0;border:0}
+.devices .device::after{content:'';position:absolute;left:44px;right:0;bottom:0;height:1px;background:color-mix(in srgb,var(--divider-color) 65%,transparent);pointer-events:none}.devices .device:last-child::after{display:none}
+.device .identity{min-width:0;max-width:100%;min-height:44px;gap:12px;background:transparent;box-shadow:none;border-radius:0}.device .identity:hover:not(:disabled){background:transparent}
+.device .identity span{min-width:0;font-size:13px;font-weight:500;line-height:18px;white-space:normal;overflow-wrap:anywhere}.device .identity small{display:block;font-size:12px;font-weight:400;line-height:16px;margin-top:1px}
+.item-state-icon{display:block;flex:none;width:32px;height:32px;box-sizing:border-box;padding:5px;border-radius:8px;color:var(--secondary-text-color);background:color-mix(in srgb,var(--secondary-text-color) 5%,transparent)}
+.device .identity .item-state-icon{min-width:32px}.item-state-icon ha-icon{--mdc-icon-size:22px;width:22px;height:22px;color:inherit!important}
+.device[data-domain=light]{--item-active:var(--state-light-active-color,var(--state-active-color,var(--primary-color)))}.device[data-domain=fan]{--item-active:var(--state-fan-active-color,var(--state-active-color,var(--primary-color)))}.device[data-domain=cover]{--item-active:var(--state-cover-active-color,var(--state-active-color,var(--primary-color)))}.device[data-domain=switch],.device[data-domain=input_boolean]{--item-active:var(--state-switch-active-color,var(--state-active-color,var(--primary-color)))}
+.device[data-item-state=active] .item-state-icon,.device[data-item-state=moving] .item-state-icon{color:var(--item-active,var(--primary-color));background:color-mix(in srgb,var(--item-active,var(--primary-color)) 9%,transparent)}
+.device[data-item-state=heating] .item-state-icon{color:var(--state-climate-heat-color,var(--error-color));background:color-mix(in srgb,var(--state-climate-heat-color,var(--error-color)) 9%,transparent)}
+.device[data-item-state=cooling] .item-state-icon{color:var(--state-climate-cool-color,var(--primary-color));background:color-mix(in srgb,var(--state-climate-cool-color,var(--primary-color)) 9%,transparent)}
+.device[data-item-state=unavailable] .item-state-icon{color:var(--disabled-text-color,var(--secondary-text-color));background:transparent}
+.device-controls{display:flex;align-items:center;justify-content:flex-end;box-sizing:border-box;max-width:none;width:100%;min-width:0;padding:0;margin:0;gap:6px;flex-wrap:nowrap;overflow:visible}
+.device-controls .target{order:0;flex:0 0 64px;width:64px;min-width:64px;max-width:64px;margin:0;text-align:center;white-space:nowrap;font-size:17px;font-weight:600;line-height:20px;font-variant-numeric:tabular-nums}
+.device-controls .toggle{flex:none}.power-icon{width:19px;height:19px;pointer-events:none}
+.device:has(.level){grid-template-columns:minmax(0,1fr) minmax(0,calc(var(--control-width) - 52px)) 44px}.device:has(.level) .device-controls{display:contents}.device:has(.level) .level{grid-column:2}.device:has(.level) .toggle{grid-column:3}
+.level{display:flex;box-sizing:border-box;flex-direction:row-reverse;flex:1 1 auto;min-width:0;gap:8px;padding:0;margin:0}.level input{flex:1;width:0;min-width:44px;max-width:100%;border-radius:6px}.level output{flex:none;min-width:38px;text-align:end;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.5}
+.device[data-power=off] .level{--ui-bar-tone:var(--secondary-text-color)}
+.level input::-webkit-slider-runnable-track{height:8px;box-shadow:var(--eleven-material-well,none)}.level input::-webkit-slider-thumb{margin-top:-5px}.level input::-moz-range-track,.level input::-moz-range-progress{height:8px}
+.device .identity:focus-visible,.level input:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:0;border-radius:6px}
+@container(max-width:279px){.devices .device{grid-template-columns:minmax(0,1fr)}.device-controls{grid-column:1;justify-self:end;width:var(--control-width)}.device:has(.level){grid-template-columns:minmax(0,1fr) 44px}.device:has(.level) .identity{grid-column:1/-1}.device:has(.level) .level{grid-column:1}.device:has(.level) .toggle{grid-column:2}}
+`;
+
+
 const TYPES={actions:'eleven-actions-card',controls:'eleven-controls-card',waste:'eleven-waste-card'};
 const TITLES={actions:['Control Pad','Control Pad'],controls:['Bediening','Controls'],waste:['Afvalinzameling','Waste collection']};
 const DOMAINS={actions:['scene','script'],controls:['climate','cover','light','fan','switch','input_boolean','number','input_number'],waste:['sensor','calendar']};
@@ -830,34 +884,7 @@ const STYLES=`${CSS}
 :host{height:auto;container-type:inline-size}.content{padding:16px}.heading{margin-bottom:12px}.heading h2{overflow-wrap:anywhere}.empty{padding:8px 0;color:var(--secondary-text-color);font-size:13px}.device{padding:12px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.device+.device{border-top:1px solid var(--divider-color)}.device:first-child{padding-top:0}.device:last-child{padding-bottom:0}.device .identity{flex:1 1 84px}.device .identity span{font-size:14px}.device .identity small{font-size:12px}.device .identity ha-icon{color:var(--primary-color)}.device-controls{display:flex;align-items:center;gap:4px;max-width:100%;margin-left:auto}.device-controls .target{font-size:15px;min-width:42px}.level{flex:1 0 100%;display:flex;align-items:center;gap:10px}.level input{flex:1;min-width:0;min-height:44px;accent-color:var(--primary-color);cursor:pointer}.level output{font-size:12px;font-variant-numeric:tabular-nums;min-width:34px;text-align:right}.device .current{font-size:22px;font-weight:550;font-variant-numeric:tabular-nums;line-height:1.3}.device .current small{display:inline;font-size:13px}.upcoming{padding:2px 0 14px}.eyebrow{text-transform:uppercase;letter-spacing:.06em;font-size:10px;font-weight:650;color:var(--secondary-text-color);margin-bottom:4px}.pickup-date{font-size:24px;font-weight:600;letter-spacing:-.025em;line-height:1.25;overflow-wrap:anywhere}.pickup-meta{font-size:12px;color:var(--secondary-text-color);margin-top:3px}.waste-items{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px}.waste-item{display:flex;gap:7px;align-items:center;min-height:44px;padding:0;background:transparent;text-align:left;min-width:0;max-width:100%;font-size:14px}.waste-item span{overflow-wrap:anywhere}.waste-item ha-icon{color:var(--waste-color,var(--primary-color))}.pickup-row{padding:11px 0;border-top:1px solid var(--divider-color);display:flex;gap:8px;align-items:center}.pickup-row .waste-items{flex:1;margin:0;gap:0 14px}.pickup-row .when{font-size:12px;color:var(--secondary-text-color);text-align:right;max-width:42%}.unresolved{border-top:1px solid var(--divider-color);padding-top:10px;font-size:12px;color:var(--secondary-text-color)}.unresolved button[data-info]{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;background:transparent;width:100%;padding:5px 0;font-size:12px}.unresolved button[data-info] span:last-child{text-align:right}.retry{margin-top:8px}.collection-error{color:var(--error-color)}.actions{grid-template-columns:repeat(2,minmax(0,1fr))}.action span{max-width:100%;overflow-wrap:break-word;hyphens:none}@container(min-width:340px){.actions{grid-template-columns:repeat(3,minmax(0,1fr))}}@container(max-width:339px){.device:has(.target) .identity{flex-basis:100%}}@media(max-width:380px){.content{padding:var(--eleven-card-padding,16px)}.device{gap:8px}.pickup-date{font-size:22px}}
 `;
 // Controls-only geometry and semantic roles; theme owns optional paint/depth.
-const CONTROLS_STYLES=`
-.content{padding-bottom:8px}
-.heading{margin-bottom:16px}.heading h2{min-width:0;letter-spacing:normal;hyphens:auto;overflow-wrap:break-word}
-.devices{display:grid;grid-auto-rows:1fr}
-.devices .device{display:grid;grid-template-columns:minmax(0,1fr) minmax(158px,1.4fr);gap:10px;align-items:center;min-height:64px;box-sizing:border-box;padding:10px 0}
-.device .identity{min-width:0;max-width:100%;min-height:44px;gap:9px;background:transparent;box-shadow:none;border-radius:0}
-.device .identity:hover:not(:disabled){background:transparent}
-.device .identity ha-icon{color:var(--secondary-text-color)}
-.device .identity span{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4}
-.device .identity small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.5}
-.device-controls{width:calc(100% + 12px);max-width:none;box-sizing:border-box;padding:6px;margin:-6px;min-width:0;gap:8px;flex-wrap:nowrap;justify-content:safe flex-end;overflow-x:auto;scrollbar-width:thin}
-.device-controls .toggle{flex:none}
-.device-controls .target{flex:none;white-space:nowrap;font-size:15px;min-width:54px;line-height:1.4}
-.device-controls .target small{font-size:12px;line-height:1.5}
-
-
-
-
-.device .identity:focus-visible,.level input:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:3px}
-.device-controls input:focus-visible{outline-offset:-2px}
-.level{box-sizing:border-box;flex:1 1 auto;min-width:86px;gap:8px;padding:0;margin:0}
-.level input{flex:0 1 276px;width:0;min-width:44px}
-.level input::-webkit-slider-runnable-track{height:8px;box-shadow:var(--eleven-material-well,none)}
-.level input::-webkit-slider-thumb{margin-top:-5px}
-.level input::-moz-range-track{height:8px;box-shadow:var(--eleven-material-well,none)}
-.level input::-moz-range-progress{height:8px}
-.level output{flex:none;line-height:1.5}
-`;
+const CONTROLS_STYLES=controlsPresentationStyles;
 // Calendar anatomy is Waste-only; concurrent Actions/Controls output is retained.
 const WASTE_STYLES=`
 .content{padding:16px}.heading{margin-bottom:12px}
@@ -1016,7 +1043,7 @@ class StandaloneCard extends HTMLElement{
   const request=(act,v)=>controlRequest(s,e.entity,act,v),btn=(act,label,ico)=>this.button(i,act,`${name}: ${label}`,ico,request(act));
   if(domain==='climate'){
    status=ok?`${this.number(a.current_temperature)} ${this._hass?.config?.unit_system?.temperature||'°C'} · ${a.hvac_action==='heating'?this.t('Verwarmen','Heating'):a.hvac_action==='cooling'?this.t('Koelen','Cooling'):this.t('Huidig','Current')}`:status;
-   if(Number(a.supported_features)&1)controls=btn('down',this.t('Lager','Decrease'),'mdi:minus')+`<span class="target">${ok?this.number(a.temperature)+' '+esc(this._hass?.config?.unit_system?.temperature||'°C'):'—'}<small>${this.t('ingesteld','target')}</small></span>`+btn('up',this.t('Hoger','Increase'),'mdi:plus');
+   if(Number(a.supported_features)&1)controls=btn('down',this.t('Lager','Decrease'),'mdi:minus')+`<span class="target" title="${this.t('Ingestelde temperatuur','Target temperature')}">${ok?this.number(a.temperature)+' '+esc(this._hass?.config?.unit_system?.temperature||'°C'):'—'}</span>`+btn('up',this.t('Hoger','Increase'),'mdi:plus');
   }else if(domain==='cover'){
    status=ok&&finite(a.current_position)?`${a.current_position}% · ${status}`:status;
    controls=btn('open',this.t('Openen','Open'),'mdi:arrow-up')+btn('stop',this.t('Stoppen','Stop'),'mdi:stop')+btn('close',this.t('Sluiten','Close'),'mdi:arrow-down');
@@ -1024,11 +1051,12 @@ class StandaloneCard extends HTMLElement{
    status=ok?`${this.number(s.state)} ${a.unit_of_measurement||''}`:status;
    controls=btn('down',this.t('Lager','Decrease'),'mdi:minus')+btn('up',this.t('Hoger','Increase'),'mdi:plus');
   }else if(['light','fan','switch','input_boolean'].includes(domain)){
-   controls=uiButton({variant:'action',className:`toggle ${s?.state==='on'?'on':''}`,label:name+': '+this.t('Schakelen','Toggle'),text:s?.state==='on'?this.t('Uit','Off'):this.t('Aan','On'),disabled:!request('toggle')||this._pending,attrs:{'data-index':i,'data-action':'toggle','data-key':`${i}-toggle`,'aria-pressed':s?.state==='on'}});
+   controls=uiButton({variant:'action-icon',className:'toggle',label:name+': '+(s?.state==='on'?this.t('Uitschakelen','Turn off'):this.t('Inschakelen','Turn on')),content:controlPowerIcon,disabled:!request('toggle')||this._pending,attrs:{'data-index':i,'data-action':'toggle','data-key':`${i}-toggle`,'aria-pressed':s?.state==='on'}});
   }
   const level=domain==='light'&&finite(a.brightness)?Math.round(Number(a.brightness)/255*100):domain==='fan'?a.percentage:domain==='cover'?a.current_position:null;
   if(domain!=='cover'&&request('level',50))extra=`<label class="level">${uiSlider({value:finite(level)?Number(level):0,step:domain==='fan'&&finite(a.percentage_step)&&Number(a.percentage_step)>0?Number(a.percentage_step):1,disabled:this._pending,attrs:{'data-key':`${i}-level`,'data-level':String(i),'aria-label':name+': '+this.t('Niveau','Level')}})}<output>${finite(level)?esc(level)+'%':'—'}</output></label>`;
-  return `<div class="device"><button type="button" class="identity" data-info="${esc(e.entity)}" data-key="${i}-info" title="${esc(name+': '+status)}" aria-label="${esc(name+': '+status)}">${icon(e.icon||GLYPHS[domain]||'mdi:tune')}<span>${esc(name)}<small>${esc(status)}</small></span></button><div class="device-controls">${extra}${controls}</div></div>`;
+  const itemState=controlItemState(domain,s);
+  return `<div class="device" data-domain="${esc(domain)}" data-item-state="${itemState}" data-power="${s?.state==='off'?'off':'on'}"><button type="button" class="identity" data-info="${esc(e.entity)}" data-key="${i}-info" title="${esc(name+': '+status)}" aria-label="${esc(name+': '+status)}">${controlItemIcon(domain,s,itemState,e.icon)}<span>${esc(name)}<small>${esc(status)}</small></span></button><div class="device-controls">${extra}${controls}</div></div>`;
  }).join('')}</div>`;}
  _waste(items){
   const rows=wasteRows(items,this._hass?.states,this._cache,{locale:this._hass?.locale?.language,timeZone:this._hass?.config?.time_zone}),groups=groupWaste(rows),unresolved=rows.filter(e=>!e.date);

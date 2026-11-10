@@ -3,6 +3,18 @@ import {ENERGY_FLOW_BACKGROUNDS} from './energy-flow-backgrounds.js';
 export const energyFlowDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
 export const ENERGY_FLOW_COLORS=[{value:'charging',label:'Goud / Gold'},{value:'waiting',label:'Blauw / Blue'},{value:'done',label:'Groen / Green'},{value:'planned',label:'Paars / Purple'},{value:'off',label:'Grijs / Gray'}];
 export const energyFlowNumber=value=>value==null||value===''||typeof value==='boolean'||!Number.isFinite(Number(value))?null:Number(value);
+// Use measured totals for the displayed live or historical period. Battery
+// storage prevents attributing solar use to the home, as in the flow diagram.
+export function energyFlowStatusColor(data,dark=false){
+ const palette=dark?{import:'#70b7ff',mixed:'#ffd45c',export:'#72d6a0',neutral:'#a7a9b2'}:{import:'#287edb',mixed:'#c58a12',export:'#218457',neutral:'#656975'};
+ if(!data||['solar','home','import','export'].some(key=>!Number.isFinite(data[key])||data[key]<0))return palette.neutral;
+ const net=data.import-data.export;
+ if(data.battery)return net>0&&data.solar===0?palette.import:palette.neutral;
+ const solarUse=Math.min(data.home,Math.max(0,data.solar-data.export));
+ if(net>0)return solarUse>0?palette.mixed:palette.import;
+ if(net<0&&solarUse>0)return palette.export;
+ return palette.neutral;
+}
 export function normalizeEnergyFlowConfig(input={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Invalid energy flow configuration');
  const config={...input,title:typeof input.title==='string'?input.title:'',default_view:input.default_view==='history'?'history':'live',hours_to_show:Math.min(8784,Math.max(1,energyFlowNumber(input.hours_to_show)??24)),show_navigation:true,animate_background:input.animate_background!==false,compact:(input.compact??(input.density==='compact'))===true,grid_power_inverted:input.grid_power_inverted===true};

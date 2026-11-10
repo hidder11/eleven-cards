@@ -144,16 +144,16 @@ ${segmentedControlStyles('.navigation','.navigation>.period-controls>.period-tri
 .month-weekday{text-align:center;font-size:11px;font-weight:400;padding:10px 5px;color:var(--secondary-text-color);border:0;border-bottom:1px solid color-mix(in srgb,var(--secondary-text-color) 14%,transparent);border-inline-end:1px solid color-mix(in srgb,var(--secondary-text-color) 10%,transparent)}
 .month-grid>:nth-child(7n){border-inline-end:0}
 .month-grid>:nth-last-child(-n+7){border-bottom:0}
-.month-cell{min-width:0;border:0;border-bottom:1px solid color-mix(in srgb,var(--secondary-text-color) 14%,transparent);border-inline-end:1px solid color-mix(in srgb,var(--secondary-text-color) 10%,transparent);min-height:100px;padding:6px;box-sizing:border-box}
-.month-cell-head{display:flex;align-items:center;justify-content:space-between;gap:2px;font-size:12px;margin-bottom:6px;min-height:28px}
+.month-cell{min-width:0;border:0;border-bottom:1px solid color-mix(in srgb,var(--secondary-text-color) 14%,transparent);border-inline-end:1px solid color-mix(in srgb,var(--secondary-text-color) 10%,transparent);min-height:100px;padding:4px;box-sizing:border-box}
+.month-cell-head{display:flex;align-items:center;justify-content:space-between;gap:2px;font-size:12px;margin-bottom:3px;min-height:28px}
 .month-cell-head time{position:relative;display:inline-grid;place-items:center;width:28px;height:28px;font-weight:400;border:0;border-radius:0;background:transparent;box-shadow:none}
 .month-cell.today{box-shadow:none}
 .month-cell.today .month-cell-head time{color:var(--accent-color,var(--primary-color));background:transparent;box-shadow:none;font-weight:600}
 .month-cell.today .month-cell-head time::after{content:'';position:absolute;bottom:0;left:9px;width:10px;height:2px;border-radius:1px;background:currentColor}
 .month-cell.outside:not(.past){color:var(--secondary-text-color);background:color-mix(in srgb,var(--secondary-text-color) 2%,transparent)}
 
-.month-chip .month-event-time{display:block;font-size:10px;line-height:12px;color:var(--secondary-text-color);font-variant-numeric:tabular-nums;margin-bottom:2px}
-.month-chip .month-event-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:16px;overflow:hidden;text-overflow:ellipsis}
+.month-chip .month-event-time{display:block;font-size:10px;line-height:12px;color:var(--secondary-text-color);font-variant-numeric:tabular-nums;margin:0;white-space:nowrap}
+.month-chip .month-event-title{display:block;min-width:0;white-space:nowrap;line-height:16px;overflow:hidden;text-overflow:ellipsis}
 .event-button:hover{color:var(--primary-text-color)}
 .month-cell.past .month-chip:hover{background:color-mix(in srgb,var(--secondary-text-color,#666) 14%,transparent);color:var(--secondary-text-color)}
 .month-more{display:block;min-height:44px;min-width:44px;padding:4px 6px;border:0;background:transparent;color:var(--secondary-text-color,#666);font:inherit;cursor:pointer;text-align:start;font-size:11px}
@@ -172,7 +172,7 @@ ${segmentedControlStyles('.navigation','.navigation>.period-controls>.period-tri
 
 /* Appointment surfaces share one tint, colour rail and outer shadow. */
 .column .event-button{padding:7px 7px 7px 9px!important;margin-bottom:7px}
-.month-chip{width:100%;min-width:0;text-align:start;margin:0 0 4px;border:0!important;white-space:normal;text-overflow:clip;overflow-wrap:anywhere;display:block!important;min-height:56px!important;height:56px;max-height:56px;margin-bottom:5px;padding:5px 6px!important;font-size:12px;line-height:16px;overflow:hidden;box-sizing:border-box}
+.month-chip{width:100%;min-width:0;text-align:start;margin:0 0 4px;border:0!important;white-space:normal;text-overflow:clip;overflow-wrap:anywhere;display:block!important;min-height:40px!important;height:40px;max-height:40px;margin-bottom:5px;padding:4px 5px!important;font-size:12px;line-height:16px;overflow:hidden;box-sizing:border-box}
 .list-event .event-button{font-size:13px;min-height:44px!important;padding:6px 4px 6px 9px!important}
 .month-chip,.list-event .event-button,.column .event-button{background:color-mix(in srgb,var(--event-color) 10%,transparent);border-inline-start:2px solid var(--event-color)!important;border-radius:0 6px 6px 0!important;box-shadow:0 2px 4px color-mix(in srgb,var(--eleven-material-shadow,rgba(0,0,0,.18)) 85%,transparent)}
 .month-chip[data-past-event],.list-event .event-button[data-past-event],.column .event-button[data-past-event]{box-shadow:0 1px 3px color-mix(in srgb,var(--eleven-material-shadow,rgba(0,0,0,.18)) 45%,transparent)}
