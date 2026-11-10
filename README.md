@@ -29,7 +29,7 @@ Use `card_background: false` to turn it off. Dynamic colours use the calling car
 | **Energy** | Import and export prices, favorable periods and an optional grid-import energy overlay. | [Energy documentation](cards/dynamic-energy-price-card/README.md) |
 | **History** | Recorded values from 1–8 numeric sensors, with an independent y-axis per unit. | [History documentation](cards/history-graph-card/README.md) |
 | **Timeline** | State history for entities such as doors, switches and people. | [Timeline documentation](cards/timeline-card/README.md) |
-| **Overview (beta)** | Current sensor values, sparklines and change since period start. | [Overview documentation](cards/overview-card/README.md) |
+| **Overview** | Current sensor values, sparklines and change since period start. | [Overview documentation](cards/overview-card/README.md) |
 | **Bar Chart** | Vertical grouped or stacked sensor-history bars, based on History. | [Bar Chart documentation](cards/bar-chart/README.md) |
 | **Heatmap (beta)** | Sensor averages or consumption grouped by hour, day, week or month. | [Heatmap documentation](cards/heatmap-card/README.md) |
 | **Car (beta)** | Vehicle image, percentage and custom readings, with optional EVCC charging integration and selectable tabs. | [Car documentation](cards/car-card/README.md) |
@@ -256,7 +256,7 @@ For YAML configuration, use these types:
 | Energy | `custom:eleven-dynamic-energy-price-card` |
 | History | `custom:eleven-history-graph-card` |
 | Timeline | `custom:eleven-timeline-card` |
-| Overview (beta) | `custom:eleven-overview-card` |
+| Overview | `custom:eleven-overview-card` |
 | Bar Chart | `custom:eleven-bar-chart` |
 | Heatmap (beta) | `custom:eleven-heatmap-card` |
 | Calendar (beta) | `custom:eleven-calendar-card` |

@@ -23,6 +23,8 @@ image_media:
 
 Switch back with `image_source: entity` to use `image_entity`. Image scale and position apply to either source. The local test collection includes this change in `custom:eleven-car-card-test`.
 
+Entity images preload before replacing the displayed vehicle. Temporary failures retry after 1, 4 and 15 seconds, including when no new Home Assistant state arrives; each request times out after 10 seconds. The last successfully loaded image stays visible during recovery. Without a previous image, a localized loading message appears. After four failed attempts, the card shows the unavailable message and a Retry button. A new entity URL or reconnection starts recovery again. Changing the selected entity or Home Assistant connection clears the old vehicle image. This applies with and without EVCC and does not change the Media selection behavior.
+
 ```yaml
 type: custom:eleven-car-card
 evcc_enabled: false

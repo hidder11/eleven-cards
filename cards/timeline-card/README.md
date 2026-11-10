@@ -4,7 +4,11 @@ Horizontal status-history bars, one per entity. Uses Home Assistant Recorder his
 
 Use the graph directly or its arrow-key navigation to browse state changes; Home/End jump to the bounds and Escape dismisses the details. Sensor labels have a 24px minimum height, grow for wrapped names and retain keyboard focus and isolation actions. Short intervals retain their accurate width on the time scale.
 
+Each row name is followed by the entity's current value, using the History Graph's value typography. Entity-specific state labels take precedence over common rules; otherwise Home Assistant formats the current state in the frontend language. Unknown/unavailable values are localized and a missing entity shows a dash. These readings remain live while browsing a historical period; the timeline segments and hover details still represent recorded history. `show_labels: false` hides both the name and current value.
+
 ## Installation
+
+Pointer hover is limited to timeline tracks. Moving over a legend, group heading, row label, time axis or empty chart space clears the hover guide and popup, including a pending hover frame. Drag zoom starts on a track and may continue outside it; touch and keyboard inspection remain available.
 
 The Graph and Timeline cards share one header implementation, including title typography, responsive spacing and stroke-based SVG icons. The visual editor’s Show title / Titel tonen switch (`show_title`, default `true`) hides only the heading, preserving its configured text and the zoom and History controls.
 

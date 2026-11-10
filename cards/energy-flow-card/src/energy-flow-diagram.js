@@ -2,6 +2,33 @@ import {uiEscape} from '../../../shared/ui-button.js';
 import {uiMetric} from '../../../shared/ui-metric.js';
 import {energyFlowIcon} from './energy-flow-icons.js';
 
+// All coordinates are CSS pixels in the same scene as the native endpoint
+// buttons. A wider card changes the gaps, never the alignment of text and wire.
+export function energyFlowGeometry(width,nodeSize=72){
+ const middle=width/2,right=width-nodeSize/2,y=104+nodeSize/2;
+ const solar=[nodeSize,middle-nodeSize/2],grid=[middle+nodeSize/2,width-nodeSize];
+ return {height:104+nodeSize+8,y,solar,grid,paths:{
+  solar:`M${solar[0]} ${y}H${solar[1]}`,
+  grid:`M${grid[1]} ${y}H${grid[0]}`,
+  return:`M${nodeSize/2} 104V48A8 8 0 0 1 ${nodeSize/2+8} 40H${right-8}A8 8 0 0 1 ${right} 48V104`
+ }};
+}
+export function layoutEnergyFlowDiagram(root){
+ const scene=root?.querySelector('.circle-scene'),svg=scene?.querySelector('.flow-routes>svg');
+ if(!svg||!scene.clientWidth)return;
+ const nodeSize=scene.querySelector('[data-node=sun]')?.offsetWidth||72;
+ const geometry=energyFlowGeometry(scene.clientWidth,nodeSize);
+ svg.setAttribute('viewBox',`0 0 ${scene.clientWidth} ${geometry.height}`);
+ for(const [name,path] of Object.entries(geometry.paths)){
+  const group=svg.querySelector(`[data-route="${name}"]`);if(!group)continue;
+  group.querySelectorAll('.flow-bed,.flow-wire').forEach(node=>node.setAttribute('d',path));
+  const dot=group.querySelector('.flow-dot');if(dot)dot.style.offsetPath=`path('${path}')`;
+  const centres=name==='return'?[...['solar','grid'].map(key=>(geometry[key][0]+geometry[key][1])/2)]:[(geometry[name][0]+geometry[name][1])/2];
+  const y=name==='return'?40:geometry.y,sign=name==='grid'?-1:1;
+  group.querySelector('.flow-arrow')?.setAttribute('d',centres.map(x=>`M${x-3*sign} ${y-4}l${5*sign} 4 ${-5*sign} 4`).join(''));
+ }
+}
+
 export function energyFlowDiagram(data,history,nl,format,{detailView='popup',tabs=[],id='energy-flow'}={}){
  const text=(a,b)=>nl?a:b,unit=history?'kWh':'kW',number=value=>value==null?'—':format(value);
  const {solar,home,import:incoming,export:outgoing}=data;

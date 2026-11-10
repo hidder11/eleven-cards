@@ -1,20 +1,22 @@
-# Eleven Overview (beta)
+# Eleven Overview
 
-A compact overview of 1–8 numeric Home Assistant sensors, with current values, Recorder sparklines and signed change since the start of the selected rolling period. Different sensors may use different units. This is an exploratory beta; no device controls or sensor creation.
+A compact overview of numeric Home Assistant sensors, with current values, Recorder sparklines and signed change since the start of the selected rolling period. Add one or more sensors; there is no fixed sensor-count limit. Different sensors may use different units. The card displays existing sensors; it does not create sensors or provide device controls.
 
 ## Installation
 
-Included in the local collection build `dist/eleven-cards.js`. For an existing standalone installation, install only `cards/overview-card/dist/eleven-overview-card.js` at `/config/www/eleven-cards/eleven-overview-card.js` and register `/local/eleven-cards/eleven-overview-card.js?v=<build-hash>` as a JavaScript module. Do not install a second combined resource alongside sibling modules. No HACS release has been published for this beta.
+Included in the local collection build `dist/eleven-cards.js`. For an existing standalone installation, install only `cards/overview-card/dist/eleven-overview-card.js` at `/config/www/eleven-cards/eleven-overview-card.js` and register `/local/eleven-cards/eleven-overview-card.js?v=<build-hash>` as a JavaScript module. Do not install a second combined resource alongside sibling modules. Use the collection resource when installing the complete card set.
 
-Refresh Home Assistant, Add card, search for **Eleven Overview (beta)**. A native visual editor provides title, period (1–168 hours), columns, graph and delta switches, plus independent expandable sensor settings: entity, name, color, reorder and remove.
+Refresh Home Assistant, Add card, search for **Eleven Overview**. A native visual editor provides title, period (1–168 hours), columns, graph and delta switches, plus independent expandable sensor settings: entity, name, color, reorder and remove.
 
 ```yaml
 type: custom:eleven-overview-card
-title: Eleven Overview (beta)
+title: Eleven Overview
 hours_to_show: 24
 columns: auto
 show_graph: true
 show_delta: true
+section_size: standard
+# graph_height: 64
 entities:
   - entity: sensor.example_power
     name: Power
@@ -25,6 +27,22 @@ entities:
 ```
 
 Entity identifiers above are examples, not installed sensors. Columns accepts `auto`, `1`, `2`, `3`; very narrow cards always reflow to one column. HA theme and Dutch/English labels are supported. Activate a sensor with click or keyboard to open Home Assistant more-info.
+
+## Section size
+
+Sensor sections use a quiet rounded surface, a stronger reading and a compact trend line. Hover keeps the section border unchanged; keyboard focus remains visible. The visual editor offers **Sensor section size / Grootte sensorsecties** for all sensors together:
+
+| `section_size` | Padding | Value size | Default graph height |
+| --- | --- | --- | --- |
+| `compact` | 10 px | 24 px | 32 px |
+| `standard` (default) | 14 px | 28 px | 40 px |
+| `spacious` | 20 px | 36 px | 64 px |
+
+Use **Graph height / Grafiekhoogte** (`graph_height`, an integer from 24 to 160 pixels) to override the graph height independently. Clear the field to follow the selected section size again. `columns` controls the maximum number of sections alongside each other; layout still reduces columns to keep values readable. Existing YAML needs no changes. Card-size estimates account for the chosen section size and graph height.
+
+Compact sections place the current value at the upper right, with the name and colour dot aligned at the top. The change and its period caption share a baseline below the graph. Narrow sections allow text to wrap instead of clipping values. Standard and spacious keep their stacked layout. Graph height is independent of this layout choice.
+
+The editor's **Add sensor / Sensor toevoegen** action also works beyond eight sensors. Default colours repeat after the eighth sensor; individual colour overrides remain available. All configured sensors share one history request per refresh. More sensors and longer periods increase the amount of Recorder data requested.
 
 ## Data semantics
 

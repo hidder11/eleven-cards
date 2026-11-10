@@ -11,10 +11,10 @@ import {periodControls,periodControlsStyles,bindPeriodControls,disconnectPeriodC
 import {graphPeriodRange,connectTimeframeSync,disconnectTimeframeSync} from '../../../shared/periods.js';
 import {weatherStyles} from '../../weather-card/src/weather-styles.js';
 import {patchWeatherDOM} from '../../weather-card/src/weather-dom.js';
-import {normalizeEnergyFlowConfig,energyFlowDutch,energyFlowSources,energyFlowStatisticIds,energyFlowLive,energyFlowHistorical,energyFlowStatisticsRequest} from './energy-flow-data.js';
+import {normalizeEnergyFlowConfig,energyFlowDutch,energyFlowSources,energyFlowStatisticIds,energyFlowLive,energyFlowHistorical,energyFlowStatisticsRequest,energyFlowStatusColor} from './energy-flow-data.js';
 import {energyFlowBackground,energyFlowBackgroundStyles} from './energy-flow-backgrounds.js';
 import {energyFlowStyles} from './energy-flow-styles.js';
-import {energyFlowDiagram} from './energy-flow-diagram.js';
+import {energyFlowDiagram,layoutEnergyFlowDiagram} from './energy-flow-diagram.js';
 import {EnergyFlowEditor} from './energy-flow-editor.js';
 import {bindUIPopup} from '../../../shared/ui-popup.js';
 import {energyFlowDetailIds,energyFlowGridMeters} from './energy-flow-details-data.js';
@@ -45,8 +45,9 @@ export class EnergyFlowCard extends HTMLElement{
  }
  set hass(hass){const changed=this._hass?.connection!==hass?.connection||this._offline()!==(hass?.connected===false||hass?.connection?.connected===false);this._hass=hass;if(changed)this._reset();this.render();this._sync();}
  get hass(){return this._hass;}
+ cardBackgroundStatusColor(){return energyFlowStatusColor(this._offline()||this._error?null:this._displayData,!!this._hass?.themes?.darkMode);}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
- connectedCallback(){this._attached=true;this._connectTimeframe();if(this._view==='history')this._reloadPeriod();this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._sync());this._readingResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._readingResize=new ResizeObserver(()=>this._fitPrimaryReading());this._readingResize.observe(this);}this.render();this._sync();}
+ connectedCallback(){this._attached=true;this._connectTimeframe();if(this._view==='history')this._reloadPeriod();this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._sync());this._readingResize?.disconnect();if(typeof ResizeObserver!=='undefined'){this._readingResize=new ResizeObserver(()=>{this._fitPrimaryReading();layoutEnergyFlowDiagram(this.shadowRoot);});this._readingResize.observe(this);}this.render();this._sync();}
  disconnectedCallback(){this._readingResize?.disconnect();this._readingResize=null;this._tabController?.disconnect();this._attached=false;this._connected=false;this._timeframeKey=null;disconnectTimeframeSync(this);this._motionCleanup?.();this._motionCleanup=null;disconnectPeriodControls(this);this._reset();}
  _reset(){this._dismissDetails();this._baseVersion=(this._baseVersion??0)+1;this._baseResult=null;this._basePendingKey=null;this._detailVersion=(this._detailVersion??0)+1;this._detailResult=null;this._detailLoading=false;this._detailError=false;this._detailInfo=null;this._version++;clearTimeout(this._timer);this._timer=null;this._loading=false;this._prefs=null;this._statistics=null;this._error=null;this._requested=0;}
  _connectTimeframe(){
@@ -216,6 +217,7 @@ export class EnergyFlowCard extends HTMLElement{
   if(openedDetail&&config.detail_view!=='tabs'){const popup=this.shadowRoot.querySelector(`[data-energy-popup=${openedDetail}]`);requestAnimationFrame(()=>{if(!popup.isConnected||this._detailNode!==openedDetail)return;popup.scrollTop=detailScroll;if(focusedPopupControl)popup.querySelector(focusedPopupControl)?.focus({preventScroll:true});else if(focusedEntity)[...popup.querySelectorAll('[data-entity]')].find(button=>button.dataset.entity===focusedEntity)?.focus({preventScroll:true});});}
   if(focusedDetail&&!openedDetail)this.shadowRoot.querySelector(`[data-energy-detail=${focusedDetail}]`)?.focus({preventScroll:true});
   this._fitPrimaryReading();
+  layoutEnergyFlowDiagram(this.shadowRoot);
   if(focused&&!this._periodMenuOpen)this.shadowRoot.querySelector('[data-view-button]')?.focus({preventScroll:true});
  }
 }

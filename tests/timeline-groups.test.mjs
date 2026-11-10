@@ -22,6 +22,38 @@ test('group configuration round-trips through the editor and rejects invalid gro
  assert.throws(()=>new Card().setConfig({...config,series_options:[{entity:'switch.a',group:3}]}),/group/);
 });
 
+test('row labels show live localized values independently of the selected historical window',()=>{
+ const {card}=setup({entities:['switch.a'],series_options:[{entity:'switch.a',name:'Verwarming'}]});
+ card.hass={language:'nl',states:{'switch.a':{state:'on',attributes:{}}},formatEntityState:entity=>entity.state==='on'?'Aan':'Uit'};
+ card._viewport=[0,30000];card._render();
+ assert.match(card.shadowRoot.innerHTML,/<span>Verwarming<\/span><strong>Aan<\/strong>/);
+ const history=card._series;
+ card.hass={...card.hass,states:{'switch.a':{state:'off',attributes:{}}}};
+ assert.match(card.shadowRoot.innerHTML,/<span>Verwarming<\/span><strong>Uit<\/strong>/);
+ assert.equal(card._series,history);assert.equal(card._viewport[1],30000);
+});
+
+test('current values preserve state-rule precedence, escape labels and handle unavailable entities',()=>{
+ const {card}=setup({entities:['switch.a'],state_colors:[{state:'on',label:'Algemeen',color:'#fff'},{entity:'switch.a',state:'on',label:'<A & B>',color:'#fff'}]});
+ card.hass={language:'nl',states:{'switch.a':{state:'on'}},formatEntityState:()=> 'Aan'};
+ assert.match(card._timelineRow(0),/<strong>&lt;A &amp; B&gt;<\/strong>/);
+ for(const [state,label] of [['unknown','Onbekend'],['unavailable','Niet beschikbaar']]){
+  card.hass={...card.hass,states:{'switch.a':{state}}};assert.equal(card._timelineCurrentValue('switch.a'),label);
+ }
+ card.hass={...card.hass,states:{}};assert.equal(card._timelineCurrentValue('switch.a'),'\u2014');
+ card._config.show_labels=false;assert.doesNotMatch(card._timelineRow(0),/row-label|<strong>/);
+});
+
+test('current readings follow unit and number-format changes even when the raw state stays equal',()=>{
+ const {card}=setup({entities:['sensor.a']});
+ card.hass={locale:{language:'nl',number_format:'comma_decimal'},states:{'sensor.a':{state:'0',attributes:{unit_of_measurement:'W'}}},formatEntityState:entity=>'0 '+entity.attributes.unit_of_measurement};
+ assert.match(card.shadowRoot.innerHTML,/<strong>0 W<\/strong>/);
+ card.hass={...card.hass,states:{'sensor.a':{state:'0',attributes:{unit_of_measurement:'kW'}}}};
+ assert.match(card.shadowRoot.innerHTML,/<strong>0 kW<\/strong>/);
+ card.hass={...card.hass,locale:{language:'nl',number_format:'decimal_comma'},formatEntityState:()=> '0,0 kW'};
+ assert.match(card.shadowRoot.innerHTML,/<strong>0,0 kW<\/strong>/);
+});
+
 test('group headings can be hidden independently from the card title and legends',()=>{
  const {Card,card}=setup({title:'Kaarttitel',show_group_titles:false});
  assert.doesNotMatch(card.shadowRoot.innerHTML,/<h3>/);

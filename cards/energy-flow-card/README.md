@@ -8,11 +8,13 @@ type: custom:eleven-energy-flow-card
 
 For the local test collection use `custom:eleven-energy-flow-card-test` and load only the collection test resource.
 
-The card has a compact horizontal distribution diagram with solar, home and a single grid endpoint, with moving round dots for measured live flows. The diagram uses a taller layout with more space between the return route and the home routes, 72 × 72 endpoint buttons, 22 px icons, 18 px route readings and stronger lines; its outside endpoints align with the left and right edges of the solar metric below, including compact mode. The large home-consumption value uses the shared primary-value component. Solar generation, grid import and grid export use the shared metric surfaces, including compact density. In Live, a **History** button opens historical data. In History, an adjacent **Live** button returns to current power. The switch belongs to the same compact 36px group as the period picker and navigation. All controls stay on one row on narrow cards, matching the graph navigation; long period labels wrap within the picker. The group sits beside the primary value when space permits and wraps below it as a whole on narrow cards or with longer readings. The shared period popup stays unchanged, with no view controls inside it. Details can be shown as popups or tabs, with custom entity tabs.
+The card has a compact horizontal distribution diagram with solar, home and a single grid endpoint, with moving round dots for measured live flows. The diagram uses a taller layout with more space between the return route and the home routes, 72 × 72 endpoint buttons (60 × 60 on narrow cards), 22 px icons, 16 px route readings and stronger lines; its outside endpoints align with the left and right edges of the solar metric below, including compact mode. The large home-consumption value uses the shared primary-value component. Solar generation, grid import and grid export use the shared metric surfaces, including compact density. In Live, a **History** button opens historical data. In History, an adjacent **Live** button returns to current power. The switch belongs to the same compact 36px group as the period picker and navigation. All controls stay on one row on narrow cards, matching the graph navigation; long period labels wrap within the picker. The group sits beside the primary value when space permits and wraps below it as a whole on narrow cards or with longer readings. The shared period popup stays unchanged, with no view controls inside it. Details can be shown as popups or tabs, with custom entity tabs.
 
 ## Data
 
-All detail proportions reuse the shared recessed 12px bar from Car/EVCC and Controls. Domain colours and adjacent readings are preserved; these informational bars remain static and decorative, since they show a proportion rather than active battery charging.
+Diagram readings sit above the midpoint of their own connection with a fixed 12 px gap to the lower routes. SVG wires and moving dots use the same pixel geometry as the HTML endpoint buttons, recalculated when the card resizes. The export reading sits above the upper route. Live and historical units and endpoint detail actions are unchanged.
+
+All detail proportions reuse the shared recessed bar from Car/EVCC and Controls. Home and device bars use Home Assistant's primary theme colour; solar, grid import and grid export bars follow their Home Assistant energy colour tokens. These informational bars remain static and decorative, since they show a proportion rather than active battery charging.
 
 The header uses the same uniform primary-value composition as Car, Weather and EVCC: 44 px values (36 px compact), a raised unit, and a short 12 px subtitle accent. The Live/History and period controls sit beside the primary value and share the graph cards' segmented control treatment. Below 560 px the historical control row moves below the value, with every navigation button still visible. Detail tabs use the shared balanced tab spacing and normal selected text weight. The fixture-only [energy detail page](../../review/detail.html?card=energy-flow-card) shows live power, historical energy and tabbed details using the production card.
 
@@ -153,3 +155,13 @@ Other uses the same home accent for its surface tint and proportion bar as indiv
 ## Shared card background
 
 The visual editor includes **Card background / Kaartachtergrond** with the shared styles, colour source, transparency, animation and whole-card or fading top-section coverage. The same `card_background` YAML object works across all cards. See [shared configuration](../../README.md#shared-card-background) for options and legacy compatibility.
+
+With **Card status colour / Statuskleur van de kaart** (`card_background.colorMode: dynamic`), the background follows the displayed energy flows:
+
+| Situation | Light theme | Dark theme |
+| --- | --- | --- |
+| Net grid import without solar home consumption | Blue `#287edb` | Blue `#70b7ff` |
+| Net grid import with solar home consumption | Gold `#c58a12` | Gold `#ffd45c` |
+| Net grid export with solar home consumption | Green `#218457` | Green `#72d6a0` |
+
+History uses the net import/export balance over the displayed period. Missing or invalid readings, an idle or balanced grid, and solar flows that cannot be attributed because of battery storage use neutral grey (`#656975` / `#a7a9b2`). Grid import without any solar generation remains blue with a battery. The background pattern, transparency and animation settings still apply. Accent and custom background colours, and HA Energy colours used by the diagram, remain independent of this status palette.
