@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {CARD_BACKGROUNDS,normalizeCardBackground,uiCardBackground,observeCardBackgroundMotion} from '../shared/ui-card-background.js';
 
 test('background variants have unique stable identifiers and safe defaults',()=>{
- assert.equal(CARD_BACKGROUNDS.length,25);assert.equal(new Set(CARD_BACKGROUNDS.map(v=>v.value)).size,25);
+ assert.equal(CARD_BACKGROUNDS.length,29);assert.equal(new Set(CARD_BACKGROUNDS.map(v=>v.value)).size,29);
  assert.deepEqual(normalizeCardBackground(null),{variant:'aurora',colorMode:'accent',colors:[],transparency:65,animated:true,coverage:'card',height:240});
  assert.equal(normalizeCardBackground({transparency:-20}).transparency,0);
  assert.equal(normalizeCardBackground({transparency:150}).transparency,100);

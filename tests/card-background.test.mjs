@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {CARD_BACKGROUNDS,CARD_BACKGROUND_CHOICES,normalizeCardBackground,uiCardBackground} from '../shared/ui-card-background.js';
 globalThis.HTMLElement??=class{};
 const {cardBackgroundSettings,cardBackgroundEditorSchema,withCardBackground}=await import('../shared/card-background.js');
 
@@ -31,4 +32,27 @@ test('native editor schema filtering is immutable and preserves unrelated settin
 test('card registration wrapper delegates validation, lifecycle and existing APIs',()=>{
  const events=[];class Base{setConfig(config){if(!config.valid)throw Error('invalid');this.config=config;}connectedCallback(){events.push('connect');}disconnectedCallback(){events.push('disconnect');}getCardSize(){return 4;}set hass(hass){this._hass=hass;}get hass(){return this._hass;}}
  const Wrapped=withCardBackground(Base),card=new Wrapped();assert.equal(Wrapped.backgroundBaseCard,Base);assert.throws(()=>card.setConfig({}),/invalid/);card.setConfig({valid:true});assert.equal(card.config.valid,true);card.hass={connected:true};assert.equal(card.hass.connected,true);assert.equal(card.getCardSize(),4);card.connectedCallback();card.setCardBackground({variant:'ribbon'});assert.equal(card._elevenBackgroundConfig.card_background.variant,'ribbon');card.disconnectedCallback();assert.deepEqual(events,['connect','disconnect']);
+});
+
+test('selected designs are available in the common catalog without dropping legacy designs',()=>{
+ for(const variant of ['satin-waves','isometric-depth','comet-trails','lenticular-glow']){
+  assert.ok(CARD_BACKGROUND_CHOICES.some(row=>row.value===variant));
+  assert.equal(normalizeCardBackground({variant}).variant,variant);
+ }
+ assert.ok(CARD_BACKGROUNDS.some(row=>row.value==='aurora-curtains'));
+ assert.equal(CARD_BACKGROUND_CHOICES.length,9);
+});
+test('legacy cards keep their renderer until shared backgrounds are explicitly selected',()=>{
+ const options={preserveNative:true};
+ for(const config of [{},{background:'aurora'},{background:'ribbon'},{background:'prism-glass'},{background:'none'}])assert.equal(cardBackgroundSettings(config,options).legacy,true);
+ const settings=cardBackgroundSettings({background:'prism-glass',card_background:{variant:'satin-waves',transparency:40}},options);
+ assert.equal(settings.legacy,false);assert.equal(settings.enabled,true);assert.equal(settings.variant,'satin-waves');assert.equal(settings.transparency,40);
+ assert.equal(cardBackgroundSettings({card_background:false},options).enabled,false);
+});
+test('new background markup rejects untrusted CSS colours and keeps accessibility attributes',()=>{
+ for(const variant of ['satin-waves','isometric-depth','comet-trails','lenticular-glow']){
+  const html=uiCardBackground({variant,colorMode:'custom',colors:['red;position:fixed','<img src=x onerror=alert(1)>','#123456'],transparency:25});
+  assert.doesNotMatch(html,/position:fixed|onerror|<img/);
+  assert.match(html,/aria-hidden="true"/);assert.match(html,/--ui-bg-1:#123456/);assert.match(html,/--ui-bg-opacity:0.75/);
+ }
 });

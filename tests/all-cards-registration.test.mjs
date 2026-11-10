@@ -7,7 +7,7 @@ import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
 
 const root = new URL('../', import.meta.url);
-const types = ['dynamic-energy-price-card','history-graph-card','timeline-card','overview-card','bar-chart','heatmap-card','calendar-card','weather-card','car-card','energy-flow-card','shopping-card','house-card','actions-card','controls-card','waste-card','appliance-planner','room-card','scene-engine-card','material-house'].map(type => `eleven-${type}`);
+const types = ['dynamic-energy-price-card','history-graph-card','timeline-card','overview-card','bar-chart','heatmap-card','calendar-card','weather-card','car-card','energy-flow-card','camera-card','shopping-card','house-card','actions-card','controls-card','waste-card','appliance-planner','room-card','scene-engine-card','material-house'].map(type => `eleven-${type}`);
 const standalones = ['cards/home-controls/dist/eleven-home-controls-card.js','cards/appliance-planner/dist/eleven-appliance-planner.js','cards/room-card/dist/eleven-room-card.js','cards/scene-engine-card/dist/eleven-scene-engine-card.js','experiments/material-house/dist/material-house.js'];
 const read = path => readFileSync(new URL(path, root), 'utf8');
 function runtime() {
@@ -19,7 +19,7 @@ function runtime() {
   return {registry, window, context};
 }
 
-test('collection includes all 19 approved card types exactly once without pilot baseline picker entries', () => {
+test('collection includes all 20 approved card types exactly once without pilot baseline picker entries', () => {
   const {registry, window, context} = runtime();
   const entries = window.customCards;
   vm.runInContext(read('dist/eleven-cards.js'), context);
@@ -76,7 +76,7 @@ test('actual legacy pilot registrations require removing the old resource before
     } else {
       vm.runInContext(read('dist/eleven-cards.js'), context);
       assert.throws(() => vm.runInContext(legacy, context), /duplicate eleven-material-house/);
-      assert.equal(window.customCards.length, 20, 'The unguarded old resource also restores its private baseline picker');
+      assert.equal(window.customCards.length, types.length + 1, 'The unguarded old resource also restores its private baseline picker');
     }
   }
   const readme = read('README.md');
@@ -110,7 +110,7 @@ test('root source build includes the provenance-checked Material House closure a
     for (const path of ['cards','shared','experiments/material-house','scripts','package.json']) {
       cpSync(new URL(path, root), join(scratch, path), {recursive: true, filter});
     }
-    execFileSync('npm', ['run', 'build'], {cwd: scratch, stdio: 'pipe'});
+    execFileSync(process.platform === 'win32' ? 'cmd.exe' : 'npm', process.platform === 'win32' ? ['/d', '/s', '/c', 'npm run build'] : ['run', 'build'], {cwd: scratch, stdio: 'pipe'});
     const rebuilt = readFileSync(join(scratch, 'dist/eleven-cards.js'), 'utf8');
     assert.equal(rebuilt, before);
     execFileSync('node', ['scripts/build.mjs'], {cwd: scratch, stdio: 'pipe'});

@@ -22,13 +22,15 @@ CARDS = ['dynamic-energy-price-card', 'history-graph-card', 'timeline-card',
          'overview-card', 'bar-chart', 'heatmap-card', 'calendar-card', 'car-card',
          'weather-card', 'energy-flow-card', 'shopping-card', 'house-card',
          'actions-card', 'controls-card', 'waste-card', 'appliance-planner',
-         'room-card', 'scene-engine-card', 'material-house']
+         'room-card', 'scene-engine-card', 'camera-card', 'material-house']
 ADDITIONS = CARDS[12:]
+SCREENSHOTS = os.environ.get('QA_SCREENSHOTS', '1') != '0'
 STANDALONES = ['cards/home-controls/dist/eleven-home-controls-card.js',
                'cards/appliance-planner/dist/eleven-appliance-planner.js',
                'cards/room-card/dist/eleven-room-card.js',
                'cards/scene-engine-card/dist/eleven-scene-engine-card.js',
                'cards/house-card/dist/eleven-house-card.js',
+               'cards/camera-card/dist/eleven-camera-card.js',
                'experiments/material-house/dist/material-house.js']
 COLLECTION = 'dist/eleven-cards.js'
 ORIGIN = 'https://offline.invalid'
@@ -120,6 +122,7 @@ class AllCardsRender(unittest.TestCase):
         source = source.replace('export ', '').replace('import.meta.url', json.dumps(ORIGIN+'/review/fixtures.js'))
         page.evaluate('() => {'+source+'''
           window.qaConfigs=Object.fromEntries(configs.map(([name,title,c])=>[name,{...c,type:'custom:eleven-'+name}]));
+          window.qaConfigs['camera-card']={type:'custom:eleven-camera-card',title:'Security',cameras:[]};
           window.qaCalls=[];
           window.qaHass=(name)=>{
             const h=createFixture(name);
@@ -150,7 +153,7 @@ class AllCardsRender(unittest.TestCase):
     def picker(self, page, label):
         result = page.evaluate('''()=>({identity:window.customCards===window.capturedPicker,types:customCards.map(c=>c.type).sort(),houseDistinct:customElements.get('eleven-house-card')!==customElements.get('eleven-material-house')})''')
         self.check(label+' picker identity', result['identity'])
-        self.check(label+' exact 19 unique picker types', result['types'] == sorted('eleven-'+name for name in CARDS))
+        self.check(label+' exact 20 unique picker types', result['types'] == sorted('eleven-'+name for name in CARDS))
         self.check(label+' production House distinct from Material', result['houseDistinct'])
 
     def render(self, page, name, dark=False, screenshot=False):
@@ -172,7 +175,7 @@ class AllCardsRender(unittest.TestCase):
             self.check(name+' actual mocked compositor loaded and painted', result['loaded'] and result['canvasPainted'])
         self.report['renders'].append({'name':name,'dark':dark,**result})
         self.report['editors'].append({'name':name,'dark':dark,'tag':page.evaluate('qaEditor.localName')})
-        if screenshot:
+        if screenshot and SCREENSHOTS:
             page.locator('eleven-'+name).screenshot(path=str(OUT/(name+('-dark' if dark else '-light')+'.png')))
 
     def test_01_all_cards_render_light_dark_and_confirmed_scene_reset(self):
@@ -226,7 +229,7 @@ class AllCardsRender(unittest.TestCase):
                     page.evaluate("document.querySelector('#mount').append(qaProductionHouse)")
                     page.wait_for_function('qaProductionHouse.isConnected&&qaCard.isConnected&&qaProductionHouse.loaded&&qaCard.loaded&&!qaProductionHouse.modeLoad&&!qaCard.modeLoad')
                     self.check(mode+' both House implementations coexist and paint simultaneously',page.evaluate("qaProductionHouse.constructor!==qaCard.constructor&&[qaProductionHouse,qaCard].every(c=>c.shadowRoot.querySelector('.stage canvas').getContext('2d').getImageData(0,0,64,48).data.some(v=>v>0))"))
-                    page.locator('#mount').screenshot(path=str(OUT/(mode+'-house-coexist.png')))
+                    if SCREENSHOTS: page.locator('#mount').screenshot(path=str(OUT/(mode+'-house-coexist.png')))
                     self.check(mode+' no service dispatch',page.evaluate("qaCalls.every(c=>c.method!=='callService')"))
                     self.report['migrations'].append(mode)
                     self.report['ha_calls'].extend(page.evaluate('qaCalls'))
@@ -235,21 +238,22 @@ class AllCardsRender(unittest.TestCase):
     def test_03_contact_sheet_and_clean_runtime(self):
         page=self.browser.new_page(viewport={'width':940,'height':1000})
         try:
-            rows=[]
-            for name in ADDITIONS:
-                images=[]
-                for mode in ['light','dark']:
-                    blob=(OUT/f'{name}-{mode}.png').read_bytes()
-                    images.append('<figure><figcaption>'+name+' · '+mode+'</figcaption><img src="data:image/png;base64,'+base64.b64encode(blob).decode()+'"></figure>')
-                rows.append('<section>'+''.join(images)+'</section>')
-            style='<style>body{font:14px system-ui;margin:12px;background:#ddd}section{display:flex;align-items:flex-start;gap:12px;margin-bottom:18px}figure{margin:0;width:440px}img{display:block;width:440px}figcaption{padding:8px 0;font-weight:600}</style>'
-            page.set_content(style+''.join(rows))
-            page.screenshot(path=str(OUT/'additions-light-dark-contact-sheet.png'),full_page=True)
-            for index,html in enumerate([rows[:4],rows[4:]],1):
-                page.set_content(style+''.join(html))
-                page.screenshot(path=str(OUT/f'additions-light-dark-part-{index}.png'),full_page=True)
-            self.check('exact 44 render cases completed',len(self.report['renders'])==44)
-            self.check('exact 44 editor instances configured',len(self.report['editors'])==44)
+            if SCREENSHOTS:
+                rows=[]
+                for name in ADDITIONS:
+                    images=[]
+                    for mode in ['light','dark']:
+                        blob=(OUT/f'{name}-{mode}.png').read_bytes()
+                        images.append('<figure><figcaption>'+name+' · '+mode+'</figcaption><img src="data:image/png;base64,'+base64.b64encode(blob).decode()+'"></figure>')
+                    rows.append('<section>'+''.join(images)+'</section>')
+                style='<style>body{font:14px system-ui;margin:12px;background:#ddd}section{display:flex;align-items:flex-start;gap:12px;margin-bottom:18px}figure{margin:0;width:440px}img{display:block;width:440px}figcaption{padding:8px 0;font-weight:600}</style>'
+                page.set_content(style+''.join(rows))
+                page.screenshot(path=str(OUT/'additions-light-dark-contact-sheet.png'),full_page=True)
+                for index,html in enumerate([rows[:4],rows[4:]],1):
+                    page.set_content(style+''.join(html))
+                    page.screenshot(path=str(OUT/f'additions-light-dark-part-{index}.png'),full_page=True)
+            self.check('exact 46 render cases completed',len(self.report['renders'])==46)
+            self.check('exact 46 editor instances configured',len(self.report['editors'])==46)
             self.check('all three migration cases completed',len(self.report['migrations'])==3)
             self.check('no JavaScript page errors',self.report['page_errors']==[])
             self.check('no browser console errors',self.report['console_errors']==[])

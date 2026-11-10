@@ -12,6 +12,7 @@ const paths = [
   'cards/weather-card/dist/eleven-weather-card.js',
   'cards/car-card/dist/eleven-car-card.js',
   'cards/energy-flow-card/dist/eleven-energy-flow-card.js',
+  'cards/camera-card/dist/eleven-camera-card.js',
   'cards/shopping-card/dist/eleven-shopping-card.js',
   'cards/house-card/dist/eleven-house-card.js',
   'cards/home-controls/dist/eleven-home-controls-card.js',

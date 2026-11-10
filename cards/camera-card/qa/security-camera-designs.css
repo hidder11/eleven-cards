@@ -1,0 +1,5 @@
+.examples{grid-template-columns:repeat(2,minmax(0,var(--study-width)))}
+security-camera-design{display:block;min-width:0}
+footer a{color:var(--primary-color)}
+.viewer-demos{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:28px}.viewer-demos>span{font-size:12px;color:var(--secondary-text-color)}.viewer-demos button{min-height:40px;padding:8px 12px;border:1px solid var(--divider-color);border-radius:8px;background:var(--ha-card-background);color:var(--primary-color);font:inherit;font-size:12px;cursor:pointer}.viewer-demos button:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
+@media(max-width:780px){.examples{grid-template-columns:minmax(0,var(--study-width))}}
