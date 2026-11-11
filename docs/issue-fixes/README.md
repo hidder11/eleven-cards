@@ -29,7 +29,10 @@ title/value gap. Standard density, themed paint, data and entity actions remain.
 Optional detail text and wrapped labels can still increase the surface height.
 
 `python tests/browser-issue-57.py` checks the four cards at four widths in both
-themes and light/dark modes, plus keyboard actions, zero and unavailable data.
+themes and light/dark modes with system and monospace fonts, plus keyboard
+actions, zero and unavailable data. Height comparisons account for wrapped title
+rows shared by CSS subgrid; padding, value geometry and density must still match.
+Long labels must grow without horizontal overflow.
 With explicit screenshot authorization, `ISSUE_SCREENSHOTS=1` captures
 `issue-57.png`: the actual compact reading rows, with unrelated header areas
 hidden for comparison, using fictional data. The default run captures nothing.
