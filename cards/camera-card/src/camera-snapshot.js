@@ -15,17 +15,19 @@ export class CameraSnapshot{
  }
  async refresh(){
   if(!this.active||this.pending)return;
-  this.pending=true;this.failed=false;const version=++this.version;this.abort=new AbortController();this.onStatus('loading');
-  let nextUrl;
+  this.pending=true;this.failed=false;const version=++this.version,controller=new AbortController();this.abort=controller;this.onStatus('loading');
+  let nextUrl,picture,rejectAbort;
+  const aborted=new Promise((_,reject)=>{rejectAbort=()=>reject(Error('Snapshot aborted'));controller.signal.addEventListener('abort',rejectAbort,{once:true});});
+  const timeout=setTimeout(()=>controller.abort(),15000);
   try{
    if(typeof this.hass?.callApiRaw!=='function')throw Error('HA snapshot API unavailable');
-   const response=await this.hass.callApiRaw('GET','camera_proxy/'+this.entity+'?time='+Date.now(),undefined,{'Cache-Control':'no-cache'},this.abort.signal);
+   const response=await Promise.race([this.hass.callApiRaw('GET','camera_proxy/'+this.entity+'?time='+Date.now(),undefined,{'Cache-Control':'no-cache'},controller.signal),aborted]);
    if(!response?.ok)throw Error('Image request failed');
-   const blob=await response.blob();if(!blob.type.startsWith('image/'))throw Error('Invalid image response');
+   const blob=await Promise.race([response.blob(),aborted]);if(!blob.type.startsWith('image/'))throw Error('Invalid image response');
    if(version!==this.version)return;
-   nextUrl=this.url.createObjectURL(blob);const picture=this.image();picture.alt=this.options.alt;picture.style.objectFit=this.options.fit_mode;
-   const loaded=new Promise((resolve,reject)=>{picture.onload=resolve;picture.onerror=()=>reject(Error('Image decode failed'));this.abort.signal.addEventListener('abort',()=>reject(Error('Aborted')),{once:true});});
-   picture.src=nextUrl;await loaded;
+   nextUrl=this.url.createObjectURL(blob);picture=this.image();picture.alt=this.options.alt;picture.style.objectFit=this.options.fit_mode;
+   const loaded=new Promise((resolve,reject)=>{picture.onload=resolve;picture.onerror=()=>reject(Error('Image decode failed'));});
+   picture.src=nextUrl;await Promise.race([loaded,aborted]);
    if(version!==this.version)return;
    if(this.options.interactive===false){this.container.replaceChildren(picture);this.button=null;}
    else{const button=document.createElement('button');button.type='button';button.className='camera-snapshot';button.dataset.cameraDetails=this.entity;button.append(picture);this.container.replaceChildren(button);this.button=button;}
@@ -33,7 +35,7 @@ export class CameraSnapshot{
    if(this.currentUrl)this.url.revokeObjectURL(this.currentUrl);this.currentUrl=nextUrl;nextUrl=null;
    this.lastLoaded=Date.now();this.onLoaded(this.lastLoaded);this.onStatus('ready');
   }catch{if(version===this.version){this.failed=true;this.onStatus('error');}}
-  finally{if(nextUrl)this.url.revokeObjectURL(nextUrl);if(version===this.version){this.pending=false;this.abort=null;this._schedule();}}
+  finally{clearTimeout(timeout);controller.signal.removeEventListener('abort',rejectAbort);if(picture){picture.onload=null;picture.onerror=null;}if(nextUrl)this.url.revokeObjectURL(nextUrl);if(version===this.version){this.pending=false;this.abort=null;this._schedule();}}
  }
  _schedule(){if(this.timer!=null)this.cancel(this.timer);this.timer=null;if(this.active&&this.interval>0&&!this.pending)this.timer=this.schedule(()=>{this.timer=null;this.refresh();},Math.max(5,this.interval)*1000);}
  stop(){

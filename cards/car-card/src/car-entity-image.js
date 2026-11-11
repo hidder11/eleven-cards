@@ -17,7 +17,7 @@ export class CarEntityImage {
  update(hass,id,active=true){
   const connection=hass?.connection??hass?.callWS??null;
   if(id!==this.id||connection!==this.connection){this.reset();this.id=id;this.connection=connection;}
-  const entity=hass?.states?.[id],source=carImageUrl(entity,hass),revision=entity?.state,online=hass?.connected!==false&&hass?.connection?.connected!==false;
+  const entity=hass?.states?.[id],source=carImageUrl(entity,hass,id),revision=entity?.state,online=hass?.connected!==false&&hass?.connection?.connected!==false;
   const changed=source!==this.source||revision!==this.revision,reconnected=online&&!this.online,resumed=active&&!this.active;
   this.hass=hass;this.source=source;this.revision=revision;this.online=online;this.active=active;
   if(!id)return;
@@ -31,7 +31,7 @@ export class CarEntityImage {
  }
  _load(){
   this.attempts++;
-  const version=++this.version,entity=this.hass?.states?.[this.id],source=carImageUrl(entity,this.hass);
+  const version=++this.version,entity=this.hass?.states?.[this.id],source=carImageUrl(entity,this.hass,this.id);
   if(!source){this._failed(version);return;}
   const image=new Image();this.pending=image;
   image.alt='';image.decoding='async';

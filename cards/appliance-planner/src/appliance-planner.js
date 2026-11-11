@@ -3,6 +3,7 @@ import {fetchTariffs,SOURCES} from './providers.js';
 import {classifyPriceLevel} from '../../dynamic-energy-price-card/src/price-utils.js';
 import {plannerCSS} from './styles.js';
 import {uiButton} from '../../../shared/ui-button.js';
+import {requestWithTimeout} from '../../../shared/request.js';
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=v=>JSON.parse(JSON.stringify(v));
@@ -64,18 +65,18 @@ export class ElevenAppliancePlanner extends HTMLElement{
   this.loading=true;this.result=null;this.message='';this.error=false;this.render();
   try{
    const deadline=localInputISO(this.form.deadline,this.zone),now=new Date();
-   const rows=await this.tariffs(now);
+   const rows=await requestWithTimeout(()=>this.tariffs(now));
    if(epoch!==this.epoch)return;
    this.rows=rows;
    let result;
    if(this.entityOnline){
-    try{result=await this.command('preview',this.payload());if(epoch!==this.epoch)return;this.backendOutage=false;}
+    try{result=await requestWithTimeout(()=>this.command('preview',this.payload()));if(epoch!==this.epoch)return;this.backendOutage=false;}
     catch(error){if(!['not_loaded','connection_lost','disconnected','cannot_connect'].includes(error.code))throw error;if(epoch!==this.epoch)return;this.backendOutage=true;result=advise(rows,p,now,deadline);}
    }else result=advise(rows,p,now,deadline);
    if(epoch!==this.epoch)return;
    if(result.price_intervals)this.rows=canonicalPrices(result.price_intervals);
    this.result=result;
-  }catch(err){if(epoch!==this.epoch)return;this.error=true;this.message=err.message||String(err);this.rows=[];}
+  }catch(err){if(epoch!==this.epoch)return;this.tariffRequest=null;this.error=true;this.message=err.message||String(err);this.rows=[];}
   finally{if(epoch===this.epoch){this.loading=false;this.render();}}
  }
  async act(operation,id){
