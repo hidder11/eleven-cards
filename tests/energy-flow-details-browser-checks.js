@@ -54,7 +54,7 @@ export async function runEnergyFlowDetailChecks(){
      for(let i=1;i<devices.length;i++)check(devices[i].getBoundingClientRect().top>=devices[i-1].getBoundingClientRect().bottom-1,'devices use separate full-width rows');
      for(const device of devices)check(device.querySelector('dt').getBoundingClientRect().bottom<=device.querySelector('dd').getBoundingClientRect().top+1,'device label appears above reading');
     }
-    for(const bar of panel.querySelectorAll('.energy-detail-track,.energy-detail-supply,.ui-detail-surface-track'))check(bar.getBoundingClientRect().height===8,'all single and stacked bars have the same height');
+    for(const bar of panel.querySelectorAll('.energy-detail-track,.energy-detail-supply,.ui-detail-surface-track'))check(bar.getBoundingClientRect().height===12,'all single and stacked bars match the shared 12px Car track');
    }
   }
   open('grid');root.querySelector('[data-view-button=live]').click();await wait(()=>card._view==='live'&&card._detailNode==='grid'&&popup('grid').matches(':popover-open'));

@@ -1908,8 +1908,10 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content[data-evcc] .car-stage::before,.content[data-evcc] .car-stage::after{content:none}
 .content[data-evcc] .car-stage .battery-row{grid-column:1;grid-row:1;min-width:0;margin:0;z-index:1}
 .content[data-evcc] .battery-row [data-ui-primary-value]{max-width:100%;width:100%}
-.content[data-evcc] .car-stage .picture{position:relative;grid-column:2;grid-row:1;width:100%;height:112px;min-height:0;margin:0;inset:auto;overflow:hidden;z-index:0}
-.content[data-evcc] .picture img{position:absolute;width:100%;height:100%;left:calc(50% + var(--evcc-image-offset-x,0px));bottom:calc(-1 * var(--evcc-image-offset-y,0px));max-width:none;margin:0;object-fit:contain;filter:none;transform:translateX(-50%) scale(var(--evcc-image-scale,1));transform-origin:center center}
+.content[data-evcc] .car-stage .picture{position:relative;grid-column:2;grid-row:1;width:100%;height:auto;aspect-ratio:3.05;min-height:0;margin:0;inset:auto;overflow:hidden;z-index:0}
+.content[data-evcc][data-density=compact] .car-stage .picture{height:auto;aspect-ratio:3.5}
+.content[data-evcc] .car-stage .picture:has(ha-icon),.content[data-evcc] .car-stage .picture:has(img[hidden]){min-height:88px;aspect-ratio:auto}
+.content[data-evcc] .picture img{position:absolute;inset:0;left:var(--evcc-image-offset-x,0px);bottom:auto;top:var(--evcc-image-offset-y,0px);width:100%;height:100%;max-width:none;margin:0;object-fit:contain;filter:none;transform:scale(var(--evcc-image-scale,1));transform-origin:center}
 .content[data-evcc] .picture ha-icon{--mdc-icon-size:64px}
 .content[data-evcc] .battery-meta{display:none}
 .hero>.battery-progress{margin-top:8px}
@@ -2646,7 +2648,7 @@ class CarCard extends EvccCard {
    /* Regular Auto only: EVCC keeps its independent presentation. */
    :host,ha-card{height:auto;min-height:0}.content{height:auto;overflow:visible}
    .gallery-top{margin:0;padding:0;background:none}.hero{margin:0;padding:0}
-   .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;padding:0;min-height:0}
+   .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:12px;padding:0;min-height:0}
    .car-stage .battery-row{grid-column:1;grid-row:1;align-items:stretch}
    .car-stage::before,.car-stage::after{content:none}
    .battery-row [data-ui-primary-value]{max-width:100%}
