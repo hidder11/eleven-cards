@@ -304,8 +304,10 @@ try {
     assert(getComputedStyle(ws('.weather-status .ui-metric-value')).fontSize==='18px'&&getComputedStyle(ws('.weather-status .ui-metric-value')).fontWeight==='600','weather condition uses the shared text-value typography');
     assert(getComputedStyle(es('.charging-status .ui-metric-value')).fontSize===(i?'20px':'24px'),'EVCC status uses the shared numeric-value typography');
     compare('.charging-readings>[data-ui-metric]','[data-weather-field]',['borderRadius','backgroundColor']);
-    assert(getComputedStyle(ws('[data-weather-field]')).padding==='12px'&&getComputedStyle(es('.charging-readings>[data-ui-metric]')).padding===(i?'8px':'12px'),'metric padding respects each card density');
-    assert(getComputedStyle(ws('[data-weather-field] .ui-metric-title')).fontSize==='12px','weather metric labels stay readable');
+    compare('.charging-readings>[data-ui-metric]','[data-weather-field]',['padding','rowGap','columnGap']);
+    assert(getComputedStyle(ws('[data-weather-field]')).padding===(i?'8px':'12px'),'metric padding respects the shared density');
+    if(i){compare('.charging-readings .ui-metric-title','.weather-metrics .ui-metric-title',fonts);compare('.charging-readings .ui-metric-value','.weather-metrics .ui-metric-value',fonts);}
+    assert(getComputedStyle(ws('[data-weather-field] .ui-metric-title')).fontSize===(i?'11px':'12px'),'weather metric labels follow shared compact sizing');
     assert(getComputedStyle(es('.charging-readings .ui-metric-title')).fontSize==='11px','EVCC metric labels retain shared sizing');
     compare('.charging-readings .ui-metric-value','[data-weather-field] .ui-metric-value',fonts);
     compare('.charging-readings','.weather-metrics',['columnGap']);

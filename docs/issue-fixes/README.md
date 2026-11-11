@@ -20,3 +20,16 @@ of CI. Existing card browser suites cover interactions and unavailable data.
 To regenerate `issue-53.png` through `issue-56.png`, explicitly authorize
 screenshots first and then set `ISSUE_SCREENSHOTS=1` when running this test.
 The default run never captures screenshots.
+
+## Issue 57
+
+Compact header metric surfaces now use the shared density geometry for Weather,
+Energy and Car, including EVCC: 8px padding, 11px labels, 20px numbers and a 2px
+title/value gap. Standard density, themed paint, data and entity actions remain.
+Optional detail text and wrapped labels can still increase the surface height.
+
+`python tests/browser-issue-57.py` checks the four cards at four widths in both
+themes and light/dark modes, plus keyboard actions, zero and unavailable data.
+With explicit screenshot authorization, `ISSUE_SCREENSHOTS=1` captures
+`issue-57.png`: the actual compact reading rows, with unrelated header areas
+hidden for comparison, using fictional data. The default run captures nothing.
