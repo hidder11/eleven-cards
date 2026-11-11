@@ -115,7 +115,7 @@ export const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 .energy-device-sort select:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
 @container(max-width:360px){.energy-home-summary dd{font-size:16px}}
 
-:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--ui-bar-height:var(--detail-bar-height);--detail-bar-radius:8px;--detail-home:var(--primary-color,#03a9f4);--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
+:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:12px;--detail-bar-radius:999px;--detail-home:var(--primary-color,#03a9f4);--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
 :is([data-energy-popup],[data-energy-panel]) .ui-popup-heading>strong{font-size:14px;font-weight:600}
 :is([data-energy-popup],[data-energy-panel]) button{border-radius:8px}
 .energy-grid-metrics>.energy-grid-net{grid-column:1/-1}

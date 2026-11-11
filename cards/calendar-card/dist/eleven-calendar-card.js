@@ -1601,8 +1601,10 @@ ha-card{display:flex;flex-direction:column;height:100%;min-width:0;min-height:0;
 .popup-field-label{font-size:12px}.popup-location,.popup-description{font-size:13px;line-height:1.5}
 ${cardThemeStyles({periodUI:true,wells:'.calendar-info [data-ui-detail-surface]',controls:'.info-button,.period-options [data-ui-button=surface],.period-custom [type=submit]',surfaces:'[data-ui-popup],.tooltip,[data-ui-detail-surface]'})}
 /* Match chart legends: functional swatches and plain labels. */
-.legend,.compact .legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:0 0 12px;font-size:12px}
-.legend-item{padding:4px 0;gap:6px;min-width:0;justify-content:flex-start;border:0;border-radius:4px;background:transparent;box-shadow:none;color:var(--secondary-text-color);font-weight:400;line-height:1.3}
+.header-actions:has(+.legend){margin-bottom:4px}
+.legend,.compact .legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:0 0 8px;font-size:12px}
+.legend-item{padding:4px 0;gap:6px;min-width:24px;min-height:28px;justify-content:flex-start;border:0;border-radius:4px;background:transparent;box-shadow:none;color:var(--secondary-text-color);font-weight:400;line-height:1.3}
+@media(pointer:coarse){.legend-item{min-width:44px;min-height:44px}}
 .legend-item[aria-pressed=true],.legend-item[aria-pressed=true]:hover,.legend-item[aria-pressed=false],.legend-item[aria-pressed=false]:hover{background:transparent;box-shadow:none;color:var(--secondary-text-color)}
 .legend-item .dot{width:9px;height:9px;border-radius:3px}
 .navigation{flex-wrap:nowrap}

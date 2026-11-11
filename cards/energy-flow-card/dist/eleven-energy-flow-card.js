@@ -745,6 +745,14 @@ button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]
 [data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
 [data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
 @supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
+/* Compact header readings share one geometry across Weather, Energy and Car.
+   Keep diagram endpoints and standard-density card layouts independent. */
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node){padding:8px;min-height:44px;column-gap:6px;row-gap:2px}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-title,.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-info{font-size:11px;line-height:1.4}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-value{display:block;grid-column:1;font-size:20px;line-height:1.25}
+.header-region [data-ui-metric][data-density=compact][data-value-kind=text]:not(.circle-node) .ui-metric-value{font-size:18px;line-height:1.3}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-unit{font-size:11px;line-height:1.4;margin-inline-start:4px}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-icon{grid-row:1/span 2;width:20px;height:20px;transform:translate(2px,-2px)}
 `;}
 
 
@@ -2126,7 +2134,7 @@ const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 .energy-device-sort select:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
 @container(max-width:360px){.energy-home-summary dd{font-size:16px}}
 
-:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--ui-bar-height:var(--detail-bar-height);--detail-bar-radius:8px;--detail-home:var(--primary-color,#03a9f4);--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
+:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:12px;--detail-bar-radius:999px;--detail-home:var(--primary-color,#03a9f4);--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
 :is([data-energy-popup],[data-energy-panel]) .ui-popup-heading>strong{font-size:14px;font-weight:600}
 :is([data-energy-popup],[data-energy-panel]) button{border-radius:8px}
 .energy-grid-metrics>.energy-grid-net{grid-column:1/-1}
@@ -2230,7 +2238,7 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .circle-node[data-ui-metric][data-density] .ui-metric-icon,.circle-node[data-ui-metric][data-density] .ui-metric-icon svg,.circle-node[data-ui-metric][data-density] .ui-metric-icon ha-icon{width:22px;height:22px;--mdc-icon-size:22px}
 .circle-node .ui-metric-value{display:none}.circle-node[data-ui-metric] .ui-metric-title{grid-column:1;grid-row:2;justify-self:center;text-align:center;font-size:12px;font-weight:500;line-height:1.35;white-space:nowrap;overflow-wrap:normal;word-break:normal}
 .circle-node[data-ui-metric][data-density] .ui-metric-icon{position:relative;grid-row:1;grid-column:1;justify-self:center;align-self:center;transform:none;color:var(--node-ink);overflow:visible}
-.flow-reading{position:relative;z-index:1;min-width:0;color:var(--primary-text-color,#20252b);font-family:inherit;font-size:16px;line-height:1.35;font-weight:600;letter-spacing:-.4px;text-align:center;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.flow-reading[data-long=true]{font-size:12px}.flow-unit{display:inline-block;color:var(--secondary-text-color,#626a78);font-size:12px;font-weight:400;letter-spacing:0;white-space:nowrap}
+.flow-reading{white-space:nowrap;position:relative;z-index:1;min-width:0;color:var(--primary-text-color,#20252b);font-family:inherit;font-size:16px;line-height:1.35;font-weight:600;letter-spacing:-.4px;text-align:center;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.flow-reading[data-long=true]{font-size:12px}.flow-unit{display:inline-block;margin-inline-start:4px;color:var(--secondary-text-color,#626a78);font-size:12px;font-weight:400;letter-spacing:0;white-space:nowrap}
 .flow-arrow{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.flow-route[data-active=false] .flow-arrow{opacity:.24}
 .header-region>[data-ui-metric]{grid-column:1/-1}
 .flow-secondary{margin-top:12px}

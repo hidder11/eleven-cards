@@ -151,7 +151,7 @@ export class CarCard extends EvccCard {
    /* Regular Auto only: EVCC keeps its independent presentation. */
    :host,ha-card{height:auto;min-height:0}.content{height:auto;overflow:visible}
    .gallery-top{margin:0;padding:0;background:none}.hero{margin:0;padding:0}
-   .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;padding:0;min-height:0}
+   .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:12px;padding:0;min-height:0}
    .car-stage .battery-row{grid-column:1;grid-row:1;align-items:stretch}
    .car-stage::before,.car-stage::after{content:none}
    .battery-row [data-ui-primary-value]{max-width:100%}
