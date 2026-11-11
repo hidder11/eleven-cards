@@ -43,7 +43,7 @@ title: Temperature
 hours_to_show: 24
 ```
 
-Replace both example entity IDs with your own recorded numeric sensors. Sensors with the same unit share a scale; each different unit automatically gets an additional independent y-axis.
+Replace both example entity IDs with your own recorded numeric sensors. Sensors with the same unit share a scale; each different unit automatically gets an additional independent y-axis. Every legend reading includes its unit, including with a single axis. Axis units appear inside the graph surface and remain visible when the legend is hidden. Unitless sensors do not add an empty unit label.
 
 ## Installation
 
