@@ -312,8 +312,10 @@ try {
     const eh=evcc.getBoundingClientRect(),wh=weather.getBoundingClientRect();
     for(const [box,host] of [[er('.battery-value'),eh],[wr('.temperature'),wh]])assert(box.top>=host.top&&box.left>=host.left&&box.right<=host.right,'primary reading fits its own header '+width+' compact='+!!i);
     assert(Math.abs((er('.charging-readings').top-er('.charging-status').bottom)-(wr('.weather-metrics').top-wr('.weather-status').bottom))<.1,'status-to-metrics gap differs');
-    const eGap=er('.charging-readings .ui-metric-value').top-Math.max(...[...e.querySelectorAll('.charging-readings .ui-metric-title')].map(n=>n.getBoundingClientRect().bottom)),wGap=wr('[data-weather-field] .ui-metric-value').top-Math.max(...[...w.querySelectorAll('.weather-metrics .ui-metric-title')].map(n=>n.getBoundingClientRect().bottom));
-    assert(eGap>=-1&&wGap>=-1,'metric values do not overlap their labels');
+    for(const metric of [...e.querySelectorAll('.charging-readings>[data-ui-metric]'),...w.querySelectorAll('[data-weather-field]')]){
+     const title=metric.querySelector('.ui-metric-title'),value=metric.querySelector('.ui-metric-value');
+     assert(value.getBoundingClientRect().top>=title.getBoundingClientRect().bottom-1,'metric value overlaps its own label '+JSON.stringify({width,compact:!!i,label:title.textContent,title:title.getBoundingClientRect().toJSON(),value:value.getBoundingClientRect().toJSON()}));
+    }
     assert(ws('.content').scrollWidth<=ws('.content').clientWidth,'weather card overflows');
     if(!i){compare('[role=tab]','[role=tab]',fonts.concat(['padding','minHeight']));compare('.evcc-panel','.forecast-panel',['paddingTop']);}
     reports.push({width,compact:!!i,darkMode});
