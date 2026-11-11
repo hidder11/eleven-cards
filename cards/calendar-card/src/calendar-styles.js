@@ -3,8 +3,8 @@ import {uiSurfaceStyles} from '../../../shared/ui-surface.js';
 import {cardThemeStyles,segmentedControlStyles} from '../../../shared/card-theme.js';
 export function calendarCardStyles(){return uiDetailSurfaceStyles()+uiSurfaceStyles('.navigation,.info-button')+`
 :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
-ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
-.content{display:flex;flex-direction:column;height:100%;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box}
+ha-card{display:flex;flex-direction:column;height:100%;min-width:0;min-height:0;overflow:hidden;box-sizing:border-box;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
+.content{display:flex;flex:1;flex-direction:column;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box;overflow:hidden}
 .content>.header,.content>.legend,.content>.status{flex-shrink:0}
 .calendar-body{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
 .legend-error{display:inline-grid;place-items:center;width:13px;height:13px;border:1px solid currentColor;border-radius:50%;color:var(--error-color,#db4437);font-size:10px;line-height:1;flex:none}
@@ -73,8 +73,7 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 @container(max-width:420px){.content{padding:var(--eleven-card-padding,16px)}.header{align-items:flex-start}.header-actions{gap:5px}.navigation .range{font-size:10px;padding:0 6px}.navigation [data-nav=now]{padding:0 6px}.list-event{grid-template-columns:50px minmax(0,1fr);gap:8px}.weather{font-size:10px}}
 .header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}.legend-item{min-height:44px;min-width:44px}
 /* Calendar-local calm agenda anatomy; paint remains theme-owned. */
-:host,ha-card,.content{height:auto;min-height:100%}
-.calendar-body{flex:none;overflow:visible;min-width:0}
+.calendar-body{min-width:0}
 .header,.compact .header{gap:12px;margin-bottom:12px;align-items:center;flex-wrap:nowrap}
 .header h2{font-size:16px;font-weight:600;line-height:24px;min-width:0;overflow-wrap:anywhere}
 .header svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}

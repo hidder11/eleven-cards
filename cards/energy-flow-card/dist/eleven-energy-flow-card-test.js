@@ -2200,15 +2200,16 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .circle-flow{grid-column:1/-1;min-width:0}
 .circle-flow *{box-sizing:border-box}
 /* Native labels and SVG routes use the same node size and gap geometry. */
-.circle-scene{--flow-node-size:72px;position:relative;display:block;width:100%;height:calc(112px + var(--flow-node-size));margin:0 auto}
+.circle-scene{--flow-node-size:72px;--flow-node-top:56px;position:relative;display:block;width:100%;height:calc(var(--flow-node-top) + var(--flow-node-size) + 8px);margin:0 auto}
+.content[data-compact=true] .circle-scene{--flow-node-top:48px}
 .flow-routes{position:absolute;inset:0;pointer-events:none}
 .flow-routes>svg{position:absolute;inset:0;display:block;width:100%;height:100%;overflow:visible}
-.circle-scene>.circle-node[data-ui-metric]{position:absolute;top:104px;z-index:1;width:var(--flow-node-size);min-width:var(--flow-node-size);max-width:var(--flow-node-size);height:var(--flow-node-size);min-height:var(--flow-node-size)}
+.circle-scene>.circle-node[data-ui-metric]{position:absolute;top:var(--flow-node-top);z-index:1;width:var(--flow-node-size);min-width:var(--flow-node-size);max-width:var(--flow-node-size);height:var(--flow-node-size);min-height:var(--flow-node-size)}
 .circle-scene>[data-node=sun]{left:0}
 .circle-scene>[data-node=home]{left:calc(50% - var(--flow-node-size)/2)}
 .circle-scene>[data-node=grid]{right:0}
 .circle-scene>[data-flow-value]{position:absolute;padding:0 2px;overflow-wrap:normal}
-.circle-scene>[data-flow-value=return]{top:4px;left:calc(var(--flow-node-size)/2);right:calc(var(--flow-node-size)/2)}
+.circle-scene>[data-flow-value=return]{top:16px;left:calc(var(--flow-node-size)/2);right:calc(var(--flow-node-size)/2)}
 .circle-scene>[data-flow-value=solar],.circle-scene>[data-flow-value=grid]{bottom:calc(20px + var(--flow-node-size)/2);width:calc(50% - var(--flow-node-size)*1.5)}
 .circle-scene>[data-flow-value=solar]{left:var(--flow-node-size)}
 .circle-scene>[data-flow-value=grid]{right:var(--flow-node-size)}
@@ -2263,27 +2264,27 @@ function energyFlowIcon(kind){
 
 // All coordinates are CSS pixels in the same scene as the native endpoint
 // buttons. A wider card changes the gaps, never the alignment of text and wire.
-function energyFlowGeometry(width,nodeSize=72){
- const middle=width/2,right=width-nodeSize/2,y=104+nodeSize/2;
+function energyFlowGeometry(width,nodeSize=72,nodeTop=56){
+ const middle=width/2,right=width-nodeSize/2,y=nodeTop+nodeSize/2;
  const solar=[nodeSize,middle-nodeSize/2],grid=[middle+nodeSize/2,width-nodeSize];
- return {height:104+nodeSize+8,y,solar,grid,paths:{
+ return {height:nodeTop+nodeSize+8,y,solar,grid,paths:{
   solar:`M${solar[0]} ${y}H${solar[1]}`,
   grid:`M${grid[1]} ${y}H${grid[0]}`,
-  return:`M${nodeSize/2} 104V48A8 8 0 0 1 ${nodeSize/2+8} 40H${right-8}A8 8 0 0 1 ${right} 48V104`
+  return:`M${nodeSize/2} ${nodeTop}V16A8 8 0 0 1 ${nodeSize/2+8} 8H${right-8}A8 8 0 0 1 ${right} 16V${nodeTop}`
  }};
 }
 function layoutEnergyFlowDiagram(root){
  const scene=root?.querySelector('.circle-scene'),svg=scene?.querySelector('.flow-routes>svg');
  if(!svg||!scene.clientWidth)return;
  const nodeSize=scene.querySelector('[data-node=sun]')?.offsetWidth||72;
- const geometry=energyFlowGeometry(scene.clientWidth,nodeSize);
+ const geometry=energyFlowGeometry(scene.clientWidth,nodeSize,scene.querySelector('[data-node=sun]')?.offsetTop??56);
  svg.setAttribute('viewBox',`0 0 ${scene.clientWidth} ${geometry.height}`);
  for(const [name,path] of Object.entries(geometry.paths)){
   const group=svg.querySelector(`[data-route="${name}"]`);if(!group)continue;
   group.querySelectorAll('.flow-bed,.flow-wire').forEach(node=>node.setAttribute('d',path));
   const dot=group.querySelector('.flow-dot');if(dot)dot.style.offsetPath=`path('${path}')`;
   const centres=name==='return'?[...['solar','grid'].map(key=>(geometry[key][0]+geometry[key][1])/2)]:[(geometry[name][0]+geometry[name][1])/2];
-  const y=name==='return'?40:geometry.y,sign=name==='grid'?-1:1;
+  const y=name==='return'?8:geometry.y,sign=name==='grid'?-1:1;
   group.querySelector('.flow-arrow')?.setAttribute('d',centres.map(x=>`M${x-3*sign} ${y-4}l${5*sign} 4 ${-5*sign} 4`).join(''));
  }
 }

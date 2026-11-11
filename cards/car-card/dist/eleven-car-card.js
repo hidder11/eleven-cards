@@ -2245,9 +2245,14 @@ function carFieldReading(entity,hass,config,index){
  const unit=config['field_'+index+'_show_unit']===false?'':config['field_'+index+'_unit']||(attribute?'':entity.attributes?.unit_of_measurement);
  return carReading({...entity,state:String(state),attributes:{...entity.attributes,unit_of_measurement:unit}},attribute?{...hass,formatEntityState:undefined}:hass,config['field_'+index+'_decimals']);
 }
-function carImageUrl(entity,hass) {
- if(!carAvailable(entity))return null;
- const picture=entity.attributes?.entity_picture;
+function carImageUrl(entity,hass,id=entity?.entity_id) {
+ if(!entity||entity.state==='unavailable')return null;
+ // Match HA's image selector: the current access token, rather than a cached
+ // entity_picture token, authenticates image entities even before their first update.
+ const token=entity.attributes?.access_token;
+ const picture=token&&/^image\.\w+$/.test(id??'')
+  ?`/api/image_proxy/${id}?token=${encodeURIComponent(token)}&state=${encodeURIComponent(entity.state)}`
+  :entity.attributes?.entity_picture;
  if(typeof picture!=='string'||!picture.trim())return null;
  if(picture.startsWith('/')&&!picture.startsWith('//'))return hass?.hassUrl?hass.hassUrl(picture):picture;
  try{const url=new URL(picture);return ['http:','https:'].includes(url.protocol)?url.href:null;}catch{return null;}
@@ -2319,7 +2324,7 @@ class CarEntityImage {
  update(hass,id,active=true){
   const connection=hass?.connection??hass?.callWS??null;
   if(id!==this.id||connection!==this.connection){this.reset();this.id=id;this.connection=connection;}
-  const entity=hass?.states?.[id],source=carImageUrl(entity,hass),revision=entity?.state,online=hass?.connected!==false&&hass?.connection?.connected!==false;
+  const entity=hass?.states?.[id],source=carImageUrl(entity,hass,id),revision=entity?.state,online=hass?.connected!==false&&hass?.connection?.connected!==false;
   const changed=source!==this.source||revision!==this.revision,reconnected=online&&!this.online,resumed=active&&!this.active;
   this.hass=hass;this.source=source;this.revision=revision;this.online=online;this.active=active;
   if(!id)return;
@@ -2333,7 +2338,7 @@ class CarEntityImage {
  }
  _load(){
   this.attempts++;
-  const version=++this.version,entity=this.hass?.states?.[this.id],source=carImageUrl(entity,this.hass);
+  const version=++this.version,entity=this.hass?.states?.[this.id],source=carImageUrl(entity,this.hass,this.id);
   if(!source){this._failed(version);return;}
   const image=new Image();this.pending=image;
   image.alt='';image.decoding='async';

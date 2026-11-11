@@ -66,9 +66,14 @@ export function carFieldReading(entity,hass,config,index){
  const unit=config['field_'+index+'_show_unit']===false?'':config['field_'+index+'_unit']||(attribute?'':entity.attributes?.unit_of_measurement);
  return carReading({...entity,state:String(state),attributes:{...entity.attributes,unit_of_measurement:unit}},attribute?{...hass,formatEntityState:undefined}:hass,config['field_'+index+'_decimals']);
 }
-export function carImageUrl(entity,hass) {
- if(!carAvailable(entity))return null;
- const picture=entity.attributes?.entity_picture;
+export function carImageUrl(entity,hass,id=entity?.entity_id) {
+ if(!entity||entity.state==='unavailable')return null;
+ // Match HA's image selector: the current access token, rather than a cached
+ // entity_picture token, authenticates image entities even before their first update.
+ const token=entity.attributes?.access_token;
+ const picture=token&&/^image\.\w+$/.test(id??'')
+  ?`/api/image_proxy/${id}?token=${encodeURIComponent(token)}&state=${encodeURIComponent(entity.state)}`
+  :entity.attributes?.entity_picture;
  if(typeof picture!=='string'||!picture.trim())return null;
  if(picture.startsWith('/')&&!picture.startsWith('//'))return hass?.hassUrl?hass.hassUrl(picture):picture;
  try{const url=new URL(picture);return ['http:','https:'].includes(url.protocol)?url.href:null;}catch{return null;}

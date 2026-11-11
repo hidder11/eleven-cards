@@ -9297,7 +9297,7 @@ class OverviewCard extends HTMLElement{
   const title=this.shadowRoot.querySelector('h2'),period=this.shadowRoot.querySelector('.period');
   const titleMinimum=wordWidth(title);ctx.font=getComputedStyle(period).font;
   this.shadowRoot.querySelector('header').classList.toggle('stacked',titleMinimum+12+ctx.measureText(period.textContent).width>grid.clientWidth);
-  const layout=overviewSectionLayout(this._config),gap=layout.gap,inset=layout.padding*2+2;
+  const layout=overviewSectionLayout(this._config),gap=layout.gap,inset=layout.padding*2;
   let minimum=layout.minimum;const values=[];
   this.shadowRoot.querySelectorAll('.metric').forEach(metric=>{
    const value=metric.querySelector('.value');value.style.removeProperty('font-size');
@@ -9341,7 +9341,7 @@ header.stacked .period{text-align:start}
 .period{font-size:12px;line-height:1.4;text-align:end;white-space:nowrap;flex:0 0 auto;color:var(--secondary-text-color,#666)}
 .period.synced{flex:0 1 auto;white-space:normal;overflow-wrap:normal;max-width:100%;text-align:start}
 .grid{display:grid;grid-template-columns:repeat(var(--overview-columns,1),minmax(0,1fr));column-gap:${layout.gap}px;row-gap:0;align-items:stretch}
-.metric{appearance:none;font:inherit;color:inherit;background:var(--eleven-material-plot-background,transparent);border:1px solid var(--divider-color,#ddd);border-radius:10px;text-align:start;min-width:0;min-height:44px;padding:${layout.padding}px;cursor:pointer;display:grid;grid-template-rows:subgrid;grid-row:span ${2+(c.show_graph?1:0)+(c.show_delta?2:0)};align-content:start;margin-bottom:${layout.gap}px}
+.metric{appearance:none;font:inherit;color:inherit;background:var(--eleven-material-plot-background,transparent);border:0;border-radius:10px;text-align:start;min-width:0;min-height:44px;padding:${layout.padding}px;cursor:pointer;display:grid;grid-template-rows:subgrid;grid-row:span ${2+(c.show_graph?1:0)+(c.show_delta?2:0)};align-content:start;margin-bottom:${layout.gap}px}
 .metric:focus-visible,.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
 .label{font-size:13px;color:var(--secondary-text-color,#666);line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:7px;min-width:0}
 .label i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--series-color);flex-shrink:0}
@@ -9373,7 +9373,7 @@ ${c.section_size==='compact'?`
 .compact-change .caption{flex:1 1 0;min-width:0}
 `:''}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
-${cardThemeStyles({wells:'.metric',controls:'.retry'})}</style><ha-card><div class="content"><header><h2>${esc(c.title)}</h2><span class="period${synced?' synced':''}">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span>${uiButton({variant:'action',className:'retry',text:dutch?'Opnieuw':'Retry'})}</div>`:''}</div></ha-card>`;
+${cardThemeStyles({plots:'.metric',controls:'.retry'})}</style><ha-card><div class="content"><header><h2>${esc(c.title)}</h2><span class="period${synced?' synced':''}">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span>${uiButton({variant:'action',className:'retry',text:dutch?'Opnieuw':'Retry'})}</div>`:''}</div></ha-card>`;
   this.shadowRoot.querySelectorAll('.metric').forEach(b=>{b.onclick=()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:b.dataset.entity},bubbles:true,composed:true}));if(b.dataset.entity===focus)b.focus();});const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();if(retryFocus)(retry??this.shadowRoot.querySelector('.metric'))?.focus();this._observeLayout();
  }
 }
@@ -16126,8 +16126,8 @@ function calendarPeriodAdapter(host){
 
 function calendarCardStyles(){return uiDetailSurfaceStyles()+uiSurfaceStyles('.navigation,.info-button')+`
 :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
-ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
-.content{display:flex;flex-direction:column;height:100%;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box}
+ha-card{display:flex;flex-direction:column;height:100%;min-width:0;min-height:0;overflow:hidden;box-sizing:border-box;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
+.content{display:flex;flex:1;flex-direction:column;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box;overflow:hidden}
 .content>.header,.content>.legend,.content>.status{flex-shrink:0}
 .calendar-body{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
 .legend-error{display:inline-grid;place-items:center;width:13px;height:13px;border:1px solid currentColor;border-radius:50%;color:var(--error-color,#db4437);font-size:10px;line-height:1;flex:none}
@@ -16196,8 +16196,7 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 @container(max-width:420px){.content{padding:var(--eleven-card-padding,16px)}.header{align-items:flex-start}.header-actions{gap:5px}.navigation .range{font-size:10px;padding:0 6px}.navigation [data-nav=now]{padding:0 6px}.list-event{grid-template-columns:50px minmax(0,1fr);gap:8px}.weather{font-size:10px}}
 .header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}.legend-item{min-height:44px;min-width:44px}
 /* Calendar-local calm agenda anatomy; paint remains theme-owned. */
-:host,ha-card,.content{height:auto;min-height:100%}
-.calendar-body{flex:none;overflow:visible;min-width:0}
+.calendar-body{min-width:0}
 .header,.compact .header{gap:12px;margin-bottom:12px;align-items:center;flex-wrap:nowrap}
 .header h2{font-size:16px;font-weight:600;line-height:24px;min-width:0;overflow-wrap:anywhere}
 .header svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -20502,9 +20501,14 @@ function carFieldReading(entity,hass,config,index){
  const unit=config['field_'+index+'_show_unit']===false?'':config['field_'+index+'_unit']||(attribute?'':entity.attributes?.unit_of_measurement);
  return carReading({...entity,state:String(state),attributes:{...entity.attributes,unit_of_measurement:unit}},attribute?{...hass,formatEntityState:undefined}:hass,config['field_'+index+'_decimals']);
 }
-function carImageUrl(entity,hass) {
- if(!carAvailable(entity))return null;
- const picture=entity.attributes?.entity_picture;
+function carImageUrl(entity,hass,id=entity?.entity_id) {
+ if(!entity||entity.state==='unavailable')return null;
+ // Match HA's image selector: the current access token, rather than a cached
+ // entity_picture token, authenticates image entities even before their first update.
+ const token=entity.attributes?.access_token;
+ const picture=token&&/^image\.\w+$/.test(id??'')
+  ?`/api/image_proxy/${id}?token=${encodeURIComponent(token)}&state=${encodeURIComponent(entity.state)}`
+  :entity.attributes?.entity_picture;
  if(typeof picture!=='string'||!picture.trim())return null;
  if(picture.startsWith('/')&&!picture.startsWith('//'))return hass?.hassUrl?hass.hassUrl(picture):picture;
  try{const url=new URL(picture);return ['http:','https:'].includes(url.protocol)?url.href:null;}catch{return null;}
@@ -20576,7 +20580,7 @@ class CarEntityImage {
  update(hass,id,active=true){
   const connection=hass?.connection??hass?.callWS??null;
   if(id!==this.id||connection!==this.connection){this.reset();this.id=id;this.connection=connection;}
-  const entity=hass?.states?.[id],source=carImageUrl(entity,hass),revision=entity?.state,online=hass?.connected!==false&&hass?.connection?.connected!==false;
+  const entity=hass?.states?.[id],source=carImageUrl(entity,hass,id),revision=entity?.state,online=hass?.connected!==false&&hass?.connection?.connected!==false;
   const changed=source!==this.source||revision!==this.revision,reconnected=online&&!this.online,resumed=active&&!this.active;
   this.hass=hass;this.source=source;this.revision=revision;this.online=online;this.active=active;
   if(!id)return;
@@ -20590,7 +20594,7 @@ class CarEntityImage {
  }
  _load(){
   this.attempts++;
-  const version=++this.version,entity=this.hass?.states?.[this.id],source=carImageUrl(entity,this.hass);
+  const version=++this.version,entity=this.hass?.states?.[this.id],source=carImageUrl(entity,this.hass,this.id);
   if(!source){this._failed(version);return;}
   const image=new Image();this.pending=image;
   image.alt='';image.decoding='async';
@@ -23152,15 +23156,16 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .circle-flow{grid-column:1/-1;min-width:0}
 .circle-flow *{box-sizing:border-box}
 /* Native labels and SVG routes use the same node size and gap geometry. */
-.circle-scene{--flow-node-size:72px;position:relative;display:block;width:100%;height:calc(112px + var(--flow-node-size));margin:0 auto}
+.circle-scene{--flow-node-size:72px;--flow-node-top:56px;position:relative;display:block;width:100%;height:calc(var(--flow-node-top) + var(--flow-node-size) + 8px);margin:0 auto}
+.content[data-compact=true] .circle-scene{--flow-node-top:48px}
 .flow-routes{position:absolute;inset:0;pointer-events:none}
 .flow-routes>svg{position:absolute;inset:0;display:block;width:100%;height:100%;overflow:visible}
-.circle-scene>.circle-node[data-ui-metric]{position:absolute;top:104px;z-index:1;width:var(--flow-node-size);min-width:var(--flow-node-size);max-width:var(--flow-node-size);height:var(--flow-node-size);min-height:var(--flow-node-size)}
+.circle-scene>.circle-node[data-ui-metric]{position:absolute;top:var(--flow-node-top);z-index:1;width:var(--flow-node-size);min-width:var(--flow-node-size);max-width:var(--flow-node-size);height:var(--flow-node-size);min-height:var(--flow-node-size)}
 .circle-scene>[data-node=sun]{left:0}
 .circle-scene>[data-node=home]{left:calc(50% - var(--flow-node-size)/2)}
 .circle-scene>[data-node=grid]{right:0}
 .circle-scene>[data-flow-value]{position:absolute;padding:0 2px;overflow-wrap:normal}
-.circle-scene>[data-flow-value=return]{top:4px;left:calc(var(--flow-node-size)/2);right:calc(var(--flow-node-size)/2)}
+.circle-scene>[data-flow-value=return]{top:16px;left:calc(var(--flow-node-size)/2);right:calc(var(--flow-node-size)/2)}
 .circle-scene>[data-flow-value=solar],.circle-scene>[data-flow-value=grid]{bottom:calc(20px + var(--flow-node-size)/2);width:calc(50% - var(--flow-node-size)*1.5)}
 .circle-scene>[data-flow-value=solar]{left:var(--flow-node-size)}
 .circle-scene>[data-flow-value=grid]{right:var(--flow-node-size)}
@@ -23215,27 +23220,27 @@ function energyFlowIcon(kind){
 
 // All coordinates are CSS pixels in the same scene as the native endpoint
 // buttons. A wider card changes the gaps, never the alignment of text and wire.
-function energyFlowGeometry(width,nodeSize=72){
- const middle=width/2,right=width-nodeSize/2,y=104+nodeSize/2;
+function energyFlowGeometry(width,nodeSize=72,nodeTop=56){
+ const middle=width/2,right=width-nodeSize/2,y=nodeTop+nodeSize/2;
  const solar=[nodeSize,middle-nodeSize/2],grid=[middle+nodeSize/2,width-nodeSize];
- return {height:104+nodeSize+8,y,solar,grid,paths:{
+ return {height:nodeTop+nodeSize+8,y,solar,grid,paths:{
   solar:`M${solar[0]} ${y}H${solar[1]}`,
   grid:`M${grid[1]} ${y}H${grid[0]}`,
-  return:`M${nodeSize/2} 104V48A8 8 0 0 1 ${nodeSize/2+8} 40H${right-8}A8 8 0 0 1 ${right} 48V104`
+  return:`M${nodeSize/2} ${nodeTop}V16A8 8 0 0 1 ${nodeSize/2+8} 8H${right-8}A8 8 0 0 1 ${right} 16V${nodeTop}`
  }};
 }
 function layoutEnergyFlowDiagram(root){
  const scene=root?.querySelector('.circle-scene'),svg=scene?.querySelector('.flow-routes>svg');
  if(!svg||!scene.clientWidth)return;
  const nodeSize=scene.querySelector('[data-node=sun]')?.offsetWidth||72;
- const geometry=energyFlowGeometry(scene.clientWidth,nodeSize);
+ const geometry=energyFlowGeometry(scene.clientWidth,nodeSize,scene.querySelector('[data-node=sun]')?.offsetTop??56);
  svg.setAttribute('viewBox',`0 0 ${scene.clientWidth} ${geometry.height}`);
  for(const [name,path] of Object.entries(geometry.paths)){
   const group=svg.querySelector(`[data-route="${name}"]`);if(!group)continue;
   group.querySelectorAll('.flow-bed,.flow-wire').forEach(node=>node.setAttribute('d',path));
   const dot=group.querySelector('.flow-dot');if(dot)dot.style.offsetPath=`path('${path}')`;
   const centres=name==='return'?[...['solar','grid'].map(key=>(geometry[key][0]+geometry[key][1])/2)]:[(geometry[name][0]+geometry[name][1])/2];
-  const y=name==='return'?40:geometry.y,sign=name==='grid'?-1:1;
+  const y=name==='return'?8:geometry.y,sign=name==='grid'?-1:1;
   group.querySelector('.flow-arrow')?.setAttribute('d',centres.map(x=>`M${x-3*sign} ${y-4}l${5*sign} 4 ${-5*sign} 4`).join(''));
  }
 }
@@ -29369,20 +29374,22 @@ class ControlsEditor extends HTMLElement{
  render(){
   if(!this._config)return;const focus=this.shadowRoot.activeElement; // Do not rebuild native HA selectors on ordinary hass updates.
   if(this._builtConfig===this._config){this.shadowRoot.querySelectorAll('ha-form').forEach(f=>{f.hass=this._hass;});return;}
+  this._expanded??=[];this.shadowRoot.querySelectorAll('details.item').forEach((box,i)=>{this._expanded[i]=box.open;});
   this._builtConfig=this._config;const key=this.kind==='actions'?'actions':'entities',items=(this._config[key]||[]).map(normalizeItem);
-  this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.item{padding:16px 0;border-top:1px solid var(--divider-color)}.bar{display:flex;align-items:center;gap:4px}.bar strong{flex:1;font-size:14px;overflow-wrap:anywhere}${uiActionButtonStyles()}.add{padding:0 16px;margin-top:12px}p{font-size:12px;color:var(--secondary-text-color);line-height:1.5}ha-form{display:block}</style><div class="main"></div><p>${this.kind==='waste'?this.t('Gebruik een datumsensor, een aftelsensor of een kalender. Automatisch herkent ISO-datums en daysTo. Kalenderafspraken worden 60 dagen vooruit geladen.','Use a date sensor, day-count sensor or calendar. Auto recognizes ISO dates and daysTo. Calendar events are loaded 60 days ahead.'):this.kind==='controls'?this.t('Voeg alleen de apparaten toe die je hier wilt bedienen. De knoppen passen zich aan de mogelijkheden aan.','Add the devices you want to control. Controls follow each entity’s capabilities.'):this.t('Voeg scènes of scripts toe. Elke actie heeft een eigen naam en icoon.','Add scenes or scripts. Each action has its own name and icon.')}</p><div class="items"></div>${uiButton({variant:'action',className:'add',text:this.t('Onderdeel toevoegen','Add item')})}`;
+  this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.item{padding:16px 0;border-top:1px solid var(--divider-color)}.bar{display:flex;align-items:center;gap:4px}.bar strong{flex:1;font-size:14px;overflow-wrap:anywhere}details.item{padding:0}details.item>summary{cursor:pointer;min-height:44px;padding:12px 0;list-style:none}details.item>summary::-webkit-details-marker{display:none}details.item>summary::before{content:"";width:7px;height:7px;flex:none;margin:0 8px 0 4px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg)}details.item[open]>summary::before{transform:rotate(45deg)}details.item>summary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}details.item>.fields{padding-bottom:16px}${uiActionButtonStyles()}.add{padding:0 16px;margin-top:12px}p{font-size:12px;color:var(--secondary-text-color);line-height:1.5}ha-form{display:block}</style><div class="main"></div><p>${this.kind==='waste'?this.t('Gebruik een datumsensor, een aftelsensor of een kalender. Automatisch herkent ISO-datums en daysTo. Kalenderafspraken worden 60 dagen vooruit geladen.','Use a date sensor, day-count sensor or calendar. Auto recognizes ISO dates and daysTo. Calendar events are loaded 60 days ahead.'):this.kind==='controls'?this.t('Voeg alleen de apparaten toe die je hier wilt bedienen. De knoppen passen zich aan de mogelijkheden aan.','Add the devices you want to control. Controls follow each entity’s capabilities.'):this.t('Voeg scènes of scripts toe. Elke actie heeft een eigen naam en icoon.','Add scenes or scripts. Each action has its own name and icon.')}</p><div class="items"></div>${uiButton({variant:'action',className:'add',text:this.t('Onderdeel toevoegen','Add item')})}`;
   this.form(this.shadowRoot.querySelector('.main'),[{name:'title',selector:{text:{}}},...(this.kind==='waste'?[]:[{name:'confirmation',selector:{boolean:{}}}]),...(this.kind==='actions'?[{name:'columns',selector:{number:{min:1,max:6,step:1,mode:'box'}}}]:[])],this.kind==='actions'?{...this._config,columns:this._config.columns??3}:this._config,v=>{this.emit({...this._config,...v});});
   items.forEach((e,i)=>{
-   const box=document.createElement('section');box.className='item';box.innerHTML=`<div class="bar"><strong>${esc(e.name||e.entity||this.t('Nieuw onderdeel','New item'))}</strong>${uiButton({variant:'action-icon',label:this.t('Omhoog','Move up'),text:'↑',disabled:i===0,attrs:{'data-move':-1}})}${uiButton({variant:'action-icon',label:this.t('Omlaag','Move down'),text:'↓',disabled:i===items.length-1,attrs:{'data-move':1}})}${uiButton({variant:'action-danger',label:this.t('Verwijderen','Remove'),text:'×',attrs:{'data-remove':''}})}</div><div class="fields"></div>`;
+   const collapsible=this.kind==='waste',bar=collapsible?'summary':'div';
+   const box=document.createElement(collapsible?'details':'section');box.className='item';if(collapsible)box.open=this._expanded[i]??items.length===1;box.innerHTML=`<${bar} class="bar"><strong>${esc(e.name||e.entity||this.t('Nieuw onderdeel','New item'))}</strong>${uiButton({variant:'action-icon',label:this.t('Omhoog','Move up'),text:'↑',disabled:i===0,attrs:{'data-move':-1}})}${uiButton({variant:'action-icon',label:this.t('Omlaag','Move down'),text:'↓',disabled:i===items.length-1,attrs:{'data-move':1}})}${uiButton({variant:'action-danger',label:this.t('Verwijderen','Remove'),text:'×',attrs:{'data-remove':''}})}</${bar}><div class="fields"></div>`;
    const schema=[{name:'entity',required:true,selector:{entity:{domain:DOMAINS[this.kind]}}},{name:'name',selector:{text:{}}},{name:'icon',selector:{icon:{}}}];
    if(this.kind==='actions')schema.push({name:'description',selector:{text:{}}});
    if(this.kind==='waste')schema.push({name:'source',selector:{select:{options:[{value:'auto',label:this.t('Automatisch','Auto')},{value:'date',label:this.t('Datum','Date')},{value:'days',label:this.t('Aantal dagen','Day count')}]}}},{name:'attribute',selector:{text:{}}},{name:'color',selector:{color_rgb:{}}},{name:'filter',selector:{text:{}}});
    this.form(box.querySelector('.fields'),schema,{...e,...(this.kind==='waste'?{source:e.source||'auto',color:Array.isArray(e.color)?e.color:/^#[\da-f]{6}$/i.test(e.color||'')?[1,3,5].map(n=>parseInt(e.color.slice(n,n+2),16)):undefined}:{})},v=>{const next=(this._config[key]||[]).map(normalizeItem);next[i]={...next[i],...v};this.emit({...this._config,[key]:next});});
-   box.querySelector('[data-remove]').onclick=()=>{const next=(this._config[key]||[]).filter((_,n)=>n!==i);this.emit({...this._config,[key]:next});this.render();};
-   box.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const next=[...this._config[key]],j=i+Number(b.dataset.move);[next[i],next[j]]=[next[j],next[i]];this.emit({...this._config,[key]:next});this.render();});
+   box.querySelector('[data-remove]').onclick=event=>{event.preventDefault();const next=(this._config[key]||[]).filter((_,n)=>n!==i);box.remove();this._expanded.splice(i,1);this.emit({...this._config,[key]:next});this.render();};
+   box.querySelectorAll('[data-move]').forEach(b=>b.onclick=event=>{event.preventDefault();const next=[...this._config[key]],j=i+Number(b.dataset.move);[next[i],next[j]]=[next[j],next[i]];if(collapsible){const entries=[...this.shadowRoot.querySelectorAll('details.item')];[entries[i].open,entries[j].open]=[entries[j].open,entries[i].open];}this.emit({...this._config,[key]:next});this.render();});
    this.shadowRoot.querySelector('.items').append(box);
   });
-  this.shadowRoot.querySelector('.add').onclick=()=>{this.emit({...this._config,[key]:[...(this._config[key]||[]),{entity:''}]});this.render();};
+  this.shadowRoot.querySelector('.add').onclick=()=>{this._expanded[items.length]=true;this.emit({...this._config,[key]:[...(this._config[key]||[]),{entity:''}]});this.render();};
  }
 }
 for(const [tag,cls] of [['eleven-controls-editor',ControlsEditor],[TYPES.actions,ActionsCard],[TYPES.controls,ControlsCard],[TYPES.waste,WasteCard]])if(!customElements.get(tag))customElements.define(tag,tag.endsWith('-editor')?cls:withCardBackground(cls));
