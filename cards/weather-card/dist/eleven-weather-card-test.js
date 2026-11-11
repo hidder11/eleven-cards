@@ -1,5 +1,28 @@
 // Eleven Weather (beta) — self-contained module
 (()=>{
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Paint only, scoped to each caller's shadow root and explicit semantic roles.
 // Material recipes/palettes belong to the optional YAML theme, never this helper.
 // Do not use generic control selectors: swatches, state tracks and chart colors
@@ -1280,13 +1303,17 @@ const weatherCalmStyles=`
 function patchWeatherDOM(root,markup){
  const template=document.createElement('template');template.innerHTML=markup;
  const key=node=>node.nodeType===1?node.localName+'|'+(node.getAttribute('data-weather-key')??node.getAttribute('data-ui-tab')??node.getAttribute('data-ui-tab-panel')??node.getAttribute('data-forecast-field')??node.getAttribute('class')?.split(' ')[0]??''):String(node.nodeType);
+ // The background wrapper owns these siblings. Moving the card's live content
+ // around its injected layer resets descendant scroll offsets in Chromium.
+ const managed=node=>node?.nodeType===1&&node.matches('[data-ui-card-background],style[data-ui-background-styles]');
+ const nextOwned=node=>{while(managed(node))node=node.nextSibling;return node;};
  const patch=(parent,incoming)=>{
-  let cursor=parent.firstChild;
+  let cursor=nextOwned(parent.firstChild);
   for(const next of [...incoming.childNodes]){
    let current=cursor;
    if(!current||key(current)!==key(next)){
-    current=cursor?.nextSibling;
-    while(current&&key(current)!==key(next))current=current.nextSibling;
+    current=nextOwned(cursor?.nextSibling);
+    while(current&&key(current)!==key(next))current=nextOwned(current.nextSibling);
     if(current)parent.insertBefore(current,cursor);else{current=next.cloneNode(true);parent.insertBefore(current,cursor);}
    }
    if(!current.isEqualNode(next)){
@@ -1297,9 +1324,9 @@ function patchWeatherDOM(root,markup){
      patch(current,next);
     }
    }
-   cursor=current.nextSibling;
+   cursor=nextOwned(current.nextSibling);
   }
-  while(cursor){const next=cursor.nextSibling;parent.removeChild(cursor);cursor=next;}
+  while(cursor){const next=nextOwned(cursor.nextSibling);parent.removeChild(cursor);cursor=next;}
  };
  patch(root,template.content);
 }
@@ -1433,6 +1460,7 @@ class WeatherEditor extends HTMLElement{
 
 
 
+
 class WeatherCard extends HTMLElement {
  constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._forecast=[];this._iconCache=new Map();}
  static async getConfigElement(){if(!customElements.get('eleven-weather-editor-test'))customElements.define('eleven-weather-editor-test',WeatherEditor);return document.createElement('eleven-weather-editor-test');}
@@ -1462,7 +1490,7 @@ class WeatherCard extends HTMLElement {
  getGridOptions(){return {columns:12,min_columns:6,rows:this.getCardSize(),min_rows:3};}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
  _forecastEnabled(){return weatherVisibleTabs(this._config).length>0;}
- _stopForecast(){this._generation++;try{this._unsubscribe?.();}catch{}this._unsubscribe=null;}
+ _stopForecast(){this._generation++;stopSubscription(this._unsubscribe);this._unsubscribe=null;}
  _statusMarkup(attributes,available,state,nl){
   const metric=weatherField(this._config,'metric_status',attributes,this._hass,available);if(!metric)return '';
   const condition=this._config.metric_status==='condition',id=metric.entity||(this._config.metric_status==='custom'?'':this._config.entity);
@@ -1499,7 +1527,7 @@ class WeatherCard extends HTMLElement {
     this._forecast=Array.isArray(payload?.forecast)?payload.forecast:[];this._render();
    },{type:'weather/subscribe_forecast',entity_id:this._config.entity,forecast_type:type})).then(unsubscribe=>{
     if(typeof unsubscribe!=='function')return;
-    if(!this._attached||generation!==this._generation){try{unsubscribe();}catch{}}else this._unsubscribe=unsubscribe;
+    if(!this._attached||generation!==this._generation)stopSubscription(unsubscribe);else this._unsubscribe=unsubscribe;
    },fail);
   }catch{fail();}
  }

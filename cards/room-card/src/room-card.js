@@ -18,7 +18,12 @@ export class RoomCard extends HTMLElement{
  ],computeLabel:s=>({name:'Ruimtenaam',icon:'Icoon',scenes:'Scenes',show_scene_names:'Tekst bij sceneknoppen',lights:'Lampen (geen groepen én hun leden)',temperature_entity:'Temperatuursensor',humidity_entity:'Luchtvochtigheidssensor',navigation_path:'Pad naar ruimtepagina',note:'Toelichting / testkoppeling'}[s.name]??s.name)};}
  static getStubConfig(){return {name:'Nieuwe ruimte',icon:'mdi:home-outline',lights:[]};}
  setConfig(c){this._config=normalizeRoom(c);this._sceneError=false;this._render();}
- set hass(h){this._hass=h;this._render();}get hass(){return this._hass;}
+ set hass(h){
+  const c=this._config,signature=JSON.stringify([h?.connected,h?.connection?.connected,typeof h?.callService,h?.language,h?.locale?.language,c&&[...c.lights,...c.scenes,c.temperature_entity,c.humidity_entity].map(id=>h?.states?.[id])]);this._hass=h;
+  // Keep a value snapshot: fixture/custom hosts can mutate their states in place.
+  // Always retain the latest hass for actions, including ignored sensor updates.
+  if(signature!==this._roomSignature){this._roomSignature=signature;this._render();}
+ }get hass(){return this._hass;}
  getCardSize(){return 2;}
  getGridOptions(){return {columns:6,min_columns:6,rows:'auto',min_rows:2};}
  _moreInfo(entityId){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId},bubbles:true,composed:true}));}

@@ -1,9 +1,9 @@
-// Optional rendered checks using Chrome DevTools, without screenshots,
+// Rendered CI and local checks using Chrome DevTools, without screenshots,
 // recordings, external services, or production Home Assistant data.
 // Run with Node.js 22+; CHROME_PATH can select a Chrome executable.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile, mkdtemp, access} from 'node:fs/promises';
+import {readFile, mkdtemp, mkdir, access} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {resolve, extname, sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -12,7 +12,8 @@ import {fileURLToPath} from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url)).replace(/[\\/]$/, '');
 const chrome = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 await access(chrome);
-const profile = await mkdtemp(resolve(root, '.cache/evcc-browser-'));
+await mkdir(resolve(root,'.cache'),{recursive:true});
+const profile = await mkdtemp(resolve(root, '.cache/weather-browser-'));
 const mime = {'.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.css': 'text/css'};
 const server = createServer(async (request, response) => {
  const path = resolve(root, '.' + decodeURIComponent(new URL(request.url, 'http://localhost').pathname));
@@ -21,7 +22,7 @@ const server = createServer(async (request, response) => {
  catch { response.writeHead(404).end(); }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const browser = spawn(chrome, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', 'about:blank'], {windowsHide: true, stdio: 'ignore'});
+const browser = spawn(chrome, ['--headless=new', ...(process.platform==='linux'?['--no-sandbox']:[]), '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', 'about:blank'], {windowsHide: true, stdio: 'ignore'});
 const watchdog = setTimeout(() => { browser.kill(); server.closeAllConnections(); console.error('Browser verification timed out'); process.exit(1); }, 45000);
 let socket;
 try {
@@ -52,6 +53,7 @@ try {
  await send('Page.navigate', {url: `http://127.0.0.1:${server.address().port}/cards/weather-card/qa/index.html`});
  for(let attempt=0;attempt<100;attempt++){if(await evaluate('!!window.weatherQA'))break;await delay(50);}
  const checks=await evaluate(`(async()=>{
+ const {assertCardBackground}=await import('/tests/card-background-browser-checks.js');
  const qa=weatherQA,card=qa.cards[0],hass=qa.hass,config={...card._config},checks=[];
  const query=s=>card.shadowRoot.querySelector(s),check=(name,value)=>{if(!value)throw Error(name);checks.push(name);};
  check('four state illustrations and live forecasts render',qa.cards.length===4&&qa.cards.every(c=>c.shadowRoot.querySelectorAll('.forecast-list li').length===6));
@@ -73,17 +75,16 @@ try {
  const backgroundPaints=[];
  for(const background of ['lanes','halo','ribbon','prism-glass','eclipse']){
   card.setConfig({...config,background});
-  backgroundPaints.push(getComputedStyle(query('.scene-background'),'::before').backgroundImage+'|'+getComputedStyle(query('.scene-background'),'::after').backgroundImage);
+  backgroundPaints.push(query('[data-ui-card-background]')?[...query('[data-ui-card-background]').querySelectorAll('i')].map(el=>getComputedStyle(el).backgroundImage+'|'+getComputedStyle(el).borderRadius).join(';'):getComputedStyle(query('.scene-background'),'::before').backgroundImage+'|'+getComputedStyle(query('.scene-background'),'::after').backgroundImage);
   check('background '+background+' preserves weather layout',query('.content').dataset.background===background&&!!query('.art .weather-icon'));
-  const backdrop=query('.scene-background'),style=getComputedStyle(backdrop);
-  check('background '+background+' fades on a shared layer before clipping',style.maskImage.includes('gradient')&&style.maskImage.includes('88%')&&getComputedStyle(backdrop,'::before').maskImage==='none'&&getComputedStyle(backdrop,'::after').maskImage==='none'&&Math.abs(backdrop.getBoundingClientRect().bottom-query('.header-region').getBoundingClientRect().bottom)<.1);
+  await assertCardBackground(card,check);
  }
  check('all five backgrounds have distinct visible paint',new Set(backgroundPaints).size===5);
  for(const compact of [false,true])for(const icon_style of ['classic','glass','neon']){
   const heights=[];
   for(const background of ['lanes','halo','ribbon','prism-glass','eclipse','aurora','clouds','isobars']){
    card.setConfig({...config,compact,icon_style,background});heights.push(query('.hero').getBoundingClientRect().height);
-   check('full card fade '+compact+icon_style+background,Math.abs(query('.scene-background').getBoundingClientRect().bottom-query('.header-region').getBoundingClientRect().bottom)<.1);
+   await assertCardBackground(card,check);
   }
   check('backgrounds preserve equal header height '+compact+icon_style,new Set(heights).size===1);
  }
@@ -92,11 +93,11 @@ try {
  for(const background of ['aurora','clouds','isobars']){
   for(const compact of [false,true]){
    card.setConfig({...config,background,compact});
-   check('animated background layer '+background+compact,!!query('.header-atmosphere')&&query('.header-atmosphere').getAttribute('aria-hidden')==='true');
-   check('selected atmosphere animates '+background+compact,card.shadowRoot.getAnimations().some(animation=>animation.animationName?.startsWith('weather-')));
+   check('shared animated background layer '+background+compact,query('[data-ui-card-background]')?.dataset.uiCardBackground===background);
+   check('selected atmosphere animates '+background+compact,card.shadowRoot.getAnimations().some(animation=>animation.animationName?.startsWith('ui-bg-')));
    for(const width of [260,480]){card.style.width=width+'px';check('animated header fits '+background+compact+width,query('.content').scrollWidth<=query('.content').clientWidth);}
    card.style.width='';
-   const backdrop=query('.scene-background');check('animated header fades as one layer '+background+compact,getComputedStyle(backdrop).maskImage.includes('88%')&&Math.abs(backdrop.getBoundingClientRect().bottom-query('.header-region').getBoundingClientRect().bottom)<.1);
+   await assertCardBackground(card,check);
   }
   card.setConfig({...config,background,animate_icons:false,animate_background:false});check('animation toggle stops entire header '+background,card.shadowRoot.getAnimations().length===0);
   card.setConfig({...config,background});card.hass={...hass,connected:false};check('offline stops entire header '+background,card.shadowRoot.getAnimations().length===0);
@@ -174,12 +175,12 @@ try {
  card.hass={...hass,connection:{subscribeMessage:async()=>{throw Error('Synthetic subscription failure');}}};await Promise.resolve();await Promise.resolve();
  check('subscription failure has a retry action',!!query('.retry')&&card._forecastStatus==='error');
  card.hass=hass;await Promise.resolve();check('reconnection restores forecast',query('.forecast-list li')&&card._forecastStatus==='ready');
- const editor=await card.constructor.getConfigElement();editor.setConfig(config);editor.hass=hass;document.getElementById('editor').append(editor);
+ const wrapper=await card.constructor.getConfigElement();wrapper.setConfig(config);wrapper.hass=hass;document.getElementById('editor').append(wrapper);const editor=wrapper._nativeEditor;
  const editorSchema=()=>{const flatten=items=>items.flatMap(item=>[item,...flatten(item.schema??[])]);return flatten(editor._form._schema);};
  check('visual editor offers entity and forecast choices',editorSchema().some(f=>f.name==='entity')&&editorSchema().some(f=>f.name==='forecast_type'));
  check('visual editor offers compact layout and both metric selectors',['compact','metric_primary','metric_secondary'].every(name=>editorSchema().some(f=>f.name===name)));
  check('editor offers both approved icon styles',editorSchema().find(f=>f.name==='icon_style')?.selector.select.options.map(item=>item.value).join(',')==='classic,glass,neon');
- check('visual editor offers backgrounds and animation toggle',editorSchema().find(f=>f.name==='background')?.selector.select.options.length===8&&editorSchema().some(f=>f.name==='animate_icons'));
+ check('visual editor offers shared backgrounds and icon animation toggle',wrapper.shadowRoot.querySelector('[data-bg=variant]').options.length>=10&&editorSchema().some(f=>f.name==='animate_icons'));
  editor.setConfig({...config,compact:true});
  check('compact editor offers visible tabs and hides the redundant default for a single forecast',editorSchema().find(f=>f.name==='tabs')?.selector.select.multiple&&!editorSchema().some(f=>f.name==='forecast_type')&&editorSchema().some(f=>f.name==='forecast_hourly_fields'));
  check('editor offers wide field configuration',editorSchema().some(item=>item.name==='metric_status')&&editorSchema().some(item=>item.name==='metric_status_icon'));
@@ -238,11 +239,13 @@ try {
  // Live nodes and subscriptions survive telemetry and cosmetic configuration edits.
  card.setConfig({...config,tabs:['hourly','daily'],background:'clouds',icon_style:'glass'});await Promise.resolve();
  card.style.width='260px';
+ const liveBackground=query('[data-ui-card-background]'),liveBackgroundStyles=query('style[data-ui-background-styles]');
  const liveContent=query('.content'),liveIcon=query('.art svg'),liveList=query('.forecast-list'),liveRow=query('.forecast-list li');
- liveList.scrollLeft=30;const offset=liveList.scrollLeft,generation=card._generation,forecast=card._forecast,liveAnimation=card.shadowRoot.getAnimations().find(animation=>animation.effect.target.closest('.art'));
+ liveList.scrollLeft=30;check('forecast scroll regression starts with overflow',liveList.scrollLeft>0);const offset=liveList.scrollLeft,generation=card._generation,forecast=card._forecast,liveAnimation=card.shadowRoot.getAnimations().find(animation=>animation.effect.target.closest('.art'));
  card.hass={...hass,states:{...hass.states,[config.entity]:{...hass.states[config.entity],attributes:{...hass.states[config.entity].attributes,temperature:23}}}};
  check('telemetry retains content icon list and forecast row nodes',query('.content')===liveContent&&query('.art svg')===liveIcon&&query('.forecast-list')===liveList&&query('.forecast-list li')===liveRow);
  check('telemetry preserves forecast scroll position',query('.forecast-list').scrollLeft===offset);
+ check('telemetry retains the wrapper background layer and styles',query('[data-ui-card-background]')===liveBackground&&query('style[data-ui-background-styles]')===liveBackgroundStyles);
  check('telemetry retains the running icon animation',!!liveAnimation&&card.shadowRoot.getAnimations().includes(liveAnimation));
  query('[data-ui-tab=daily]').click();await Promise.resolve();
  const dailyGeneration=card._generation,dailyForecast=card._forecast;
@@ -270,7 +273,7 @@ try {
  card.setConfig({...config,title:'<img src=x onerror=alert(1)>'});check('configured title is escaped',!query('img')&&query('ha-card').getAttribute('aria-label').includes('<img'));card.setConfig(config);
  await import('/cards/weather-card/dist/eleven-weather-card-test.js');const test=document.createElement('eleven-weather-card-test');test.setConfig({...config,type:'custom:eleven-weather-card-test'});test.hass=hass;document.body.append(test);await Promise.resolve();
  check('standalone test card coexists with normal card',test.constructor!==card.constructor&&!!test.shadowRoot.querySelector('.forecast-list'));
- const testEditor=await test.constructor.getConfigElement();check('test editor has a distinct name',testEditor.tagName==='ELEVEN-WEATHER-EDITOR-TEST');test.remove();
+ const testEditor=await test.constructor.getConfigElement();check('test editor has a distinct name',testEditor._nativeEditor.tagName==='ELEVEN-WEATHER-EDITOR-TEST');test.remove();
  card.hass={...hass,language:'en',locale:{language:'en'},themes:{darkMode:false}};check('English and light theme render',query('.weather-status .ui-metric-value').textContent==='Sunny'&&query('.content').dataset.dark==='false');card.hass=hass;
  return checks;
  })()`);
@@ -297,17 +300,22 @@ try {
     compare('.header-background','.scene-background',['overflow','position']);assert(getComputedStyle(ws('.scene-background')).maskImage.includes('88%'),'weather fade scales with header height');
     compare('.battery-value .primary-value','.temperature .primary-value',fonts);
     compare('.charging-status','.weather-status',['padding','gap','borderRadius','backgroundColor']);
-    compare('.charging-status .ui-metric-icon','.weather-status .ui-metric-icon',['width','height','borderRadius']);
-    compare('.charging-status .ui-metric-value','.weather-status .ui-metric-value',fonts);
-    compare('.charging-readings>[data-ui-metric]','[data-weather-field]',['padding','borderRadius','backgroundColor']);
-    compare('.charging-readings .ui-metric-title','[data-weather-field] .ui-metric-title',fonts);
+    for(const key of ['width','height']){assert(getComputedStyle(ws('.weather-status .ui-metric-icon'))[key]==='20px','weather keeps its compact status icon');assert(getComputedStyle(es('.charging-status .ui-metric-icon'))[key]===(i?'20px':'26px'),'EVCC status icon follows card density');}
+    assert(getComputedStyle(ws('.weather-status .ui-metric-value')).fontSize==='18px'&&getComputedStyle(ws('.weather-status .ui-metric-value')).fontWeight==='600','weather condition uses the shared text-value typography');
+    assert(getComputedStyle(es('.charging-status .ui-metric-value')).fontSize===(i?'20px':'24px'),'EVCC status uses the shared numeric-value typography');
+    compare('.charging-readings>[data-ui-metric]','[data-weather-field]',['borderRadius','backgroundColor']);
+    assert(getComputedStyle(ws('[data-weather-field]')).padding==='12px'&&getComputedStyle(es('.charging-readings>[data-ui-metric]')).padding===(i?'8px':'12px'),'metric padding respects each card density');
+    assert(getComputedStyle(ws('[data-weather-field] .ui-metric-title')).fontSize==='12px','weather metric labels stay readable');
+    assert(getComputedStyle(es('.charging-readings .ui-metric-title')).fontSize==='11px','EVCC metric labels retain shared sizing');
     compare('.charging-readings .ui-metric-value','[data-weather-field] .ui-metric-value',fonts);
     compare('.charging-readings','.weather-metrics',['columnGap']);
     const eh=evcc.getBoundingClientRect(),wh=weather.getBoundingClientRect();
-    for(const [a,b] of [['.battery-value','.temperature']])assert(Math.abs((er(a).top-eh.top)-(wr(b).top-wh.top))<.1,'header top differs '+width+' compact='+!!i);
+    for(const [box,host] of [[er('.battery-value'),eh],[wr('.temperature'),wh]])assert(box.top>=host.top&&box.left>=host.left&&box.right<=host.right,'primary reading fits its own header '+width+' compact='+!!i);
     assert(Math.abs((er('.charging-readings').top-er('.charging-status').bottom)-(wr('.weather-metrics').top-wr('.weather-status').bottom))<.1,'status-to-metrics gap differs');
-    const eGap=er('.charging-readings .ui-metric-value').top-Math.max(...[...e.querySelectorAll('.charging-readings .ui-metric-title')].map(n=>n.getBoundingClientRect().bottom)),wGap=wr('[data-weather-field] .ui-metric-value').top-Math.max(...[...w.querySelectorAll('.weather-metrics .ui-metric-title')].map(n=>n.getBoundingClientRect().bottom));
-    assert(Math.abs(eGap-wGap)<.1,'label-to-value gap differs');
+    for(const metric of [...e.querySelectorAll('.charging-readings>[data-ui-metric]'),...w.querySelectorAll('[data-weather-field]')]){
+     const title=metric.querySelector('.ui-metric-title'),value=metric.querySelector('.ui-metric-value');
+     assert(value.getBoundingClientRect().top>=title.getBoundingClientRect().bottom-1,'metric value overlaps its own label '+JSON.stringify({width,compact:!!i,label:title.textContent,title:title.getBoundingClientRect().toJSON(),value:value.getBoundingClientRect().toJSON()}));
+    }
     assert(ws('.content').scrollWidth<=ws('.content').clientWidth,'weather card overflows');
     if(!i){compare('[role=tab]','[role=tab]',fonts.concat(['padding','minHeight']));compare('.evcc-panel','.forecast-panel',['paddingTop']);}
     reports.push({width,compact:!!i,darkMode});

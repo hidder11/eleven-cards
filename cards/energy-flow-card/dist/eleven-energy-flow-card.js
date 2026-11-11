@@ -1703,13 +1703,17 @@ const weatherCalmStyles=`
 function patchWeatherDOM(root,markup){
  const template=document.createElement('template');template.innerHTML=markup;
  const key=node=>node.nodeType===1?node.localName+'|'+(node.getAttribute('data-weather-key')??node.getAttribute('data-ui-tab')??node.getAttribute('data-ui-tab-panel')??node.getAttribute('data-forecast-field')??node.getAttribute('class')?.split(' ')[0]??''):String(node.nodeType);
+ // The background wrapper owns these siblings. Moving the card's live content
+ // around its injected layer resets descendant scroll offsets in Chromium.
+ const managed=node=>node?.nodeType===1&&node.matches('[data-ui-card-background],style[data-ui-background-styles]');
+ const nextOwned=node=>{while(managed(node))node=node.nextSibling;return node;};
  const patch=(parent,incoming)=>{
-  let cursor=parent.firstChild;
+  let cursor=nextOwned(parent.firstChild);
   for(const next of [...incoming.childNodes]){
    let current=cursor;
    if(!current||key(current)!==key(next)){
-    current=cursor?.nextSibling;
-    while(current&&key(current)!==key(next))current=current.nextSibling;
+    current=nextOwned(cursor?.nextSibling);
+    while(current&&key(current)!==key(next))current=nextOwned(current.nextSibling);
     if(current)parent.insertBefore(current,cursor);else{current=next.cloneNode(true);parent.insertBefore(current,cursor);}
    }
    if(!current.isEqualNode(next)){
@@ -1720,9 +1724,9 @@ function patchWeatherDOM(root,markup){
      patch(current,next);
     }
    }
-   cursor=current.nextSibling;
+   cursor=nextOwned(current.nextSibling);
   }
-  while(cursor){const next=cursor.nextSibling;parent.removeChild(cursor);cursor=next;}
+  while(cursor){const next=nextOwned(cursor.nextSibling);parent.removeChild(cursor);cursor=next;}
  };
  patch(root,template.content);
 }
@@ -2122,7 +2126,7 @@ const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 .energy-device-sort select:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
 @container(max-width:360px){.energy-home-summary dd{font-size:16px}}
 
-:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--detail-bar-radius:8px;--detail-home:var(--primary-color,#03a9f4);--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
+:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--ui-bar-height:var(--detail-bar-height);--detail-bar-radius:8px;--detail-home:var(--primary-color,#03a9f4);--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
 :is([data-energy-popup],[data-energy-panel]) .ui-popup-heading>strong{font-size:14px;font-weight:600}
 :is([data-energy-popup],[data-energy-panel]) button{border-radius:8px}
 .energy-grid-metrics>.energy-grid-net{grid-column:1/-1}
@@ -2428,7 +2432,15 @@ class EnergyFlowCard extends HTMLElement{
   if(!previous||changedView||changedGroup||previous.hours_to_show!==next.hours_to_show)this._reloadPeriod();else this.render();
   this._sync();
  }
- set hass(hass){const changed=this._hass?.connection!==hass?.connection||this._offline()!==(hass?.connected===false||hass?.connection?.connected===false);this._hass=hass;if(changed)this._reset();this.render();this._sync();}
+ set hass(hass){const previous=this._hass,offline=hass?.connected===false||hass?.connection?.connected===false,changed=previous?.connection!==hass?.connection||this._lastOffline!==offline;this._lastOffline=offline;this._hass=hass;if(changed)this._reset();const renderChanged=this._hassRenderChanged(hass);if(changed||renderChanged)this.render();this._sync();}
+ _hassRenderChanged(hass){
+  if(!this._entityContext||this._entityContext.config!==this._config||this._entityContext.prefs!==this._prefs){
+   const ids=new Set(),visit=value=>{if(typeof value==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(value))ids.add(value);else if(value&&typeof value==='object')for(const item of Object.values(value))visit(item);};
+   visit(this._config);visit(this._prefs);this._entityContext={config:this._config,prefs:this._prefs,ids};
+  }
+  const signature=JSON.stringify([hass.config?.time_zone,hass.config?.currency,hass.locale,hass.language,hass.themes?.darkMode,[...this._entityContext.ids].map(id=>hass.states?.[id])]),changed=signature!==this._renderContextSignature;
+  this._renderContextSignature=signature;return changed;
+ }
  get hass(){return this._hass;}
  cardBackgroundStatusColor(){return energyFlowStatusColor(this._offline()||this._error?null:this._displayData,!!this._hass?.themes?.darkMode);}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}

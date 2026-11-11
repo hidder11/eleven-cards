@@ -49,3 +49,27 @@ test('Waste still renders daysTo sources and read-only calendar events in the st
  assert.match(card.shadowRoot.innerHTML,/Next collection/);
  card.disconnectedCallback();
 });
+
+test('Waste exits a hung calendar read and supports an explicit retry',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const {create}=loadCards(),card=create('eleven-waste-card');let calls=0,late;
+ card.setConfig({entities:['calendar.waste']});card.isConnected=true;
+ card.hass={connection:{},states:{'calendar.waste':{state:'off',attributes:{}}},callApi:()=>{calls++;return calls===1?new Promise(resolve=>late=resolve):Promise.resolve([]);}};
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(card._fetching,true);
+ t.mock.timers.tick(15000);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(card._fetching,false);assert.equal(card._cache['calendar.waste'].error,true);
+ await card._refresh(true);assert.equal(calls,2);assert.equal(card._cache['calendar.waste'].error,undefined);
+ late([{summary:'Stale result'}]);await new Promise(resolve=>setImmediate(resolve));assert.equal(card._cache['calendar.waste'].events.length,0);
+ card.disconnectedCallback();
+});
+
+test('Waste discards responses from an old HA connection',async()=>{
+ const {create}=loadCards(),card=create('eleven-waste-card');let stale;
+ card.setConfig({entities:['calendar.waste']});card.isConnected=true;
+ const state={state:'off',attributes:{}};
+ card.hass={connection:{},states:{'calendar.waste':state},callApi:()=>new Promise(resolve=>stale=resolve)};
+ await new Promise(resolve=>setImmediate(resolve));
+ card.hass={connection:{},states:{'calendar.waste':state},callApi:async()=>[]};
+ await new Promise(resolve=>setImmediate(resolve));stale([{summary:'Old connection'}]);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(card._cache['calendar.waste'].events.length,0);assert.equal(card._fetching,false);card.disconnectedCallback();
+});

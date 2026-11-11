@@ -39,6 +39,18 @@ test('background history reloads never overlap and recover from errors without d
  t.mock.timers.tick(60000);assert.equal(calls,1);release([]);await first;
  card._hass.callApi=async()=>{calls++;throw Error('Fixture failure');};await card._loadHistory(true);
  assert.equal(card._historyError,true);assert.equal(card._activity.events[0].id,'observed');
- card._hass.callApi=async()=>{calls++;return [];};t.mock.timers.tick(30000);await Promise.resolve();await Promise.resolve();
+ card._hass.callApi=async()=>{calls++;return [];};t.mock.timers.tick(30000);await new Promise(resolve=>setImmediate(resolve));
  assert.equal(calls,3);assert.equal(card._historyError,false);assert.equal(card._activity.events[0].id,'observed');
+});
+
+test('hung activity history times out and the next scheduled refresh can recover',async t=>{
+ const card=fixture(t);let calls=0;
+ card._activity=new CameraActivity();card._detections=new Map();card._renderActivity=()=>{};card._render=()=>card._syncHistoryRefresh();
+ card._hass.callApi=()=>{calls++;return calls===1?new Promise(()=>{}):Promise.resolve([]);};
+ const pending=card._loadHistory(true);await new Promise(resolve=>setImmediate(resolve));
+ t.mock.timers.tick(15000);await pending;
+ assert.equal(card._historyLoading,false);assert.equal(card._historyError,true);
+ t.mock.timers.tick(15000);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls,2);assert.equal(card._historyLoading,false);assert.equal(card._historyError,false);
+ card._attached=false;card._syncHistoryRefresh();
 });

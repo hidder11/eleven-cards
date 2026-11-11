@@ -1,6 +1,7 @@
 ﻿async function(){
  const wait=async test=>{for(let i=0;i<100;i++){if(test())return;await new Promise(resolve=>setTimeout(resolve,10));}throw Error('Timed out waiting for energy data');};
  await wait(()=>energyFlowConcepts.every(c=>c._prefs&&!c._loading));
+ const {assertCardBackground}=await import('/tests/card-background-browser-checks.js');
  let count=0;const check=(ok,message)=>{if(!ok)throw Error(message);count++;},cards=energyFlowConcepts;
  check(!document.querySelector('#consumer'),'no custom entity controls');
  for(const light of [false,true]){
@@ -15,29 +16,20 @@
    if(card._view==='history'){
     const mode=r.querySelector('[data-view-button]').getBoundingClientRect(),period=r.querySelector('[data-period=menu]').getBoundingClientRect();
     const heading=r.querySelector('.energy-heading').getBoundingClientRect(),toolbar=r.querySelector('.toolbar').getBoundingClientRect();
-    check(Math.abs(toolbar.top-heading.top)<1&&toolbar.left>=heading.right,'historical controls stay beside primary value');
-    if(width<=480){
-     check(period.top>=mode.bottom&&Math.abs(mode.left-period.left)<1,'narrow controls stack beside the value');
-     check([...r.querySelectorAll('.chart-controls>[data-period]')].every(button=>getComputedStyle(button).display==='none'),'narrow header omits navigation');
-     check(getComputedStyle(r.querySelector('.period-menu-navigation')).display==='flex','narrow popup contains navigation');
-    }else{
-     check(Math.abs(mode.top-period.top)<1&&mode.right<=period.left+1,'wide controls stay alongside');
-     for(const button of r.querySelectorAll('.chart-controls>[data-period]'))check(Math.abs(button.getBoundingClientRect().top-mode.top)<1,'wide navigation stays on one row');
-     check(getComputedStyle(r.querySelector('.period-menu-navigation')).display==='none','wide popup omits duplicate navigation');
-    }
+    check((toolbar.top>=heading.bottom||(Math.abs(toolbar.top-heading.top)<3&&toolbar.left>=heading.right))&&(width>360||toolbar.top>=heading.bottom),'historical controls wrap without overlapping the primary value');
+    check(Math.abs(mode.top-period.top)<1&&period.right<=mode.left+1,'mode and period stay alongside');
+    for(const button of r.querySelectorAll('.chart-controls>[data-period]'))check(getComputedStyle(button).display!=='none'&&Math.abs(button.getBoundingClientRect().top-mode.top)<1,'navigation stays visible on one row');
+    check(getComputedStyle(r.querySelector('.period-menu-navigation')).display==='none','popup omits duplicate navigation');
    }
    check(!r.querySelector('[data-view-button][role=tab]'),'buttons have no tab semantics');
    const rect=s=>r.querySelector(s).getBoundingClientRect();
    check(r.querySelectorAll('.flow-route').length===3,'three distinct connections');
-   for(const node of r.querySelectorAll('.circle-node')){check(getComputedStyle(node).borderRadius==='8px','nodes share metric rounding');check(getComputedStyle(node).backgroundImage.includes('radial-gradient'),'nodes share metric tint');}
+   for(const node of r.querySelectorAll('.circle-node')){const style=getComputedStyle(node),probe=document.createElement('span');probe.style.cssText='border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));background:var(--eleven-material-control-background,var(--secondary-background-color,transparent))';r.append(probe);const control=getComputedStyle(probe);check(style.borderRadius===control.borderRadius,'nodes share themed control rounding');check(style.backgroundColor===control.backgroundColor&&style.backgroundColor!=='rgba(0, 0, 0, 0)','nodes share themed control paint');probe.remove();}
    check(r.querySelectorAll('.flow-reading').length===3,'three uniform route values');
    check(r.querySelector('[data-metric=solar] [data-energy-icon=solar]')!=null,'solar panel icon');
    check(r.querySelector('[data-metric=import] [data-energy-icon=import]')!=null,'import direction icon');
    check(r.querySelector('[data-metric=export] [data-energy-icon=export]')!=null,'export direction icon');
-   const backdrop=r.querySelector('.scene-background'),header=r.querySelector('.header-region');
-   check(getComputedStyle(backdrop).maskImage.includes('88%')&&!getComputedStyle(backdrop).maskImage.includes('200px'),'relative shared fade');
-   check(Math.abs(backdrop.getBoundingClientRect().height-header.getBoundingClientRect().height)<1,'background follows content height');
-   check(backdrop.getBoundingClientRect().bottom<=r.querySelector('.flow-secondary').getBoundingClientRect().top+1,'fade ends before lower content');
+   await assertCardBackground(card,(name,ok)=>check(ok,name));
   }
  }
  for(const width of [260,360,480,640])for(const compact of [false,true]){
@@ -127,9 +119,9 @@
  check(peer._periodMode==='year','different sync groups stay independent');
  peer.remove();live.remove();probe.setConfig(base);
  const editor=await probe.constructor.getConfigElement();editor.setConfig(probe._config);editor.hass=hass;document.body.append(editor);
- const editorForm=editor.shadowRoot.querySelector('ha-form');
+ const editorForm=editor._nativeEditor.shadowRoot.querySelector('ha-form');
  check(editorForm.schema.some(group=>group.name==='power'),'visual editor includes power overrides');
- editor.setConfig({...probe._config,title:'New title'});check(editor.shadowRoot.querySelector('ha-form')===editorForm,'editor retains form on config updates');
+ editor.setConfig({...probe._config,title:'New title'});check(editor._nativeEditor.shadowRoot.querySelector('ha-form')===editorForm,'editor retains form on config updates');
  let changed;editor.addEventListener('config-changed',event=>changed=event.detail.config);
  editorForm.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{...editorForm.data,title:'Kitchen'}}}));
  check(changed?.title==='Kitchen','editor emits config changes');editor.remove();

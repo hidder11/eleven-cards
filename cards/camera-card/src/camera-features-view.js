@@ -1,4 +1,5 @@
 import {cameraSecurityStatusColor} from './security-status.js';
+import {requestWithTimeout} from '../../../shared/request.js';
 import {cameraShowAlarm} from './camera-features.js';
 import {uiEscape,uiButton} from '../../../shared/ui-button.js';
 import {cameraDutch,cameraPictureConfig,visibleCameras,cameraDetections} from './camera-utils.js';
@@ -303,7 +304,8 @@ export const cameraFeaturesView=Base=>class extends Base{
   try{
    if(typeof this._hass.callApi!=='function')throw Error('History API unavailable');
    const query=new URLSearchParams({filter_entity_id:ids.join(','),end_time:new Date(end).toISOString(),minimal_response:'',no_attributes:'',skip_initial_state:''});
-   const response=await this._hass.callApi('GET','history/period/'+encodeURIComponent(new Date(start).toISOString())+'?'+query);
+   const hass=this._hass;
+   const response=await requestWithTimeout(()=>hass.callApi('GET','history/period/'+encodeURIComponent(new Date(start).toISOString())+'?'+query));
    if(version!==this._historyVersion)return;this._historyError=false;this._historyHasLoaded=true;const events=cameraHistoryEvents(response,config,start,end);this._activity.merge(events);this._activity.events=this._activity.events.filter(event=>event.time>=start);
    for(const event of events)if(['motion','person'].includes(event.kind))this._detections.set(event.entity,Math.max(this._detections.get(event.entity)??0,event.time));
   }catch{if(version===this._historyVersion)this._historyError=true;}
