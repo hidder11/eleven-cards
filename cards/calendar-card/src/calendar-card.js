@@ -7,7 +7,7 @@ import {cardHeaderIcon} from '../../../shared/card-header.js';
 import {periodControls,periodControlsStyles,bindPeriodControls,disconnectPeriodControls} from '../../../shared/period-controls.js';
 import {uiBalancedTabsStyles} from '../../../shared/ui-tabs.js';
 import {calendarSelectedRange,calendarPeriodAdapter} from './calendar-periods.js';
-import {retryDelay} from '../../../shared/request.js';
+import {retryDelay,stopSubscription} from '../../../shared/request.js';
 import {CALENDAR_COLORS,calendarRgb,escapeCalendarHtml,calendarColor,normalizeCalendarConfig,localCalendarDayKey,nextCalendarDayKey,calendarDaysWithEvents,forecastByCalendarDay,calendarEventKey,nextCalendarEvent} from './calendar-utils.js';
 import {calendarCardStyles} from './calendar-styles.js';
 
@@ -117,7 +117,7 @@ export class CalendarCard extends HTMLElement{
  _zone(){return this._hass?.config?.time_zone||'UTC';}
  _queueRender(){if(this._renderQueued)return;this._renderQueued=true;queueMicrotask(()=>{this._renderQueued=false;if(this._connected)this._render();});}
  _range(){return calendarSelectedRange(this);}
- _stopCalendars(){this._calendarGeneration++;clearTimeout(this._calendarRetryTimer);this._calendarRetryTimer=null;for(const unsubscribe of this._calendarUnsubs)try{unsubscribe();}catch{}this._calendarUnsubs=[];}
+ _stopCalendars(){this._calendarGeneration++;clearTimeout(this._calendarRetryTimer);this._calendarRetryTimer=null;for(const unsubscribe of this._calendarUnsubs)stopSubscription(unsubscribe);this._calendarUnsubs=[];}
  _retryCalendars(){if(this._calendarRetryTimer||!this._connected)return;const generation=this._calendarGeneration;this._calendarRetryFailures=(this._calendarRetryFailures??0)+1;this._calendarRetryTimer=setTimeout(()=>{this._calendarRetryTimer=null;if(this._connected&&generation===this._calendarGeneration&&Object.values(this._statuses).includes('error')){this._startCalendars();this._queueRender();}},retryDelay(this._calendarRetryFailures,30000));this._calendarRetryTimer.unref?.();}
  _startCalendars(){
   this._stopCalendars();if(!this._connected||!this._hass||!this._config||this._emptyConfig)return;
@@ -133,11 +133,11 @@ export class CalendarCard extends HTMLElement{
      const events=payload?.event?.events??payload?.events;
      this._statuses[entity]=Array.isArray(events)?'ready':'error';if(Array.isArray(events)){this._events[entity]=events;this._eventRevision=(this._eventRevision??0)+1;if(Object.values(this._statuses).every(status=>status==='ready')){this._calendarRetryFailures=0;clearTimeout(this._calendarRetryTimer);this._calendarRetryTimer=null;}}else this._retryCalendars();this._queueRender();
     },{type:'calendar/event/subscribe',entity_id:entity,start:new Date(range.start).toISOString(),end:new Date(range.end).toISOString()});
-    Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._calendarGeneration)unsubscribe();else this._calendarUnsubs.push(unsubscribe);},()=>{if(this._connected&&generation===this._calendarGeneration){this._statuses[entity]='error';this._retryCalendars();this._queueRender();}});
+    Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._calendarGeneration)stopSubscription(unsubscribe);else this._calendarUnsubs.push(unsubscribe);},()=>{if(this._connected&&generation===this._calendarGeneration){this._statuses[entity]='error';this._retryCalendars();this._queueRender();}});
    }catch{this._statuses[entity]='error';this._retryCalendars();}
   }
  }
- _stopWeather(){this._weatherGeneration++;clearTimeout(this._weatherRetryTimer);this._weatherRetryTimer=null;this._weatherUnsub?.();this._weatherUnsub=null;}
+ _stopWeather(){this._weatherGeneration++;clearTimeout(this._weatherRetryTimer);this._weatherRetryTimer=null;stopSubscription(this._weatherUnsub);this._weatherUnsub=null;}
  _retryWeather(){if(this._weatherRetryTimer||!this._connected)return;const generation=this._weatherGeneration;this._weatherRetryFailures=(this._weatherRetryFailures??0)+1;this._weatherRetryTimer=setTimeout(()=>{this._weatherRetryTimer=null;if(this._connected&&generation===this._weatherGeneration&&this._weatherError)this._startWeather();},retryDelay(this._weatherRetryFailures,30000));this._weatherRetryTimer.unref?.();}
  _startWeather(){
   this._stopWeather();if(this._forecastEntity!==this._config?.weather_entity)this._forecast=null;this._forecastEntity=this._config?.weather_entity;this._weatherError=false;
@@ -153,7 +153,7 @@ export class CalendarCard extends HTMLElement{
     else{this._weatherError=true;this._retryWeather();}
     this._queueRender();
    },{type:'weather/subscribe_forecast',forecast_type:'daily',entity_id:entity});
-   Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._weatherGeneration)unsubscribe();else this._weatherUnsub=unsubscribe;},()=>{if(this._connected&&generation===this._weatherGeneration){this._weatherError=true;this._retryWeather();this._queueRender();}});
+   Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._weatherGeneration)stopSubscription(unsubscribe);else this._weatherUnsub=unsubscribe;},()=>{if(this._connected&&generation===this._weatherGeneration){this._weatherError=true;this._retryWeather();this._queueRender();}});
   }catch{this._weatherError=true;this._retryWeather();}
  }
  _scheduleMidnight(){

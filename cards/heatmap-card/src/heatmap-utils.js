@@ -258,8 +258,9 @@ export function colorScale(rows, config) {
     }
     return {min,max,color,gradient:`linear-gradient(90deg,${positions.join(',')})`};
   }
-  const values=rows.flatMap(row=>row.cells).map(cell=>cell.value).filter(value=>value!=null);
-  let min=config.scale_min ?? (values.length?Math.min(...values):0), max=config.scale_max ?? (values.length?Math.max(...values):1);
+  let minimum=Infinity,maximum=-Infinity;
+  for(const row of rows)for(const cell of row.cells)if(Number.isFinite(cell.value)){minimum=Math.min(minimum,cell.value);maximum=Math.max(maximum,cell.value);}
+  let min=config.scale_min ?? (minimum===Infinity?0:minimum), max=config.scale_max ?? (maximum===-Infinity?1:maximum);
   if(config.scale_min!=null && max<min)max=min;
   if(config.scale_max!=null && min>max)min=max;
   return {min,max,gradient:`linear-gradient(90deg,rgb(${config.low_color.join(',')}),rgb(${config.high_color.join(',')}))`,color(value){
@@ -271,10 +272,12 @@ export function colorScale(rows, config) {
 
 // Summaries describe the displayed cells, like the Bar Chart information popup.
 export function summarizeHeatmap(rows, mode) {
-  const cells=rows.flatMap(row=>row.cells),known=cells.filter(cell=>Number.isFinite(cell.value));
-  const values=known.map(cell=>cell.value),sum=values.reduce((total,value)=>total+value,0);
-  return {minimum:values.length?Math.min(...values):null,maximum:values.length?Math.max(...values):null,
-    average:values.length?sum/values.length:null,count:values.length,
-    missing:cells.some(cell=>cell.partial || (cell.intervals.length && cell.value==null)),
-    ...(mode==='consumption'?{total:values.length?sum:null}:{})};
+  let minimum=Infinity,maximum=-Infinity,sum=0,count=0,missing=false;
+  for(const row of rows)for(const cell of row.cells){
+    if(Number.isFinite(cell.value)){minimum=Math.min(minimum,cell.value);maximum=Math.max(maximum,cell.value);sum+=cell.value;count++;}
+    missing ||= !!(cell.partial || (cell.intervals.length && cell.value==null));
+  }
+  return {minimum:count?minimum:null,maximum:count?maximum:null,
+    average:count?sum/count:null,count,missing,
+    ...(mode==='consumption'?{total:count?sum:null}:{})};
 }

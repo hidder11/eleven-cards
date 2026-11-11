@@ -71,6 +71,25 @@ function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
 
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Calendar periods use the Home Assistant timezone, including DST boundaries.
 const periodZoneFormats=new Map();
 function periodLocalParts(t,zone){
@@ -1460,8 +1479,8 @@ function calendarPeriodAdapter(host){
 
 function calendarCardStyles(){return uiDetailSurfaceStyles()+uiSurfaceStyles('.navigation,.info-button')+`
 :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
-ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
-.content{display:flex;flex-direction:column;height:100%;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box}
+ha-card{display:flex;flex-direction:column;height:100%;min-width:0;min-height:0;overflow:hidden;box-sizing:border-box;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
+.content{display:flex;flex:1;flex-direction:column;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box;overflow:hidden}
 .content>.header,.content>.legend,.content>.status{flex-shrink:0}
 .calendar-body{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
 .legend-error{display:inline-grid;place-items:center;width:13px;height:13px;border:1px solid currentColor;border-radius:50%;color:var(--error-color,#db4437);font-size:10px;line-height:1;flex:none}
@@ -1530,8 +1549,7 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 @container(max-width:420px){.content{padding:var(--eleven-card-padding,16px)}.header{align-items:flex-start}.header-actions{gap:5px}.navigation .range{font-size:10px;padding:0 6px}.navigation [data-nav=now]{padding:0 6px}.list-event{grid-template-columns:50px minmax(0,1fr);gap:8px}.weather{font-size:10px}}
 .header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}.legend-item{min-height:44px;min-width:44px}
 /* Calendar-local calm agenda anatomy; paint remains theme-owned. */
-:host,ha-card,.content{height:auto;min-height:100%}
-.calendar-body{flex:none;overflow:visible;min-width:0}
+.calendar-body{min-width:0}
 .header,.compact .header{gap:12px;margin-bottom:12px;align-items:center;flex-wrap:nowrap}
 .header h2{font-size:16px;font-weight:600;line-height:24px;min-width:0;overflow-wrap:anywhere}
 .header svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -1761,7 +1779,7 @@ class CalendarCard extends HTMLElement{
  _zone(){return this._hass?.config?.time_zone||'UTC';}
  _queueRender(){if(this._renderQueued)return;this._renderQueued=true;queueMicrotask(()=>{this._renderQueued=false;if(this._connected)this._render();});}
  _range(){return calendarSelectedRange(this);}
- _stopCalendars(){this._calendarGeneration++;clearTimeout(this._calendarRetryTimer);this._calendarRetryTimer=null;for(const unsubscribe of this._calendarUnsubs)try{unsubscribe();}catch{}this._calendarUnsubs=[];}
+ _stopCalendars(){this._calendarGeneration++;clearTimeout(this._calendarRetryTimer);this._calendarRetryTimer=null;for(const unsubscribe of this._calendarUnsubs)stopSubscription(unsubscribe);this._calendarUnsubs=[];}
  _retryCalendars(){if(this._calendarRetryTimer||!this._connected)return;const generation=this._calendarGeneration;this._calendarRetryFailures=(this._calendarRetryFailures??0)+1;this._calendarRetryTimer=setTimeout(()=>{this._calendarRetryTimer=null;if(this._connected&&generation===this._calendarGeneration&&Object.values(this._statuses).includes('error')){this._startCalendars();this._queueRender();}},retryDelay(this._calendarRetryFailures,30000));this._calendarRetryTimer.unref?.();}
  _startCalendars(){
   this._stopCalendars();if(!this._connected||!this._hass||!this._config||this._emptyConfig)return;
@@ -1777,11 +1795,11 @@ class CalendarCard extends HTMLElement{
      const events=payload?.event?.events??payload?.events;
      this._statuses[entity]=Array.isArray(events)?'ready':'error';if(Array.isArray(events)){this._events[entity]=events;this._eventRevision=(this._eventRevision??0)+1;if(Object.values(this._statuses).every(status=>status==='ready')){this._calendarRetryFailures=0;clearTimeout(this._calendarRetryTimer);this._calendarRetryTimer=null;}}else this._retryCalendars();this._queueRender();
     },{type:'calendar/event/subscribe',entity_id:entity,start:new Date(range.start).toISOString(),end:new Date(range.end).toISOString()});
-    Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._calendarGeneration)unsubscribe();else this._calendarUnsubs.push(unsubscribe);},()=>{if(this._connected&&generation===this._calendarGeneration){this._statuses[entity]='error';this._retryCalendars();this._queueRender();}});
+    Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._calendarGeneration)stopSubscription(unsubscribe);else this._calendarUnsubs.push(unsubscribe);},()=>{if(this._connected&&generation===this._calendarGeneration){this._statuses[entity]='error';this._retryCalendars();this._queueRender();}});
    }catch{this._statuses[entity]='error';this._retryCalendars();}
   }
  }
- _stopWeather(){this._weatherGeneration++;clearTimeout(this._weatherRetryTimer);this._weatherRetryTimer=null;this._weatherUnsub?.();this._weatherUnsub=null;}
+ _stopWeather(){this._weatherGeneration++;clearTimeout(this._weatherRetryTimer);this._weatherRetryTimer=null;stopSubscription(this._weatherUnsub);this._weatherUnsub=null;}
  _retryWeather(){if(this._weatherRetryTimer||!this._connected)return;const generation=this._weatherGeneration;this._weatherRetryFailures=(this._weatherRetryFailures??0)+1;this._weatherRetryTimer=setTimeout(()=>{this._weatherRetryTimer=null;if(this._connected&&generation===this._weatherGeneration&&this._weatherError)this._startWeather();},retryDelay(this._weatherRetryFailures,30000));this._weatherRetryTimer.unref?.();}
  _startWeather(){
   this._stopWeather();if(this._forecastEntity!==this._config?.weather_entity)this._forecast=null;this._forecastEntity=this._config?.weather_entity;this._weatherError=false;
@@ -1797,7 +1815,7 @@ class CalendarCard extends HTMLElement{
     else{this._weatherError=true;this._retryWeather();}
     this._queueRender();
    },{type:'weather/subscribe_forecast',forecast_type:'daily',entity_id:entity});
-   Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._weatherGeneration)unsubscribe();else this._weatherUnsub=unsubscribe;},()=>{if(this._connected&&generation===this._weatherGeneration){this._weatherError=true;this._retryWeather();this._queueRender();}});
+   Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._weatherGeneration)stopSubscription(unsubscribe);else this._weatherUnsub=unsubscribe;},()=>{if(this._connected&&generation===this._weatherGeneration){this._weatherError=true;this._retryWeather();this._queueRender();}});
   }catch{this._weatherError=true;this._retryWeather();}
  }
  _scheduleMidnight(){

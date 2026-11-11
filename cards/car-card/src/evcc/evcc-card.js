@@ -36,9 +36,10 @@ export class EvccCard extends HTMLElement {
  constructor() { super(); this.attachShadow({mode: 'open'}); this._registry = []; this._actionVersion = 0; this._solarVersion = 0; }
  setConfig(config) { this._cancelMode(); this._cancelSolar(); this._actionError = null; this._solarError = null; this._config = normalizeEvccConfig(config); this._signature = null; this._render(); }
  connectedCallback() { this._observeMotion(); this._ensureClock(); this._render(); }
- _observeMotion() { this._motionCleanup?.(); this._motionCleanup=observeCardMotion(this); }
+ _observeMotion() { this._motionCleanup?.(); this._motionCleanup=observeCardMotion(this,()=>{this._ensureClock();this._render();this._syncHistory();}); }
  _ensureClock() {
-  if (!this.isConnected || this._clockTimer) return;
+  if (!this.isConnected || this._config?.evcc_enabled===false || globalThis.document?.hidden || this.hasAttribute?.('data-motion-paused')) { clearInterval(this._clockTimer);this._clockTimer=null;return; }
+  if (this._clockTimer) return;
   this._clockTimer = setInterval(() => { this._render(); this._syncHistory(); }, 1000);
  }
  set hass(hass) {

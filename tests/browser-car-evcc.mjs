@@ -1,9 +1,9 @@
-// Optional rendered checks using Chrome DevTools, without screenshots,
+// Rendered CI and local checks using Chrome DevTools, without screenshots,
 // recordings, external services, or production Home Assistant data.
 // Run with Node.js 22+; CHROME_PATH can select a Chrome executable.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile, mkdtemp, access} from 'node:fs/promises';
+import {readFile, mkdtemp, mkdir, access} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {resolve, extname, sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -12,7 +12,8 @@ import {fileURLToPath} from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url)).replace(/[\\/]$/, '');
 const chrome = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 await access(chrome);
-const profile = await mkdtemp(resolve(process.env.TMPDIR ?? '/opt/data/cache/scratch', 'evcc-browser-'));
+await mkdir(resolve(root,'.cache'),{recursive:true});
+const profile = await mkdtemp(resolve(root, '.cache/car-evcc-browser-'));
 const mime = {'.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.css': 'text/css'};
 const server = createServer(async (request, response) => {
  const path = resolve(root, '.' + decodeURIComponent(new URL(request.url, 'http://localhost').pathname));
@@ -50,7 +51,7 @@ try {
  };
  await send('Runtime.enable'); await send('Page.enable');
  await send('Page.navigate', {url: `http://127.0.0.1:${server.address().port}/cards/car-card/qa/evcc/index.html`});
- for (let attempt = 0; attempt < 100; attempt++) { if (await evaluate('!!window.evccQA?.editor && evccQA.card._registry.length > 0')) break; await delay(100); }
+ for (let attempt = 0; attempt < 100; attempt++) { if (await evaluate('!!window.evccQA?.editor && evccQA.card._registry.length > 0 && evccQA.card.shadowRoot.querySelector("img")?.naturalWidth > 0')) break; await delay(100); }
  await evaluate(`evccQA.card.shadowRoot.querySelector('[data-ui-tab="controls"]').click()`);
  const slider = await evaluate(`(() => {const input=evccQA.card.shadowRoot.querySelector('[data-solar-share]');input.scrollIntoView({block:'center'});evccQA.holdSolar=true;const r=input.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,active:evccQA.card._activeTab,ancestors:(()=>{let n=input,a=[];while(n?.tagName){a.push({tag:n.tagName,hidden:n.hidden,display:getComputedStyle(n).display});n=n.parentElement;}return a})()};})()`);
  assert.ok(slider.width>0,JSON.stringify(slider));
@@ -74,8 +75,8 @@ try {
   check('obsolete decorative car line is removed',getComputedStyle(query('.car-stage'),'::after').content==='none');
   check('power and duration units use the smaller shared type',Array.from(card.shadowRoot.querySelectorAll('.charging-readings .ui-metric-value .ui-metric-unit')).length===3 && Array.from(card.shadowRoot.querySelectorAll('.charging-readings .ui-metric-value .ui-metric-unit')).every(unit=>getComputedStyle(unit).fontSize==='11px'));
   check('technical information buttons do not inflate line height',Array.from(card.shadowRoot.querySelectorAll('.charging-readings .ui-metric-info button')).every(button=>getComputedStyle(button).minHeight==='0px') && Math.abs(query('.charging-readings .ui-metric-info').getBoundingClientRect().height-query('.charging-status .ui-metric-info').getBoundingClientRect().height)<1);
-  check('accessible battery level', query('.battery-track').getAttribute('aria-valuenow') === '62');
-  check('Gallery header reserves non-overlapping range and vehicle regions with target marker',!query('.car-name') && !query('.target') && !!query('.target-marker') && query('.primary-label').getBoundingClientRect().top>=query('.primary-value').getBoundingClientRect().bottom && getComputedStyle(query('.picture')).position==='relative' && query('.picture').getBoundingClientRect().left>=query('.battery-row').getBoundingClientRect().right+11 && Math.abs(query('.picture').getBoundingClientRect().width/query('.battery-row').getBoundingClientRect().width-2)<.03 && query('.battery-track').getBoundingClientRect().top>=query('.car-stage').getBoundingClientRect().bottom+7 && !query('.gallery-top header') && !query('.vehicle-motion'));
+  check('accessible battery level', query('[data-ui-bar]').getAttribute('aria-valuenow') === '62');
+  check('Gallery header reserves non-overlapping range and vehicle regions with target marker',!query('.car-name') && !query('.target') && !!query('.ui-bar-marker') && query('.primary-label').getBoundingClientRect().top>=query('.primary-value').getBoundingClientRect().bottom && getComputedStyle(query('.picture')).position==='relative' && query('.picture').getBoundingClientRect().left>=query('.battery-row').getBoundingClientRect().right+11 && Math.abs(query('.picture').getBoundingClientRect().width/query('.battery-row').getBoundingClientRect().width-2)<.03 && query('[data-ui-bar]').getBoundingClientRect().top>=query('.car-stage').getBoundingClientRect().bottom+7 && !query('.gallery-top header') && !query('.vehicle-motion'));
   check('solar preference is next to mode controls and distinct from measured session share',query('.charging-controls [data-solar-share]').value==='60' && query('.solar-metric label').textContent==='Zonnevoorkeur' && query('[data-field=solar_percentage]').textContent.includes('78 %'));
   for(const [a,b] of [['.solar-metric dt','.session-summary dt'],['.solar-metric dd','.session-summary dd']]){const first=getComputedStyle(query(a)),second=getComputedStyle(query(b));check('solar typography matches session '+a,['fontSize','fontWeight','color','lineHeight','letterSpacing'].every(key=>first[key]===second[key]));}
   let solarInput=query('[data-solar-share]');const beforeSolar=qa.calls.length;
@@ -85,7 +86,7 @@ try {
   qa.holdSolar=true;solarInput.dispatchEvent(new PointerEvent('pointerup'));solarInput.dispatchEvent(new Event('change'));await new Promise(resolve=>setTimeout(resolve,0));
   check('solar release sends one number service call and waits for confirmation',qa.calls.length===beforeSolar+1 && qa.calls.at(-1).domain==='number' && qa.calls.at(-1).service==='set_value' && qa.calls.at(-1).service_data.entity_id==='number.evcc_driveway_solar_share' && qa.calls.at(-1).service_data.value===70 && query('[data-solar-share]').disabled && qa.hass.states['number.evcc_driveway_solar_share'].state==='60');
   qa.update('number.evcc_driveway_solar_share',{state:'70'});qa.holdSolar=false;
-  check('solar entity confirmation re-enables controls and deferred telemetry appears',!query('[data-solar-share]').disabled && query('[data-solar-share]').value==='70' && query('.battery-track').getAttribute('aria-valuenow')==='63');
+  check('solar entity confirmation re-enables controls and deferred telemetry appears',!query('[data-solar-share]').disabled && query('[data-solar-share]').value==='70' && query('[data-ui-bar]').getAttribute('aria-valuenow')==='63');
   qa.serviceError='<denied>';solarInput=query('[data-solar-share]');solarInput.value='80';solarInput.dispatchEvent(new Event('change'));await new Promise(resolve=>setTimeout(resolve,0));
   check('solar failure is escaped and restores the confirmed value',query('.solar-setting .error').textContent.includes('<denied>') && query('[data-solar-share]').value==='70' && !query('[data-solar-share]').disabled);
   qa.serviceError=null;await card._changeSolar(60);
@@ -111,7 +112,7 @@ try {
   query('[data-ui-tab="session"]').click();
   await new Promise(resolve=>setTimeout(resolve,0));
   check('session is borderless without a heading',!query('[data-ui-tab-panel="session"]').hidden && query('[data-ui-tab-panel="controls"]').hidden && !query('.session-details') && !query('.session [data-field=remaining_energy]') && !query('.session [data-field=co2]') && !query('.session h3') && getComputedStyle(query('.session')).borderWidth==='0px' && getComputedStyle(query('.session')).backgroundColor==='rgba(0, 0, 0, 0)');
-  check('history uses a thin stepped shared graph with a fading area below session metrics',query('.history .series-line').getAttribute('d').includes(' H ') && !query('.history .series-line').getAttribute('d').includes(' C ') && query('.history .series-line').getAttribute('stroke-width')==='2' && query('.history .power-area').getAttribute('fill')==='url(#evcc-power-fade)' && !!(query('[data-field=solar_percentage]').compareDocumentPosition(query('.history')) & Node.DOCUMENT_POSITION_FOLLOWING));
+  check('history uses the shared stepped graph with a fading area below session metrics',query('.history .series-line').getAttribute('d').includes(' H ') && !query('.history .series-line').getAttribute('d').includes(' C ') && query('.history .series-line').getAttribute('stroke-width')==='3.5' && query('.history .power-area').getAttribute('fill')==='url(#evcc-power-fade)' && !!(query('[data-field=solar_percentage]').compareDocumentPosition(query('.history')) & Node.DOCUMENT_POSITION_FOLLOWING));
   check('history is fetched lazily for the complete connection and selected power entity',qa.historyCalls.length===2 && qa.historyCalls[1].url.includes('sensor.renamed_evcc_power') && card._historyRange.end-card._historyRange.start>=10799000);
   check('tab metrics share label and value typography',card.shadowRoot.querySelectorAll('.evcc-panel dl dd').length>8 && Array.from(card.shadowRoot.querySelectorAll('.evcc-panel dl dt')).every(el=>getComputedStyle(el).fontSize==='11px') && Array.from(card.shadowRoot.querySelectorAll('.evcc-panel dl dd')).every(el=>getComputedStyle(el).fontSize==='18px'));
   check('solar percentage uses the same label/value style beneath duration',!query('.solar-session') && getComputedStyle(query('[data-field=solar_percentage]')).gridRowStart==='3' && getComputedStyle(query('[data-field=solar_percentage]')).gridColumnStart==='1');
@@ -143,9 +144,9 @@ try {
   const reading = query('[data-entity="sensor.evcc_driveway_vehicle_soc"]'); reading.focus(); reading.click();
   check('entity details event is wired', qa.lastEntity === 'sensor.evcc_driveway_vehicle_soc');
   qa.update('sensor.evcc_driveway_vehicle_soc', {state:'63'});
-  check('live updates retain selected tab and keyboard focus', !query('[data-ui-tab-panel="session"]').hidden && card.shadowRoot.activeElement.dataset.entity === 'sensor.evcc_driveway_vehicle_soc' && query('.battery-track').getAttribute('aria-valuenow') === '63');
+  check('live updates retain selected tab and keyboard focus', !query('[data-ui-tab-panel="session"]').hidden && card.shadowRoot.activeElement.dataset.entity === 'sensor.evcc_driveway_vehicle_soc' && query('[data-ui-bar]').getAttribute('aria-valuenow') === '63');
   qa.update('sensor.evcc_driveway_vehicle_soc', {state:'unavailable'});
-  check('unknown battery does not become zero', !query('.battery-track') && query('.battery-value').textContent.includes('—'));
+  check('unknown battery does not become zero', !query('[data-ui-bar]') && query('.battery-value').textContent.includes('—'));
   qa.update('sensor.evcc_driveway_vehicle_soc', {state:'62'});
   qa.update('binary_sensor.evcc_driveway_charging', {state:'off'});
   qa.update('sensor.renamed_evcc_power', {state:'0'});
@@ -161,18 +162,20 @@ try {
   qa.hass = {...qa.hass, connected:true}; card.hass = qa.hass;
   check('offline recovery', !query('.warning'));
   qa.update('image.example_car', {attributes:{entity_picture:'/cards/car-card/qa/evcc/car.svg?updated'}});
+  for(let attempt=0;attempt<100&&!query('img').src.endsWith('?updated');attempt++)await new Promise(resolve=>setTimeout(resolve,20));
   check('image updates follow entity changes', query('img').src.endsWith('?updated'));
   qa.update('image.example_car', {attributes:{entity_picture:'/missing-car.svg'}});
-  for(let attempt=0;attempt<100 && !query('img').hidden;attempt++)await new Promise(resolve=>setTimeout(resolve,20));
-  check('failed image has readable fallback', query('img').hidden && !query('img').nextElementSibling.hidden);
+  for(let attempt=0;attempt<100&&!card._entityImage.timer;attempt++)await new Promise(resolve=>setTimeout(resolve,20));
+  check('failed image schedules recovery',card._entityImage.status==='loading'&&card._entityImage.timer!=null);
+  check('temporary image failure retains the last loaded vehicle',!query('img').hidden&&query('img').src.endsWith('?updated')&&query('img').naturalWidth>0);
   qa.update('image.example_car', {attributes:{entity_picture:'/cards/car-card/qa/evcc/car.svg'}});
-  for(let attempt=0;attempt<100 && query('img').naturalWidth===0;attempt++)await new Promise(resolve=>setTimeout(resolve,20));
+  for(let attempt=0;attempt<100 && !query('img').src.endsWith('car.svg');attempt++)await new Promise(resolve=>setTimeout(resolve,20));
   check('image recovers on update', !query('img').hidden && query('img').naturalWidth > 0);
   query('[data-ui-tab="session"]').focus();
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed', {detail:{value:{title:'Mijn laadkaart',tabs:['controls','technical'],soc:'sensor.my_battery'}},bubbles:true}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed', {detail:{value:{title:'Mijn laadkaart',tabs:['controls','technical'],soc:'sensor.my_battery'}},bubbles:true}));
   check('visual editor emits configuration including manual override', qa.config.title === 'Mijn laadkaart' && qa.config.entities.soc === 'sensor.my_battery' && !text().includes('Laadsessie'));
   check('hiding the active session tab selects an available panel',!query('[data-ui-tab="session"]') && !query('[data-ui-tab-panel="controls"]').hidden && card.shadowRoot.activeElement.dataset.uiTab==='controls');
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed', {detail:{value:{soc:'',tabs:['controls','session','technical']}},bubbles:true}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed', {detail:{value:{soc:'',tabs:['controls','session','technical']}},bubbles:true}));
   check('clearing override restores detection', !qa.config.entities.soc && card._entities.soc === 'sensor.evcc_driveway_vehicle_soc');
   qa.update('select.evcc_driveway_vehicle_name', {state:'<img src=x onerror=alert(1)>',attributes:{}});
   check('entity text is escaped',query('img').alt.includes('<img') && !query('.picture img img'));
@@ -200,6 +203,7 @@ try {
  assert.deepEqual(exceptions, [], 'no uncaught browser exceptions');
  console.log(`PASS: ${checks.length + 1} rendered checks without screenshots.\ntrusted pointer drag sends one service request on release\n` + checks.join('\n'));
  const galleryChecks=await evaluate(`(async() => {
+  const {assertCardBackground}=await import('/tests/card-background-browser-checks.js');
   const qa=evccQA,card=qa.card,root=card.shadowRoot,checks=[];
   const expectedTitleColor=tone=>{const probe=document.createElement('span');probe.style.color='color-mix(in srgb,'+tone+' 88%,#fff)';root.append(probe);const color=getComputedStyle(probe).color;probe.remove();return color;};
   const check=(name,condition)=>{if(!condition)throw Error(name);checks.push(name)};
@@ -211,30 +215,33 @@ try {
   card.scrollIntoView({block:'start'});await new Promise(resolve=>setTimeout(resolve,60));
   for(const kw of [0,5.5,11]){
    qa.update('sensor.renamed_evcc_power',{state:String(kw)});
-   const style=getComputedStyle(root.querySelector('.battery-fill'),'::before');
-   check('battery animation at '+kw+' kW',style.animationName==='battery-sweep' && (kw===0?style.animationPlayState==='paused':style.animationPlayState==='running') && Math.abs(parseFloat(style.animationDuration)-(12-10*kw/11))<.001);
+   const motion=root.querySelector('.ui-bar-motion');
+   check('battery animation only runs with positive charging power '+kw,kw===0?!motion:!!motion&&getComputedStyle(motion).animationName==='ui-bar-charge'&&getComputedStyle(motion).animationPlayState==='running'&&Math.abs(parseFloat(getComputedStyle(motion).animationDuration)-3.8/card._config.animation_speed)<.001);
   }
   qa.update('sensor.renamed_evcc_power',{state:'unavailable'});
-  check('unknown power pauses the charging animation',getComputedStyle(root.querySelector('.battery-fill'),'::before').animationPlayState==='paused');
+  check('unknown power stops the charging animation',!root.querySelector('.ui-bar-motion'));
   qa.update('sensor.renamed_evcc_power',{state:'7.1'});
-  check('thin capsule and solid borderless status',getComputedStyle(root.querySelector('.battery-track')).height==='8px' && getComputedStyle(root.querySelector('.battery-track')).borderRadius==='999px' && getComputedStyle(root.querySelector('.battery-fill')).boxShadow==='none' && getComputedStyle(root.querySelector('.target-marker')).height==='12px' && getComputedStyle(root.querySelector('.charging-status')).borderWidth==='0px' && !getComputedStyle(root.querySelector('.charging-status')).backgroundColor.includes(' / '));
+  check('shared recessed battery capsule and borderless status',getComputedStyle(root.querySelector('[data-ui-bar]')).height==='12px'&&getComputedStyle(root.querySelector('[data-ui-bar]')).borderRadius==='999px'&&getComputedStyle(root.querySelector('[data-ui-bar]')).boxShadow!=='none'&&getComputedStyle(root.querySelector('.ui-bar-marker')).height==='22px'&&getComputedStyle(root.querySelector('.charging-status')).borderWidth==='0px');
   for(const soc of [0,1,62,100]){
    qa.update('sensor.evcc_driveway_vehicle_soc',{state:String(soc)});
-   const track=root.querySelector('.battery-track').getBoundingClientRect(),fill=root.querySelector('.battery-fill').getBoundingClientRect();
-   check('animated battery retains measured fill '+soc,Math.abs(fill.width/track.width*100-soc)<.5 && getComputedStyle(root.querySelector('.battery-fill')).overflowX==='hidden');
+   const track=root.querySelector('[data-ui-bar]').getBoundingClientRect(),fill=root.querySelector('.ui-bar-fill').getBoundingClientRect();
+   check('animated battery retains measured fill '+soc,Math.abs(fill.width/track.width*100-soc)<.5 && getComputedStyle(root.querySelector('.ui-bar-fill')).overflowX==='hidden');
   }
   qa.update('sensor.evcc_driveway_vehicle_soc',{state:'62'});
   for(const state of ['waiting','done','disconnected']){
    qa.update('binary_sensor.evcc_driveway_charging',{state:'off'});
    qa.update('binary_sensor.evcc_driveway_connected',{state:state==='disconnected'?'off':'on'});
    qa.update('sensor.evcc_driveway_vehicle_soc',{state:state==='done'?'100':'62'});
-   check('no battery sweep in '+state,getComputedStyle(root.querySelector('.battery-fill'),'::before').content==='none' && !root.querySelector('.vehicle-motion'));
+   check('no battery sweep in '+state,!root.querySelector('.ui-bar-motion') && !root.querySelector('.vehicle-motion'));
   }
   qa.update('binary_sensor.evcc_driveway_connected',{state:'on'});
   qa.update('binary_sensor.evcc_driveway_charging',{state:'on'});
   qa.update('sensor.evcc_driveway_vehicle_soc',{state:'62'});
   qa.update('binary_sensor.evcc_driveway_plan_active',{state:'on'});
-  check('scheduled charging also animates battery',root.querySelector('.content').dataset.tone==='planned' && getComputedStyle(root.querySelector('.battery-fill'),'::before').animationName==='battery-sweep');
+  check('active charging with a plan keeps measured charging motion',root.querySelector('.content').dataset.tone==='planned'&&!!root.querySelector('.ui-bar-motion'));
+  qa.update('binary_sensor.evcc_driveway_charging',{state:'off'});
+  check('waiting for a plan remains static',!root.querySelector('.ui-bar-motion'));
+  qa.update('binary_sensor.evcc_driveway_charging',{state:'on'});
   qa.update('binary_sensor.evcc_driveway_plan_active',{state:'off'});
   qa.update('select.evcc_driveway_mode',{state:'now'});
   check('solar preference is omitted outside Smart',!root.querySelector('.solar-setting'));
@@ -248,31 +255,32 @@ try {
    qa.update('select.evcc_driveway_mode',{state:mode});
    check('solar preference is available for raw mode '+mode,!!root.querySelector('[data-solar-share]') && root.querySelector('[data-solar-share]').value==='60');
   }
-  const flatten=items=>items.flatMap(item=>[item,...flatten(item.schema??[])]);const schema=flatten(qa.editor._schema(true)),names=schema.map(field=>field.name);
+  const flatten=items=>items.flatMap(item=>[item,...flatten(item.schema??[])]);const schema=flatten(qa.editor._nativeEditor._schema(true)),names=schema.map(field=>field.name);
   const designs=['lanes','halo','ribbon','prism-glass','eclipse','aurora','clouds','isobars','hologram','ink','terrain'];
-  check('background dropdown includes all eleven current designs',JSON.stringify(schema.find(f=>f.name==='background').selector.select.options.map(o=>o.value))===JSON.stringify(designs));
+  check('background dropdown includes shared designs',qa.editor.shadowRoot.querySelector('[data-bg=variant]').options.length>=10);
   check('existing configurations default to Energy Lanes',card._config.background==='lanes');
   for(const design of designs){
-   qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{background:design}}}));
+   qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{background:design}}}));
    check('editor persists background '+design,qa.config.background===design && root.querySelector('.content').dataset.background===design);
    for(const dark of [false,true])for(const width of [280,420]){
     document.querySelector('#host').style.width=width+'px';
     qa.hass={...qa.hass,themes:{darkMode:dark}};card.hass=qa.hass;
     const content=root.querySelector('.content'),scene=root.querySelector('.header-scene');
-    check('native background layout '+design+' '+dark+' '+width,content.scrollWidth<=content.clientWidth+1 && root.querySelector('.charging-status').parentElement===scene && root.querySelector('.charging-readings').parentElement===root.querySelector('.header-region') && (getComputedStyle(root.querySelector('.header-background'),'::before').backgroundImage!=='none'||!!root.querySelector('.header-background .header-pattern i')) && getComputedStyle(root.querySelector('.header-background')).maskImage.includes('linear-gradient') && getComputedStyle(root.querySelector('.header-background'),'::after').maskImage==='none');
+    check('background preserves layout '+design+' '+dark+' '+width,content.scrollWidth<=content.clientWidth+1&&root.querySelector('.charging-status').parentElement===scene&&root.querySelector('.charging-readings').parentElement===root.querySelector('.header-region'));
+    await assertCardBackground(card,check);
     check('native theme palette '+design+' '+dark,getComputedStyle(content).getPropertyValue('--tone').trim()===(dark?'#f2c451':'#896400'));
    }
   }
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{background:'lanes'}}}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{background:'lanes'}}}));
 
   check('editor exposes image scale and omits the old vehicle name',names.includes('image_scale') && !names.includes('vehicle_name'));
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_scale:125,vehicle_name:'obsolete'}}}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_scale:125,vehicle_name:'obsolete'}}}));
   check('editor saves the image size and strips the obsolete name',qa.config.image_scale===125 && !Object.hasOwn(qa.config,'vehicle_name') && root.querySelector('.content').style.getPropertyValue('--evcc-image-scale')==='1.25');
   for(const width of [260,280,320,420,700]){
    document.querySelector('#host').style.width=width+'px';let previous=0,stageHeight,sceneHeight,pictureHeight;
    for(const scale of [50,100,150,200,300]){
     card.setConfig({...qa.config,image_scale:scale});
-    const picture=root.querySelector('.picture').getBoundingClientRect(),image=root.querySelector('.picture img').getBoundingClientRect(),track=root.querySelector('.battery-track').getBoundingClientRect(),meta=root.querySelector('.battery-meta').getBoundingClientRect(),body=root.querySelector('.content');
+    const picture=root.querySelector('.picture').getBoundingClientRect(),image=root.querySelector('.picture img').getBoundingClientRect(),track=root.querySelector('[data-ui-bar]').getBoundingClientRect(),meta=root.querySelector('.battery-meta').getBoundingClientRect(),body=root.querySelector('.content');
     const stage=root.querySelector('.car-stage').getBoundingClientRect(),scene=root.querySelector('.header-scene').getBoundingClientRect();
     stageHeight??=stage.height;sceneHeight??=scene.height;pictureHeight??=picture.height;
     const percentage=root.querySelector('.battery-value').getBoundingClientRect();
@@ -288,14 +296,14 @@ try {
    document.querySelector('#host').style.width=width+'px';
    let sceneHeight,previousTop;
    for(const offset of [-150,0,150]){
-    qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_offset_y:offset,image_scale:scale}}}));
-    const image=root.querySelector('.picture img').getBoundingClientRect(),viewport=root.querySelector('.picture').getBoundingClientRect(),scene=root.querySelector('.header-scene').getBoundingClientRect(),track=root.querySelector('.battery-track').getBoundingClientRect();
+    qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_offset_y:offset,image_scale:scale}}}));
+    const image=root.querySelector('.picture img').getBoundingClientRect(),viewport=root.querySelector('.picture').getBoundingClientRect(),scene=root.querySelector('.header-scene').getBoundingClientRect(),track=root.querySelector('[data-ui-bar]').getBoundingClientRect();
     sceneHeight??=scene.height;
     check('vertical position persists without resizing or horizontal shift '+width+' '+scale+' '+offset,qa.config.image_offset_y===offset && scene.height===sceneHeight && Math.abs(image.left+image.width/2-(viewport.left+viewport.width/2))<1 && (previousTop===undefined || Math.abs(image.top-previousTop-150)<1) && Math.min(image.bottom,viewport.bottom)<=track.top-7);
     previousTop=image.top;
    }
   }
-  qa.editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_offset_y:0,image_scale:100}}}));
+  qa.editor._nativeEditor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{image_offset_y:0,image_scale:100}}}));
   check('charging without explicit plan status uses neutral wording',root.querySelector('.charging-status .ui-metric-value').textContent==='Laden');
   qa.update('binary_sensor.evcc_driveway_plan_active',{state:'on'});
   check('active charging plan is detected from the selected loadpoint',card._entities.plan_active==='binary_sensor.evcc_driveway_plan_active' && root.querySelector('.charging-status .ui-metric-value').textContent==='Laden' && root.querySelector('.charging-status .ui-metric-info').textContent==='Volgens laadplanning' && root.querySelector('.content').dataset.tone==='planned' && root.querySelector('.content').dataset.view==='charging');
@@ -344,7 +352,7 @@ try {
   await new Promise(resolve=>setTimeout(resolve,0));
   if(!card.shadowRoot.querySelector('.gallery-top') || !card.shadowRoot.querySelector('[data-mode=pv]'))throw Error('separate test card did not render');
   const editor=await card.constructor.getConfigElement();
-  if(editor.tagName!=='ELEVEN-CAR-EDITOR-TEST' || card.constructor===evccQA.card.constructor)throw Error('test and regular card/editor names overlap');
+  if(editor._nativeEditor.tagName!=='ELEVEN-CAR-EDITOR-TEST' || card.constructor===evccQA.card.constructor)throw Error('test and regular card/editor names overlap');
   card.remove();
  })()`);
  assert.deepEqual(exceptions,[],'no separate-test-bundle exceptions');

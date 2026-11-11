@@ -67,6 +67,29 @@ ${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-materia
 @media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
 `;}
 
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function uiAttributes(values={}){
@@ -702,18 +725,18 @@ class ShoppingCard extends HTMLElement {
   getGridOptions(){return {columns:12,rows:'auto',min_columns:6};}
   constructor() { super(); this.attachShadow({mode:'open'}); this._generation=0; this._items=null; }
   setConfig(c) { if(!/^todo\.[a-z0-9_]+$/.test(c.entity||'')) throw Error('Choose a todo entity'); const changed=this._config?.entity!==c.entity; this._config={...c}; if(changed)this._stop(true); this._render(); this._subscribe(); }
-  set hass(h) { const changed=this._hass?.connection!==h.connection; this._hass=h; if(changed)this._stop(); this._render(); this._subscribe(); }
+  set hass(h) { const changed=this._hass?.connection!==h.connection,id=this._config?.entity,signature=JSON.stringify([h.states?.[id],h.locale?.language,h.language,h.connected,h.connection?.connected]); this._hass=h; if(changed)this._stop(); if(changed||signature!==this._hassSignature){this._hassSignature=signature;this._render();} this._subscribe(); }
   get hass(){ return this._hass; }
   connectedCallback(){ this._render(); this._subscribe(); }
   disconnectedCallback(){ this._stop(); }
-  _stop(clearDraft=false){ this._generation++; this._unsubscribe?.(); this._unsubscribe=null; this._subscribed=false; this._items=null;this._adds=[];this._addQueue=null;this._pending=false;this._subscriptionError=false;this._error='';if(clearDraft){this._draft='';this._edit=null;this._confirmClear=false;this._reorder=false;} }
+  _stop(clearDraft=false){ this._generation++; stopSubscription(this._unsubscribe); this._unsubscribe=null; this._subscribed=false; this._items=null;this._adds=[];this._addQueue=null;this._pending=false;this._subscriptionError=false;this._error='';if(clearDraft){this._draft='';this._edit=null;this._confirmClear=false;this._reorder=false;} }
   _subscribe(){
     if(!this.isConnected||!this._config||!this._hass?.connection||!this.state||this._subscribed||this._subscriptionError)return;
     this._subscribed=true; const generation=this._generation,connection=this._hass.connection,entity_id=this._config.entity;
     Promise.resolve().then(()=>{
       if(generation!==this._generation)return null;
       return connection.subscribeMessage(update=>{if(generation!==this._generation)return;this._subscriptionError=false;this._items=update.items;this._render();},{type:'todo/item/subscribe',entity_id});
-    }).then(unsub=>{if(!unsub)return;if(generation!==this._generation)unsub();else this._unsubscribe=unsub;}).catch(e=>{if(generation===this._generation){this._subscribed=false;this._subscriptionError=true;this._error=e.message;this._render();}});
+    }).then(unsub=>{if(!unsub)return;if(generation!==this._generation)stopSubscription(unsub);else this._unsubscribe=unsub;}).catch(e=>{if(generation===this._generation){this._subscribed=false;this._subscriptionError=true;this._error=e.message;this._render();}});
   }
   t(n,e){return (this._hass?.locale?.language||this._hass?.language||'en').startsWith('nl')?n:e;}
   get state(){return this._hass?.states?.[this._config?.entity];}

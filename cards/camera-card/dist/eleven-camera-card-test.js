@@ -1,39 +1,34 @@
 // Eleven Camera (beta) - self-contained module
 (()=>{
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
 :host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
 ${selector}{box-shadow:var(--eleven-surface-shadow)}
 @media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
-`;}
-
-// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
-function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function uiAttributes(values={}){
- return Object.entries(values).map(([key,value])=>{
-  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
-  if(value==null)return '';
-  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
-  return ` ${key}="${uiEscape(value)}"`;
- }).join('');
-}
-function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
- const classes=className?` class="${uiEscape(className)}"`:'';
- const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
- return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
-}
-function uiButtonStyles(){return `
-[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
-[data-ui-button="icon"]{width:32px;height:32px}
-[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
-[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
-[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
-[data-ui-button]:disabled{opacity:.35;cursor:default}
-[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
-[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
-[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
-[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
 `;}
 
 
@@ -119,6 +114,34 @@ ${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-materia
 :is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
 :is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
 @media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
+
+// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
+function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function uiAttributes(values={}){
+ return Object.entries(values).map(([key,value])=>{
+  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
+  if(value==null)return '';
+  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
+  return ` ${key}="${uiEscape(value)}"`;
+ }).join('');
+}
+function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
+ const classes=className?` class="${uiEscape(className)}"`:'';
+ const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
+ return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
+}
+function uiButtonStyles(){return `
+[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
+[data-ui-button="icon"]{width:32px;height:32px}
+[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
+[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
+[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
+[data-ui-button]:disabled{opacity:.35;cursor:default}
+[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
+[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
+[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
+[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
 `;}
 
 
@@ -1318,17 +1341,19 @@ class CameraSnapshot{
  }
  async refresh(){
   if(!this.active||this.pending)return;
-  this.pending=true;this.failed=false;const version=++this.version;this.abort=new AbortController();this.onStatus('loading');
-  let nextUrl;
+  this.pending=true;this.failed=false;const version=++this.version,controller=new AbortController();this.abort=controller;this.onStatus('loading');
+  let nextUrl,picture,rejectAbort;
+  const aborted=new Promise((_,reject)=>{rejectAbort=()=>reject(Error('Snapshot aborted'));controller.signal.addEventListener('abort',rejectAbort,{once:true});});
+  const timeout=setTimeout(()=>controller.abort(),15000);
   try{
    if(typeof this.hass?.callApiRaw!=='function')throw Error('HA snapshot API unavailable');
-   const response=await this.hass.callApiRaw('GET','camera_proxy/'+this.entity+'?time='+Date.now(),undefined,{'Cache-Control':'no-cache'},this.abort.signal);
+   const response=await Promise.race([this.hass.callApiRaw('GET','camera_proxy/'+this.entity+'?time='+Date.now(),undefined,{'Cache-Control':'no-cache'},controller.signal),aborted]);
    if(!response?.ok)throw Error('Image request failed');
-   const blob=await response.blob();if(!blob.type.startsWith('image/'))throw Error('Invalid image response');
+   const blob=await Promise.race([response.blob(),aborted]);if(!blob.type.startsWith('image/'))throw Error('Invalid image response');
    if(version!==this.version)return;
-   nextUrl=this.url.createObjectURL(blob);const picture=this.image();picture.alt=this.options.alt;picture.style.objectFit=this.options.fit_mode;
-   const loaded=new Promise((resolve,reject)=>{picture.onload=resolve;picture.onerror=()=>reject(Error('Image decode failed'));this.abort.signal.addEventListener('abort',()=>reject(Error('Aborted')),{once:true});});
-   picture.src=nextUrl;await loaded;
+   nextUrl=this.url.createObjectURL(blob);picture=this.image();picture.alt=this.options.alt;picture.style.objectFit=this.options.fit_mode;
+   const loaded=new Promise((resolve,reject)=>{picture.onload=resolve;picture.onerror=()=>reject(Error('Image decode failed'));});
+   picture.src=nextUrl;await Promise.race([loaded,aborted]);
    if(version!==this.version)return;
    if(this.options.interactive===false){this.container.replaceChildren(picture);this.button=null;}
    else{const button=document.createElement('button');button.type='button';button.className='camera-snapshot';button.dataset.cameraDetails=this.entity;button.append(picture);this.container.replaceChildren(button);this.button=button;}
@@ -1336,7 +1361,7 @@ class CameraSnapshot{
    if(this.currentUrl)this.url.revokeObjectURL(this.currentUrl);this.currentUrl=nextUrl;nextUrl=null;
    this.lastLoaded=Date.now();this.onLoaded(this.lastLoaded);this.onStatus('ready');
   }catch{if(version===this.version){this.failed=true;this.onStatus('error');}}
-  finally{if(nextUrl)this.url.revokeObjectURL(nextUrl);if(version===this.version){this.pending=false;this.abort=null;this._schedule();}}
+  finally{clearTimeout(timeout);controller.signal.removeEventListener('abort',rejectAbort);if(picture){picture.onload=null;picture.onerror=null;}if(nextUrl)this.url.revokeObjectURL(nextUrl);if(version===this.version){this.pending=false;this.abort=null;this._schedule();}}
  }
  _schedule(){if(this.timer!=null)this.cancel(this.timer);this.timer=null;if(this.active&&this.interval>0&&!this.pending)this.timer=this.schedule(()=>{this.timer=null;this.refresh();},Math.max(5,this.interval)*1000);}
  stop(){
@@ -1937,6 +1962,7 @@ function cameraActivityTimeline(events,{name,type,t,timeZone,now=Date.now()}={})
 
 
 
+
 function cameraReplaceMarkup(node,markup){
  if(node._cameraMarkup===markup)return;node._cameraMarkup=markup;
  const focused=node.getRootNode().activeElement,identity=focused&&node.contains(focused)?['cameraAction','cameraDetails','cameraRefresh','cameraPrivacy','cameraActivity','cameraActivityPage','securityContacts','securityView','entity'].find(key=>focused.dataset[key]):null,value=identity?focused.dataset[identity]:null;
@@ -2228,7 +2254,8 @@ const cameraFeaturesView=Base=>class extends Base{
   try{
    if(typeof this._hass.callApi!=='function')throw Error('History API unavailable');
    const query=new URLSearchParams({filter_entity_id:ids.join(','),end_time:new Date(end).toISOString(),minimal_response:'',no_attributes:'',skip_initial_state:''});
-   const response=await this._hass.callApi('GET','history/period/'+encodeURIComponent(new Date(start).toISOString())+'?'+query);
+   const hass=this._hass;
+   const response=await requestWithTimeout(()=>hass.callApi('GET','history/period/'+encodeURIComponent(new Date(start).toISOString())+'?'+query));
    if(version!==this._historyVersion)return;this._historyError=false;this._historyHasLoaded=true;const events=cameraHistoryEvents(response,config,start,end);this._activity.merge(events);this._activity.events=this._activity.events.filter(event=>event.time>=start);
    for(const event of events)if(['motion','person'].includes(event.kind))this._detections.set(event.entity,Math.max(this._detections.get(event.entity)??0,event.time));
   }catch{if(version===this._historyVersion)this._historyError=true;}

@@ -4615,6 +4615,25 @@ function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
 
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // ../../shared/periods.js
 // Calendar periods use the Home Assistant timezone, including DST boundaries.
 const periodZoneFormats=new Map();
@@ -7327,6 +7346,25 @@ function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
 
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Calendar periods use the Home Assistant timezone, including DST boundaries.
 const periodZoneFormats=new Map();
 function periodLocalParts(t,zone){
@@ -8297,7 +8335,7 @@ class TimelineCard extends HTMLElement{
   return (luminance+.05)/.05>=1.05/(luminance+.05)?'#000000':'#ffffff';
  }
  _appearance(state,id){const m=this._config.state_colors.find(x=>String(x.state)===state&&x.entity===id)??this._config.state_colors.find(x=>String(x.state)===state&&!x.entity),background=color(m?.color,color(this._config.default_color,this._semanticColor(state,id)??this._categoricalColor(state,id)));return {label:m?.label??(state==='unknown'?(this._nl()?'Onbekend':'Unknown'):state==='unavailable'?(this._nl()?'Niet beschikbaar':'Unavailable'):state),color:background,textColor:this._textColor(background)};}
- async _refresh(){if(!this._connected||!this._hass||!this._config||this._inFlight)return;clearTimeout(this._timer);this._inFlight=true;this._started=true;const generation=++this._generation,c=this._config,{start,end}=graphPeriodRange(this);let timeout;try{const q=new URLSearchParams({filter_entity_id:c.entities.join(','),end_time:new Date(end).toISOString(),minimal_response:'',no_attributes:''});const response=await Promise.race([this._hass.callApi('GET',`history/period/${new Date(start).toISOString()}?${q}`),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),15000);timeout.unref?.();})]);if(!this._connected||generation!==this._generation)return;if(!Array.isArray(response))throw Error('Invalid history');this._start=start;this._end=end;this._stateLimits=[];const responseById=new Map(response.filter(rows=>Array.isArray(rows)&&rows[0]?.entity_id).map(rows=>[rows[0].entity_id,rows]));this._series=c.entities.map((id,index)=>{const rows=responseById.get(id)??[],states=new Set();for(const row of rows){if(row.state==null)continue;states.add(String(row.state));if(states.size>20){this._stateLimits[index]=true;return [];}}const result=segments(rows,start,end),first=Math.min(...rows.map(r=>Date.parse(r.last_changed??r.last_updated)).filter(Number.isFinite));if(result[0]?.state==='unknown'&&first>start){if(first<result[0].end)result.unshift({...result[0],end:first,missing:true}),result[1]={...result[1],start:first};else result[0]={...result[0],missing:true};}return result;});this._loadFailed=false;this._lastLoad={at:Date.now(),start,end,sources:c.entities.map((id,i)=>({id,source:'history',empty:!this._series[i]?.some(s=>!s.missing)}))};this._status='ready';this._refreshFailures=0;}catch{if(generation===this._generation){this._loadFailed=true;this._status='error';this._refreshFailures=(this._refreshFailures??0)+1;}}finally{clearTimeout(timeout);if(this._connected&&generation===this._generation){this._inFlight=false;this._render();this._timer=setTimeout(()=>this._refresh(),retryDelay(this._refreshFailures??0));this._timer.unref?.();}}}
+ async _refresh(){if(!this._connected||!this._hass||!this._config||this._inFlight)return;clearTimeout(this._timer);this._inFlight=true;this._started=true;const generation=++this._generation,c=this._config,{start,end}=graphPeriodRange(this);let timeout;try{const q=new URLSearchParams({filter_entity_id:c.entities.join(','),end_time:new Date(end).toISOString(),minimal_response:'',no_attributes:''});const response=await Promise.race([this._hass.callApi('GET',`history/period/${new Date(start).toISOString()}?${q}`),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),15000);timeout.unref?.();})]);if(!this._connected||generation!==this._generation)return;if(!Array.isArray(response))throw Error('Invalid history');this._start=start;this._end=end;this._stateLimits=[];const responseById=new Map(response.filter(rows=>Array.isArray(rows)&&rows[0]?.entity_id).map(rows=>[rows[0].entity_id,rows]));this._series=c.entities.map((id,index)=>{const rows=responseById.get(id)??[],states=new Set();for(const row of rows){if(row.state==null)continue;states.add(String(row.state));if(states.size>20){this._stateLimits[index]=true;return [];}}const result=segments(rows,start,end),first=rows.reduce((earliest,row)=>{const time=Date.parse(row.last_changed??row.last_updated);return Number.isFinite(time)?Math.min(earliest,time):earliest;},Infinity);if(result[0]?.state==='unknown'&&first>start){if(first<result[0].end)result.unshift({...result[0],end:first,missing:true}),result[1]={...result[1],start:first};else result[0]={...result[0],missing:true};}return result;});this._loadFailed=false;this._lastLoad={at:Date.now(),start,end,sources:c.entities.map((id,i)=>({id,source:'history',empty:!this._series[i]?.some(s=>!s.missing)}))};this._status='ready';this._refreshFailures=0;}catch{if(generation===this._generation){this._loadFailed=true;this._status='error';this._refreshFailures=(this._refreshFailures??0)+1;}}finally{clearTimeout(timeout);if(this._connected&&generation===this._generation){this._inFlight=false;this._render();this._timer=setTimeout(()=>this._refresh(),retryDelay(this._refreshFailures??0));this._timer.unref?.();}}}
 }
 Object.assign(TimelineCard.prototype,TimelineView);
 if(!customElements.get('eleven-timeline-card'))customElements.define('eleven-timeline-card',withCardBackground(TimelineCard));
@@ -8987,6 +9025,25 @@ function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
 
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Calendar periods use the Home Assistant timezone, including DST boundaries.
 const periodZoneFormats=new Map();
 function periodLocalParts(t,zone){
@@ -9298,7 +9355,7 @@ class OverviewCard extends HTMLElement{
   const title=this.shadowRoot.querySelector('h2'),period=this.shadowRoot.querySelector('.period');
   const titleMinimum=wordWidth(title);ctx.font=getComputedStyle(period).font;
   this.shadowRoot.querySelector('header').classList.toggle('stacked',titleMinimum+12+ctx.measureText(period.textContent).width>grid.clientWidth);
-  const layout=overviewSectionLayout(this._config),gap=layout.gap,inset=layout.padding*2+2;
+  const layout=overviewSectionLayout(this._config),gap=layout.gap,inset=layout.padding*2;
   let minimum=layout.minimum;const values=[];
   this.shadowRoot.querySelectorAll('.metric').forEach(metric=>{
    const value=metric.querySelector('.value');value.style.removeProperty('font-size');
@@ -9342,7 +9399,7 @@ header.stacked .period{text-align:start}
 .period{font-size:12px;line-height:1.4;text-align:end;white-space:nowrap;flex:0 0 auto;color:var(--secondary-text-color,#666)}
 .period.synced{flex:0 1 auto;white-space:normal;overflow-wrap:normal;max-width:100%;text-align:start}
 .grid{display:grid;grid-template-columns:repeat(var(--overview-columns,1),minmax(0,1fr));column-gap:${layout.gap}px;row-gap:0;align-items:stretch}
-.metric{appearance:none;font:inherit;color:inherit;background:var(--eleven-material-plot-background,transparent);border:1px solid var(--divider-color,#ddd);border-radius:10px;text-align:start;min-width:0;min-height:44px;padding:${layout.padding}px;cursor:pointer;display:grid;grid-template-rows:subgrid;grid-row:span ${2+(c.show_graph?1:0)+(c.show_delta?2:0)};align-content:start;margin-bottom:${layout.gap}px}
+.metric{appearance:none;font:inherit;color:inherit;background:var(--eleven-material-plot-background,transparent);border:0;border-radius:10px;text-align:start;min-width:0;min-height:44px;padding:${layout.padding}px;cursor:pointer;display:grid;grid-template-rows:subgrid;grid-row:span ${2+(c.show_graph?1:0)+(c.show_delta?2:0)};align-content:start;margin-bottom:${layout.gap}px}
 .metric:focus-visible,.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
 .label{font-size:13px;color:var(--secondary-text-color,#666);line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:7px;min-width:0}
 .label i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--series-color);flex-shrink:0}
@@ -9374,7 +9431,7 @@ ${c.section_size==='compact'?`
 .compact-change .caption{flex:1 1 0;min-width:0}
 `:''}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
-${cardThemeStyles({wells:'.metric',controls:'.retry'})}</style><ha-card><div class="content"><header><h2>${esc(c.title)}</h2><span class="period${synced?' synced':''}">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span>${uiButton({variant:'action',className:'retry',text:dutch?'Opnieuw':'Retry'})}</div>`:''}</div></ha-card>`;
+${cardThemeStyles({plots:'.metric',controls:'.retry'})}</style><ha-card><div class="content"><header><h2>${esc(c.title)}</h2><span class="period${synced?' synced':''}">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span>${uiButton({variant:'action',className:'retry',text:dutch?'Opnieuw':'Retry'})}</div>`:''}</div></ha-card>`;
   this.shadowRoot.querySelectorAll('.metric').forEach(b=>{b.onclick=()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:b.dataset.entity},bubbles:true,composed:true}));if(b.dataset.entity===focus)b.focus();});const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();if(retryFocus)(retry??this.shadowRoot.querySelector('.metric'))?.focus();this._observeLayout();
  }
 }
@@ -10484,6 +10541,25 @@ function cardHeaderStyles(){return uiButtonStyles()+uiPopupStyles()+uiSurfaceSty
 // ../../shared/request.js
 function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
 }
 
 // ../../shared/periods.js
@@ -12407,6 +12483,25 @@ function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
 }
 
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Calendar periods use the Home Assistant timezone, including DST boundaries.
 const periodZoneFormats=new Map();
 function periodLocalParts(t,zone){
@@ -14236,8 +14331,9 @@ function colorScale(rows, config) {
     }
     return {min,max,color,gradient:`linear-gradient(90deg,${positions.join(',')})`};
   }
-  const values=rows.flatMap(row=>row.cells).map(cell=>cell.value).filter(value=>value!=null);
-  let min=config.scale_min ?? (values.length?Math.min(...values):0), max=config.scale_max ?? (values.length?Math.max(...values):1);
+  let minimum=Infinity,maximum=-Infinity;
+  for(const row of rows)for(const cell of row.cells)if(Number.isFinite(cell.value)){minimum=Math.min(minimum,cell.value);maximum=Math.max(maximum,cell.value);}
+  let min=config.scale_min ?? (minimum===Infinity?0:minimum), max=config.scale_max ?? (maximum===-Infinity?1:maximum);
   if(config.scale_min!=null && max<min)max=min;
   if(config.scale_max!=null && min>max)min=max;
   return {min,max,gradient:`linear-gradient(90deg,rgb(${config.low_color.join(',')}),rgb(${config.high_color.join(',')}))`,color(value){
@@ -14249,12 +14345,14 @@ function colorScale(rows, config) {
 
 // Summaries describe the displayed cells, like the Bar Chart information popup.
 function summarizeHeatmap(rows, mode) {
-  const cells=rows.flatMap(row=>row.cells),known=cells.filter(cell=>Number.isFinite(cell.value));
-  const values=known.map(cell=>cell.value),sum=values.reduce((total,value)=>total+value,0);
-  return {minimum:values.length?Math.min(...values):null,maximum:values.length?Math.max(...values):null,
-    average:values.length?sum/values.length:null,count:values.length,
-    missing:cells.some(cell=>cell.partial || (cell.intervals.length && cell.value==null)),
-    ...(mode==='consumption'?{total:values.length?sum:null}:{})};
+  let minimum=Infinity,maximum=-Infinity,sum=0,count=0,missing=false;
+  for(const row of rows)for(const cell of row.cells){
+    if(Number.isFinite(cell.value)){minimum=Math.min(minimum,cell.value);maximum=Math.max(maximum,cell.value);sum+=cell.value;count++;}
+    missing ||= !!(cell.partial || (cell.intervals.length && cell.value==null));
+  }
+  return {minimum:count?minimum:null,maximum:count?maximum:null,
+    average:count?sum/count:null,count,missing,
+    ...(mode==='consumption'?{total:count?sum:null}:{})};
 }
 
 
@@ -14737,6 +14835,25 @@ ${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-materia
 
 function retryDelay(failures, base = 60000, maximum = 300000) {
   return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
 }
 
 // Calendar periods use the Home Assistant timezone, including DST boundaries.
@@ -16128,8 +16245,8 @@ function calendarPeriodAdapter(host){
 
 function calendarCardStyles(){return uiDetailSurfaceStyles()+uiSurfaceStyles('.navigation,.info-button')+`
 :host{display:block;height:100%;min-width:0;min-height:0;container-type:inline-size}
-ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
-.content{display:flex;flex-direction:column;height:100%;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box}
+ha-card{display:flex;flex-direction:column;height:100%;min-width:0;min-height:0;overflow:hidden;box-sizing:border-box;color:var(--primary-text-color,#20252b);background:var(--ha-card-background,var(--card-background-color,#fff));font:inherit}
+.content{display:flex;flex:1;flex-direction:column;padding:var(--eleven-card-padding,16px);min-width:0;min-height:0;box-sizing:border-box;overflow:hidden}
 .content>.header,.content>.legend,.content>.status{flex-shrink:0}
 .calendar-body{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
 .legend-error{display:inline-grid;place-items:center;width:13px;height:13px;border:1px solid currentColor;border-radius:50%;color:var(--error-color,#db4437);font-size:10px;line-height:1;flex:none}
@@ -16198,8 +16315,7 @@ ha-card{display:block;height:100%;min-width:0;min-height:0;color:var(--primary-t
 @container(max-width:420px){.content{padding:var(--eleven-card-padding,16px)}.header{align-items:flex-start}.header-actions{gap:5px}.navigation .range{font-size:10px;padding:0 6px}.navigation [data-nav=now]{padding:0 6px}.list-event{grid-template-columns:50px minmax(0,1fr);gap:8px}.weather{font-size:10px}}
 .header-actions [data-ui-button]{min-width:44px;min-height:44px;height:auto;box-sizing:border-box}.legend-item{min-height:44px;min-width:44px}
 /* Calendar-local calm agenda anatomy; paint remains theme-owned. */
-:host,ha-card,.content{height:auto;min-height:100%}
-.calendar-body{flex:none;overflow:visible;min-width:0}
+.calendar-body{min-width:0}
 .header,.compact .header{gap:12px;margin-bottom:12px;align-items:center;flex-wrap:nowrap}
 .header h2{font-size:16px;font-weight:600;line-height:24px;min-width:0;overflow-wrap:anywhere}
 .header svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -16429,7 +16545,7 @@ class CalendarCard extends HTMLElement{
  _zone(){return this._hass?.config?.time_zone||'UTC';}
  _queueRender(){if(this._renderQueued)return;this._renderQueued=true;queueMicrotask(()=>{this._renderQueued=false;if(this._connected)this._render();});}
  _range(){return calendarSelectedRange(this);}
- _stopCalendars(){this._calendarGeneration++;clearTimeout(this._calendarRetryTimer);this._calendarRetryTimer=null;for(const unsubscribe of this._calendarUnsubs)try{unsubscribe();}catch{}this._calendarUnsubs=[];}
+ _stopCalendars(){this._calendarGeneration++;clearTimeout(this._calendarRetryTimer);this._calendarRetryTimer=null;for(const unsubscribe of this._calendarUnsubs)stopSubscription(unsubscribe);this._calendarUnsubs=[];}
  _retryCalendars(){if(this._calendarRetryTimer||!this._connected)return;const generation=this._calendarGeneration;this._calendarRetryFailures=(this._calendarRetryFailures??0)+1;this._calendarRetryTimer=setTimeout(()=>{this._calendarRetryTimer=null;if(this._connected&&generation===this._calendarGeneration&&Object.values(this._statuses).includes('error')){this._startCalendars();this._queueRender();}},retryDelay(this._calendarRetryFailures,30000));this._calendarRetryTimer.unref?.();}
  _startCalendars(){
   this._stopCalendars();if(!this._connected||!this._hass||!this._config||this._emptyConfig)return;
@@ -16445,11 +16561,11 @@ class CalendarCard extends HTMLElement{
      const events=payload?.event?.events??payload?.events;
      this._statuses[entity]=Array.isArray(events)?'ready':'error';if(Array.isArray(events)){this._events[entity]=events;this._eventRevision=(this._eventRevision??0)+1;if(Object.values(this._statuses).every(status=>status==='ready')){this._calendarRetryFailures=0;clearTimeout(this._calendarRetryTimer);this._calendarRetryTimer=null;}}else this._retryCalendars();this._queueRender();
     },{type:'calendar/event/subscribe',entity_id:entity,start:new Date(range.start).toISOString(),end:new Date(range.end).toISOString()});
-    Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._calendarGeneration)unsubscribe();else this._calendarUnsubs.push(unsubscribe);},()=>{if(this._connected&&generation===this._calendarGeneration){this._statuses[entity]='error';this._retryCalendars();this._queueRender();}});
+    Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._calendarGeneration)stopSubscription(unsubscribe);else this._calendarUnsubs.push(unsubscribe);},()=>{if(this._connected&&generation===this._calendarGeneration){this._statuses[entity]='error';this._retryCalendars();this._queueRender();}});
    }catch{this._statuses[entity]='error';this._retryCalendars();}
   }
  }
- _stopWeather(){this._weatherGeneration++;clearTimeout(this._weatherRetryTimer);this._weatherRetryTimer=null;this._weatherUnsub?.();this._weatherUnsub=null;}
+ _stopWeather(){this._weatherGeneration++;clearTimeout(this._weatherRetryTimer);this._weatherRetryTimer=null;stopSubscription(this._weatherUnsub);this._weatherUnsub=null;}
  _retryWeather(){if(this._weatherRetryTimer||!this._connected)return;const generation=this._weatherGeneration;this._weatherRetryFailures=(this._weatherRetryFailures??0)+1;this._weatherRetryTimer=setTimeout(()=>{this._weatherRetryTimer=null;if(this._connected&&generation===this._weatherGeneration&&this._weatherError)this._startWeather();},retryDelay(this._weatherRetryFailures,30000));this._weatherRetryTimer.unref?.();}
  _startWeather(){
   this._stopWeather();if(this._forecastEntity!==this._config?.weather_entity)this._forecast=null;this._forecastEntity=this._config?.weather_entity;this._weatherError=false;
@@ -16465,7 +16581,7 @@ class CalendarCard extends HTMLElement{
     else{this._weatherError=true;this._retryWeather();}
     this._queueRender();
    },{type:'weather/subscribe_forecast',forecast_type:'daily',entity_id:entity});
-   Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._weatherGeneration)unsubscribe();else this._weatherUnsub=unsubscribe;},()=>{if(this._connected&&generation===this._weatherGeneration){this._weatherError=true;this._retryWeather();this._queueRender();}});
+   Promise.resolve(promise).then(unsubscribe=>{if(typeof unsubscribe!=='function')return;if(!this._connected||generation!==this._weatherGeneration)stopSubscription(unsubscribe);else this._weatherUnsub=unsubscribe;},()=>{if(this._connected&&generation===this._weatherGeneration){this._weatherError=true;this._retryWeather();this._queueRender();}});
   }catch{this._weatherError=true;this._retryWeather();}
  }
  _scheduleMidnight(){
@@ -16644,6 +16760,29 @@ if(!window.customCards.some(card=>card.type==='eleven-calendar-card'))window.cus
 ;
 // Eleven Weather (beta) — self-contained module
 (()=>{
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Paint only, scoped to each caller's shadow root and explicit semantic roles.
 // Material recipes/palettes belong to the optional YAML theme, never this helper.
 // Do not use generic control selectors: swatches, state tracks and chart colors
@@ -17924,13 +18063,17 @@ const weatherCalmStyles=`
 function patchWeatherDOM(root,markup){
  const template=document.createElement('template');template.innerHTML=markup;
  const key=node=>node.nodeType===1?node.localName+'|'+(node.getAttribute('data-weather-key')??node.getAttribute('data-ui-tab')??node.getAttribute('data-ui-tab-panel')??node.getAttribute('data-forecast-field')??node.getAttribute('class')?.split(' ')[0]??''):String(node.nodeType);
+ // The background wrapper owns these siblings. Moving the card's live content
+ // around its injected layer resets descendant scroll offsets in Chromium.
+ const managed=node=>node?.nodeType===1&&node.matches('[data-ui-card-background],style[data-ui-background-styles]');
+ const nextOwned=node=>{while(managed(node))node=node.nextSibling;return node;};
  const patch=(parent,incoming)=>{
-  let cursor=parent.firstChild;
+  let cursor=nextOwned(parent.firstChild);
   for(const next of [...incoming.childNodes]){
    let current=cursor;
    if(!current||key(current)!==key(next)){
-    current=cursor?.nextSibling;
-    while(current&&key(current)!==key(next))current=current.nextSibling;
+    current=nextOwned(cursor?.nextSibling);
+    while(current&&key(current)!==key(next))current=nextOwned(current.nextSibling);
     if(current)parent.insertBefore(current,cursor);else{current=next.cloneNode(true);parent.insertBefore(current,cursor);}
    }
    if(!current.isEqualNode(next)){
@@ -17941,9 +18084,9 @@ function patchWeatherDOM(root,markup){
      patch(current,next);
     }
    }
-   cursor=current.nextSibling;
+   cursor=nextOwned(current.nextSibling);
   }
-  while(cursor){const next=cursor.nextSibling;parent.removeChild(cursor);cursor=next;}
+  while(cursor){const next=nextOwned(cursor.nextSibling);parent.removeChild(cursor);cursor=next;}
  };
  patch(root,template.content);
 }
@@ -18077,6 +18220,7 @@ class WeatherEditor extends HTMLElement{
 
 
 
+
 class WeatherCard extends HTMLElement {
  constructor(){super();this.attachShadow({mode:'open'});this._generation=0;this._forecast=[];this._iconCache=new Map();}
  static async getConfigElement(){if(!customElements.get('eleven-weather-editor'))customElements.define('eleven-weather-editor',WeatherEditor);return document.createElement('eleven-weather-editor');}
@@ -18106,7 +18250,7 @@ class WeatherCard extends HTMLElement {
  getGridOptions(){return {columns:12,min_columns:6,rows:this.getCardSize(),min_rows:3};}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
  _forecastEnabled(){return weatherVisibleTabs(this._config).length>0;}
- _stopForecast(){this._generation++;try{this._unsubscribe?.();}catch{}this._unsubscribe=null;}
+ _stopForecast(){this._generation++;stopSubscription(this._unsubscribe);this._unsubscribe=null;}
  _statusMarkup(attributes,available,state,nl){
   const metric=weatherField(this._config,'metric_status',attributes,this._hass,available);if(!metric)return '';
   const condition=this._config.metric_status==='condition',id=metric.entity||(this._config.metric_status==='custom'?'':this._config.entity);
@@ -18143,7 +18287,7 @@ class WeatherCard extends HTMLElement {
     this._forecast=Array.isArray(payload?.forecast)?payload.forecast:[];this._render();
    },{type:'weather/subscribe_forecast',entity_id:this._config.entity,forecast_type:type})).then(unsubscribe=>{
     if(typeof unsubscribe!=='function')return;
-    if(!this._attached||generation!==this._generation){try{unsubscribe();}catch{}}else this._unsubscribe=unsubscribe;
+    if(!this._attached||generation!==this._generation)stopSubscription(unsubscribe);else this._unsubscribe=unsubscribe;
    },fail);
   }catch{fail();}
  }
@@ -19857,7 +20001,7 @@ const evccHistoryMethods = {
   this._historyVersion = (this._historyVersion || 0) + 1; this._historyKey = null; this._historyConnectionKey = null; this._historySession = null; this._historyMissingSession = false; this._historyData = []; this._historyLoading = false; this._historyError = false; this._historyRequestedAt = 0; this._historyIndex = null;
  },
  _syncHistory() {
-  if (!this.isConnected || this._offline() || !this._config?.show_session || this._activeTab !== 'session') return;
+  if (!this.isConnected || globalThis.document?.hidden || this.hasAttribute?.('data-motion-paused') || this._offline() || !this._config?.show_session || this._activeTab !== 'session') return;
   const id = this._entities.power, unit = this._hass.states?.[id]?.attributes?.unit_of_measurement;
   const key = `${id}|${unit}`;
   const connectedId = this._entities.connected, connected = this._hass.states?.[connectedId];
@@ -20245,9 +20389,10 @@ class EvccCard extends HTMLElement {
  constructor() { super(); this.attachShadow({mode: 'open'}); this._registry = []; this._actionVersion = 0; this._solarVersion = 0; }
  setConfig(config) { this._cancelMode(); this._cancelSolar(); this._actionError = null; this._solarError = null; this._config = normalizeEvccConfig(config); this._signature = null; this._render(); }
  connectedCallback() { this._observeMotion(); this._ensureClock(); this._render(); }
- _observeMotion() { this._motionCleanup?.(); this._motionCleanup=observeCardMotion(this); }
+ _observeMotion() { this._motionCleanup?.(); this._motionCleanup=observeCardMotion(this,()=>{this._ensureClock();this._render();this._syncHistory();}); }
  _ensureClock() {
-  if (!this.isConnected || this._clockTimer) return;
+  if (!this.isConnected || this._config?.evcc_enabled===false || globalThis.document?.hidden || this.hasAttribute?.('data-motion-paused')) { clearInterval(this._clockTimer);this._clockTimer=null;return; }
+  if (this._clockTimer) return;
   this._clockTimer = setInterval(() => { this._render(); this._syncHistory(); }, 1000);
  }
  set hass(hass) {
@@ -20504,9 +20649,14 @@ function carFieldReading(entity,hass,config,index){
  const unit=config['field_'+index+'_show_unit']===false?'':config['field_'+index+'_unit']||(attribute?'':entity.attributes?.unit_of_measurement);
  return carReading({...entity,state:String(state),attributes:{...entity.attributes,unit_of_measurement:unit}},attribute?{...hass,formatEntityState:undefined}:hass,config['field_'+index+'_decimals']);
 }
-function carImageUrl(entity,hass) {
- if(!carAvailable(entity))return null;
- const picture=entity.attributes?.entity_picture;
+function carImageUrl(entity,hass,id=entity?.entity_id) {
+ if(!entity||entity.state==='unavailable')return null;
+ // Match HA's image selector: the current access token, rather than a cached
+ // entity_picture token, authenticates image entities even before their first update.
+ const token=entity.attributes?.access_token;
+ const picture=token&&/^image\.\w+$/.test(id??'')
+  ?`/api/image_proxy/${id}?token=${encodeURIComponent(token)}&state=${encodeURIComponent(entity.state)}`
+  :entity.attributes?.entity_picture;
  if(typeof picture!=='string'||!picture.trim())return null;
  if(picture.startsWith('/')&&!picture.startsWith('//'))return hass?.hassUrl?hass.hassUrl(picture):picture;
  try{const url=new URL(picture);return ['http:','https:'].includes(url.protocol)?url.href:null;}catch{return null;}
@@ -20578,7 +20728,7 @@ class CarEntityImage {
  update(hass,id,active=true){
   const connection=hass?.connection??hass?.callWS??null;
   if(id!==this.id||connection!==this.connection){this.reset();this.id=id;this.connection=connection;}
-  const entity=hass?.states?.[id],source=carImageUrl(entity,hass),revision=entity?.state,online=hass?.connected!==false&&hass?.connection?.connected!==false;
+  const entity=hass?.states?.[id],source=carImageUrl(entity,hass,id),revision=entity?.state,online=hass?.connected!==false&&hass?.connection?.connected!==false;
   const changed=source!==this.source||revision!==this.revision,reconnected=online&&!this.online,resumed=active&&!this.active;
   this.hass=hass;this.source=source;this.revision=revision;this.online=online;this.active=active;
   if(!id)return;
@@ -20592,7 +20742,7 @@ class CarEntityImage {
  }
  _load(){
   this.attempts++;
-  const version=++this.version,entity=this.hass?.states?.[this.id],source=carImageUrl(entity,this.hass);
+  const version=++this.version,entity=this.hass?.states?.[this.id],source=carImageUrl(entity,this.hass,this.id);
   if(!source){this._failed(version);return;}
   const image=new Image();this.pending=image;
   image.alt='';image.decoding='async';
@@ -22657,13 +22807,17 @@ const weatherCalmStyles=`
 function patchWeatherDOM(root,markup){
  const template=document.createElement('template');template.innerHTML=markup;
  const key=node=>node.nodeType===1?node.localName+'|'+(node.getAttribute('data-weather-key')??node.getAttribute('data-ui-tab')??node.getAttribute('data-ui-tab-panel')??node.getAttribute('data-forecast-field')??node.getAttribute('class')?.split(' ')[0]??''):String(node.nodeType);
+ // The background wrapper owns these siblings. Moving the card's live content
+ // around its injected layer resets descendant scroll offsets in Chromium.
+ const managed=node=>node?.nodeType===1&&node.matches('[data-ui-card-background],style[data-ui-background-styles]');
+ const nextOwned=node=>{while(managed(node))node=node.nextSibling;return node;};
  const patch=(parent,incoming)=>{
-  let cursor=parent.firstChild;
+  let cursor=nextOwned(parent.firstChild);
   for(const next of [...incoming.childNodes]){
    let current=cursor;
    if(!current||key(current)!==key(next)){
-    current=cursor?.nextSibling;
-    while(current&&key(current)!==key(next))current=current.nextSibling;
+    current=nextOwned(cursor?.nextSibling);
+    while(current&&key(current)!==key(next))current=nextOwned(current.nextSibling);
     if(current)parent.insertBefore(current,cursor);else{current=next.cloneNode(true);parent.insertBefore(current,cursor);}
    }
    if(!current.isEqualNode(next)){
@@ -22674,9 +22828,9 @@ function patchWeatherDOM(root,markup){
      patch(current,next);
     }
    }
-   cursor=current.nextSibling;
+   cursor=nextOwned(current.nextSibling);
   }
-  while(cursor){const next=cursor.nextSibling;parent.removeChild(cursor);cursor=next;}
+  while(cursor){const next=nextOwned(cursor.nextSibling);parent.removeChild(cursor);cursor=next;}
  };
  patch(root,template.content);
 }
@@ -23076,7 +23230,7 @@ const energyFlowDetailStyles=uiDetailSurfaceStyles()+`
 .energy-device-sort select:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}
 @container(max-width:360px){.energy-home-summary dd{font-size:16px}}
 
-:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--detail-bar-radius:8px;--detail-home:var(--primary-color,#03a9f4);--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
+:is([data-energy-popup],[data-energy-panel]){border-radius:8px;scrollbar-gutter:stable;scrollbar-width:thin;--detail-value-size:13px;--detail-value-weight:600;--detail-row-space:10px;--detail-bar-height:8px;--ui-bar-height:var(--detail-bar-height);--detail-bar-radius:8px;--detail-home:var(--primary-color,#03a9f4);--detail-solar:var(--energy-solar-color,var(--solar,#c28a31));--detail-import:var(--energy-grid-consumption-color,var(--grid,#537dc0));--detail-export:var(--energy-grid-return-color,var(--return,#9576bb))}
 :is([data-energy-popup],[data-energy-panel]) .ui-popup-heading>strong{font-size:14px;font-weight:600}
 :is([data-energy-popup],[data-energy-panel]) button{border-radius:8px}
 .energy-grid-metrics>.energy-grid-net{grid-column:1/-1}
@@ -23154,15 +23308,16 @@ ha-card{border-radius:var(--ha-card-border-radius,12px)}
 .circle-flow{grid-column:1/-1;min-width:0}
 .circle-flow *{box-sizing:border-box}
 /* Native labels and SVG routes use the same node size and gap geometry. */
-.circle-scene{--flow-node-size:72px;position:relative;display:block;width:100%;height:calc(112px + var(--flow-node-size));margin:0 auto}
+.circle-scene{--flow-node-size:72px;--flow-node-top:56px;position:relative;display:block;width:100%;height:calc(var(--flow-node-top) + var(--flow-node-size) + 8px);margin:0 auto}
+.content[data-compact=true] .circle-scene{--flow-node-top:48px}
 .flow-routes{position:absolute;inset:0;pointer-events:none}
 .flow-routes>svg{position:absolute;inset:0;display:block;width:100%;height:100%;overflow:visible}
-.circle-scene>.circle-node[data-ui-metric]{position:absolute;top:104px;z-index:1;width:var(--flow-node-size);min-width:var(--flow-node-size);max-width:var(--flow-node-size);height:var(--flow-node-size);min-height:var(--flow-node-size)}
+.circle-scene>.circle-node[data-ui-metric]{position:absolute;top:var(--flow-node-top);z-index:1;width:var(--flow-node-size);min-width:var(--flow-node-size);max-width:var(--flow-node-size);height:var(--flow-node-size);min-height:var(--flow-node-size)}
 .circle-scene>[data-node=sun]{left:0}
 .circle-scene>[data-node=home]{left:calc(50% - var(--flow-node-size)/2)}
 .circle-scene>[data-node=grid]{right:0}
 .circle-scene>[data-flow-value]{position:absolute;padding:0 2px;overflow-wrap:normal}
-.circle-scene>[data-flow-value=return]{top:4px;left:calc(var(--flow-node-size)/2);right:calc(var(--flow-node-size)/2)}
+.circle-scene>[data-flow-value=return]{top:16px;left:calc(var(--flow-node-size)/2);right:calc(var(--flow-node-size)/2)}
 .circle-scene>[data-flow-value=solar],.circle-scene>[data-flow-value=grid]{bottom:calc(20px + var(--flow-node-size)/2);width:calc(50% - var(--flow-node-size)*1.5)}
 .circle-scene>[data-flow-value=solar]{left:var(--flow-node-size)}
 .circle-scene>[data-flow-value=grid]{right:var(--flow-node-size)}
@@ -23217,27 +23372,27 @@ function energyFlowIcon(kind){
 
 // All coordinates are CSS pixels in the same scene as the native endpoint
 // buttons. A wider card changes the gaps, never the alignment of text and wire.
-function energyFlowGeometry(width,nodeSize=72){
- const middle=width/2,right=width-nodeSize/2,y=104+nodeSize/2;
+function energyFlowGeometry(width,nodeSize=72,nodeTop=56){
+ const middle=width/2,right=width-nodeSize/2,y=nodeTop+nodeSize/2;
  const solar=[nodeSize,middle-nodeSize/2],grid=[middle+nodeSize/2,width-nodeSize];
- return {height:104+nodeSize+8,y,solar,grid,paths:{
+ return {height:nodeTop+nodeSize+8,y,solar,grid,paths:{
   solar:`M${solar[0]} ${y}H${solar[1]}`,
   grid:`M${grid[1]} ${y}H${grid[0]}`,
-  return:`M${nodeSize/2} 104V48A8 8 0 0 1 ${nodeSize/2+8} 40H${right-8}A8 8 0 0 1 ${right} 48V104`
+  return:`M${nodeSize/2} ${nodeTop}V16A8 8 0 0 1 ${nodeSize/2+8} 8H${right-8}A8 8 0 0 1 ${right} 16V${nodeTop}`
  }};
 }
 function layoutEnergyFlowDiagram(root){
  const scene=root?.querySelector('.circle-scene'),svg=scene?.querySelector('.flow-routes>svg');
  if(!svg||!scene.clientWidth)return;
  const nodeSize=scene.querySelector('[data-node=sun]')?.offsetWidth||72;
- const geometry=energyFlowGeometry(scene.clientWidth,nodeSize);
+ const geometry=energyFlowGeometry(scene.clientWidth,nodeSize,scene.querySelector('[data-node=sun]')?.offsetTop??56);
  svg.setAttribute('viewBox',`0 0 ${scene.clientWidth} ${geometry.height}`);
  for(const [name,path] of Object.entries(geometry.paths)){
   const group=svg.querySelector(`[data-route="${name}"]`);if(!group)continue;
   group.querySelectorAll('.flow-bed,.flow-wire').forEach(node=>node.setAttribute('d',path));
   const dot=group.querySelector('.flow-dot');if(dot)dot.style.offsetPath=`path('${path}')`;
   const centres=name==='return'?[...['solar','grid'].map(key=>(geometry[key][0]+geometry[key][1])/2)]:[(geometry[name][0]+geometry[name][1])/2];
-  const y=name==='return'?40:geometry.y,sign=name==='grid'?-1:1;
+  const y=name==='return'?8:geometry.y,sign=name==='grid'?-1:1;
   group.querySelector('.flow-arrow')?.setAttribute('d',centres.map(x=>`M${x-3*sign} ${y-4}l${5*sign} 4 ${-5*sign} 4`).join(''));
  }
 }
@@ -23381,7 +23536,15 @@ class EnergyFlowCard extends HTMLElement{
   if(!previous||changedView||changedGroup||previous.hours_to_show!==next.hours_to_show)this._reloadPeriod();else this.render();
   this._sync();
  }
- set hass(hass){const changed=this._hass?.connection!==hass?.connection||this._offline()!==(hass?.connected===false||hass?.connection?.connected===false);this._hass=hass;if(changed)this._reset();this.render();this._sync();}
+ set hass(hass){const previous=this._hass,offline=hass?.connected===false||hass?.connection?.connected===false,changed=previous?.connection!==hass?.connection||this._lastOffline!==offline;this._lastOffline=offline;this._hass=hass;if(changed)this._reset();const renderChanged=this._hassRenderChanged(hass);if(changed||renderChanged)this.render();this._sync();}
+ _hassRenderChanged(hass){
+  if(!this._entityContext||this._entityContext.config!==this._config||this._entityContext.prefs!==this._prefs){
+   const ids=new Set(),visit=value=>{if(typeof value==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(value))ids.add(value);else if(value&&typeof value==='object')for(const item of Object.values(value))visit(item);};
+   visit(this._config);visit(this._prefs);this._entityContext={config:this._config,prefs:this._prefs,ids};
+  }
+  const signature=JSON.stringify([hass.config?.time_zone,hass.config?.currency,hass.locale,hass.language,hass.themes?.darkMode,[...this._entityContext.ids].map(id=>hass.states?.[id])]),changed=signature!==this._renderContextSignature;
+  this._renderContextSignature=signature;return changed;
+ }
  get hass(){return this._hass;}
  cardBackgroundStatusColor(){return energyFlowStatusColor(this._offline()||this._error?null:this._displayData,!!this._hass?.themes?.darkMode);}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
@@ -23568,40 +23731,35 @@ if(!window.customCards.some(card=>card.type==='eleven-energy-flow-card'))window.
 ;
 // Eleven Camera (beta) - self-contained module
 (()=>{
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // One recipe for raised information surfaces across all cards.
 const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
 function uiSurfaceStyles(selector){return `
 :host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
 ${selector}{box-shadow:var(--eleven-surface-shadow)}
 @media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
-`;}
-
-// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
-function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function uiAttributes(values={}){
- return Object.entries(values).map(([key,value])=>{
-  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
-  if(value==null)return '';
-  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
-  return ` ${key}="${uiEscape(value)}"`;
- }).join('');
-}
-function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
- const classes=className?` class="${uiEscape(className)}"`:'';
- const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
- return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
-}
-function uiButtonStyles(){return `
-[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
-[data-ui-button="icon"]{width:32px;height:32px}
-[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
-[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
-[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
-[data-ui-button]:disabled{opacity:.35;cursor:default}
-[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
-[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
-[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
-[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
 `;}
 
 
@@ -23687,6 +23845,34 @@ ${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-materia
 :is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
 :is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
 @media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
+
+// Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
+function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function uiAttributes(values={}){
+ return Object.entries(values).map(([key,value])=>{
+  if(!/^[a-zA-Z_:][\w:.-]*$/.test(key)||/^on/i.test(key))throw Error('Invalid UI attribute: '+key);
+  if(value==null)return '';
+  if(['disabled','hidden','required','autofocus','multiple','readonly'].includes(key))return value?` ${key}`:'';
+  return ` ${key}="${uiEscape(value)}"`;
+ }).join('');
+}
+function uiButton({text='',content,label,title,variant='icon',className='',type='button',href,disabled=false,attrs={}}={}){
+ const classes=className?` class="${uiEscape(className)}"`:'';
+ const body=content??uiEscape(text),attributes=uiAttributes({...attrs,...(label==null?{}:{'aria-label':label}),...(title==null?{}:{title}),...(disabled?{disabled:true}:{})});
+ return href==null?`<button type="${uiEscape(type)}"${classes} data-ui-button="${uiEscape(variant)}"${attributes}>${body}</button>`:`<a${classes} data-ui-button="${uiEscape(variant)}" href="${uiEscape(href)}"${attributes}>${body}</a>`;
+}
+function uiButtonStyles(){return `
+[data-ui-button]{display:flex;align-items:center;justify-content:center;box-sizing:border-box;font:inherit;font-size:12px;font-weight:400;padding:0;border:0;border-radius:4px;background:transparent;color:var(--primary-text-color,#20252b);text-decoration:none;cursor:pointer;flex:none}
+[data-ui-button="icon"]{width:32px;height:32px}
+[data-ui-button]:not(:disabled):hover{background:color-mix(in srgb,var(--primary-text-color,#20252b) 12%,var(--ha-card-background,var(--card-background-color,#fff)))}
+[data-ui-button]:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:-2px}
+[data-ui-button="icon"]:focus-visible{background:var(--secondary-background-color,#eee)}
+[data-ui-button]:disabled{opacity:.35;cursor:default}
+[data-ui-button="surface"]{height:auto;width:100%;justify-content:space-between;gap:8px;min-height:34px;text-align:start;padding:6px 8px;border-radius:5px;background:var(--secondary-background-color,#eee)}
+[data-ui-button="surface"][aria-checked="true"],[data-ui-button="surface"][aria-pressed="true"]{color:var(--primary-color,#2196f3);background:color-mix(in srgb,var(--primary-color,#2196f3) 14%,var(--ha-card-background,var(--card-background-color,#fff)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary-color,#2196f3) 55%,transparent)}
+[data-ui-button="text"]{min-height:30px;height:auto;width:auto;border-radius:5px}
+[data-ui-button="close"]{width:30px;height:30px;min-height:30px;border-radius:5px;font-size:20px;color:inherit}
 `;}
 
 
@@ -24886,17 +25072,19 @@ class CameraSnapshot{
  }
  async refresh(){
   if(!this.active||this.pending)return;
-  this.pending=true;this.failed=false;const version=++this.version;this.abort=new AbortController();this.onStatus('loading');
-  let nextUrl;
+  this.pending=true;this.failed=false;const version=++this.version,controller=new AbortController();this.abort=controller;this.onStatus('loading');
+  let nextUrl,picture,rejectAbort;
+  const aborted=new Promise((_,reject)=>{rejectAbort=()=>reject(Error('Snapshot aborted'));controller.signal.addEventListener('abort',rejectAbort,{once:true});});
+  const timeout=setTimeout(()=>controller.abort(),15000);
   try{
    if(typeof this.hass?.callApiRaw!=='function')throw Error('HA snapshot API unavailable');
-   const response=await this.hass.callApiRaw('GET','camera_proxy/'+this.entity+'?time='+Date.now(),undefined,{'Cache-Control':'no-cache'},this.abort.signal);
+   const response=await Promise.race([this.hass.callApiRaw('GET','camera_proxy/'+this.entity+'?time='+Date.now(),undefined,{'Cache-Control':'no-cache'},controller.signal),aborted]);
    if(!response?.ok)throw Error('Image request failed');
-   const blob=await response.blob();if(!blob.type.startsWith('image/'))throw Error('Invalid image response');
+   const blob=await Promise.race([response.blob(),aborted]);if(!blob.type.startsWith('image/'))throw Error('Invalid image response');
    if(version!==this.version)return;
-   nextUrl=this.url.createObjectURL(blob);const picture=this.image();picture.alt=this.options.alt;picture.style.objectFit=this.options.fit_mode;
-   const loaded=new Promise((resolve,reject)=>{picture.onload=resolve;picture.onerror=()=>reject(Error('Image decode failed'));this.abort.signal.addEventListener('abort',()=>reject(Error('Aborted')),{once:true});});
-   picture.src=nextUrl;await loaded;
+   nextUrl=this.url.createObjectURL(blob);picture=this.image();picture.alt=this.options.alt;picture.style.objectFit=this.options.fit_mode;
+   const loaded=new Promise((resolve,reject)=>{picture.onload=resolve;picture.onerror=()=>reject(Error('Image decode failed'));});
+   picture.src=nextUrl;await Promise.race([loaded,aborted]);
    if(version!==this.version)return;
    if(this.options.interactive===false){this.container.replaceChildren(picture);this.button=null;}
    else{const button=document.createElement('button');button.type='button';button.className='camera-snapshot';button.dataset.cameraDetails=this.entity;button.append(picture);this.container.replaceChildren(button);this.button=button;}
@@ -24904,7 +25092,7 @@ class CameraSnapshot{
    if(this.currentUrl)this.url.revokeObjectURL(this.currentUrl);this.currentUrl=nextUrl;nextUrl=null;
    this.lastLoaded=Date.now();this.onLoaded(this.lastLoaded);this.onStatus('ready');
   }catch{if(version===this.version){this.failed=true;this.onStatus('error');}}
-  finally{if(nextUrl)this.url.revokeObjectURL(nextUrl);if(version===this.version){this.pending=false;this.abort=null;this._schedule();}}
+  finally{clearTimeout(timeout);controller.signal.removeEventListener('abort',rejectAbort);if(picture){picture.onload=null;picture.onerror=null;}if(nextUrl)this.url.revokeObjectURL(nextUrl);if(version===this.version){this.pending=false;this.abort=null;this._schedule();}}
  }
  _schedule(){if(this.timer!=null)this.cancel(this.timer);this.timer=null;if(this.active&&this.interval>0&&!this.pending)this.timer=this.schedule(()=>{this.timer=null;this.refresh();},Math.max(5,this.interval)*1000);}
  stop(){
@@ -25505,6 +25693,7 @@ function cameraActivityTimeline(events,{name,type,t,timeZone,now=Date.now()}={})
 
 
 
+
 function cameraReplaceMarkup(node,markup){
  if(node._cameraMarkup===markup)return;node._cameraMarkup=markup;
  const focused=node.getRootNode().activeElement,identity=focused&&node.contains(focused)?['cameraAction','cameraDetails','cameraRefresh','cameraPrivacy','cameraActivity','cameraActivityPage','securityContacts','securityView','entity'].find(key=>focused.dataset[key]):null,value=identity?focused.dataset[identity]:null;
@@ -25796,7 +25985,8 @@ const cameraFeaturesView=Base=>class extends Base{
   try{
    if(typeof this._hass.callApi!=='function')throw Error('History API unavailable');
    const query=new URLSearchParams({filter_entity_id:ids.join(','),end_time:new Date(end).toISOString(),minimal_response:'',no_attributes:'',skip_initial_state:''});
-   const response=await this._hass.callApi('GET','history/period/'+encodeURIComponent(new Date(start).toISOString())+'?'+query);
+   const hass=this._hass;
+   const response=await requestWithTimeout(()=>hass.callApi('GET','history/period/'+encodeURIComponent(new Date(start).toISOString())+'?'+query));
    if(version!==this._historyVersion)return;this._historyError=false;this._historyHasLoaded=true;const events=cameraHistoryEvents(response,config,start,end);this._activity.merge(events);this._activity.events=this._activity.events.filter(event=>event.time>=start);
    for(const event of events)if(['motion','person'].includes(event.kind))this._detections.set(event.entity,Math.max(this._detections.get(event.entity)??0,event.time));
   }catch{if(version===this._historyVersion)this._historyError=true;}
@@ -26083,6 +26273,29 @@ ${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-materia
 :is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
 @media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
 `;}
+
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
 
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -26719,18 +26932,18 @@ class ShoppingCard extends HTMLElement {
   getGridOptions(){return {columns:12,rows:'auto',min_columns:6};}
   constructor() { super(); this.attachShadow({mode:'open'}); this._generation=0; this._items=null; }
   setConfig(c) { if(!/^todo\.[a-z0-9_]+$/.test(c.entity||'')) throw Error('Choose a todo entity'); const changed=this._config?.entity!==c.entity; this._config={...c}; if(changed)this._stop(true); this._render(); this._subscribe(); }
-  set hass(h) { const changed=this._hass?.connection!==h.connection; this._hass=h; if(changed)this._stop(); this._render(); this._subscribe(); }
+  set hass(h) { const changed=this._hass?.connection!==h.connection,id=this._config?.entity,signature=JSON.stringify([h.states?.[id],h.locale?.language,h.language,h.connected,h.connection?.connected]); this._hass=h; if(changed)this._stop(); if(changed||signature!==this._hassSignature){this._hassSignature=signature;this._render();} this._subscribe(); }
   get hass(){ return this._hass; }
   connectedCallback(){ this._render(); this._subscribe(); }
   disconnectedCallback(){ this._stop(); }
-  _stop(clearDraft=false){ this._generation++; this._unsubscribe?.(); this._unsubscribe=null; this._subscribed=false; this._items=null;this._adds=[];this._addQueue=null;this._pending=false;this._subscriptionError=false;this._error='';if(clearDraft){this._draft='';this._edit=null;this._confirmClear=false;this._reorder=false;} }
+  _stop(clearDraft=false){ this._generation++; stopSubscription(this._unsubscribe); this._unsubscribe=null; this._subscribed=false; this._items=null;this._adds=[];this._addQueue=null;this._pending=false;this._subscriptionError=false;this._error='';if(clearDraft){this._draft='';this._edit=null;this._confirmClear=false;this._reorder=false;} }
   _subscribe(){
     if(!this.isConnected||!this._config||!this._hass?.connection||!this.state||this._subscribed||this._subscriptionError)return;
     this._subscribed=true; const generation=this._generation,connection=this._hass.connection,entity_id=this._config.entity;
     Promise.resolve().then(()=>{
       if(generation!==this._generation)return null;
       return connection.subscribeMessage(update=>{if(generation!==this._generation)return;this._subscriptionError=false;this._items=update.items;this._render();},{type:'todo/item/subscribe',entity_id});
-    }).then(unsub=>{if(!unsub)return;if(generation!==this._generation)unsub();else this._unsubscribe=unsub;}).catch(e=>{if(generation===this._generation){this._subscribed=false;this._subscriptionError=true;this._error=e.message;this._render();}});
+    }).then(unsub=>{if(!unsub)return;if(generation!==this._generation)stopSubscription(unsub);else this._unsubscribe=unsub;}).catch(e=>{if(generation===this._generation){this._subscribed=false;this._subscriptionError=true;this._error=e.message;this._render();}});
   }
   t(n,e){return (this._hass?.locale?.language||this._hass?.language||'en').startsWith('nl')?n:e;}
   get state(){return this._hass?.states?.[this._config?.entity];}
@@ -28271,6 +28484,29 @@ window.customCards=window.customCards||[];if(!window.customCards.some(c=>c.type=
 ;
 // Eleven standalone Actions, Controls and Waste
 (()=>{
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Paint only, scoped to each caller's shadow root and explicit semantic roles.
 // Material recipes/palettes belong to the optional YAML theme, never this helper.
 // Do not use generic control selectors: swatches, state tracks and chart colors
@@ -29198,7 +29434,7 @@ class StandaloneCard extends HTMLElement{
   const c=structuredClone(config);c[key]=(c[key]||[]).map(normalizeItem);for(const e of c[key]){if(e.entity&&(!/^[a-z_]+\.[a-z0-9_]+$/.test(e.entity)||!DOMAINS[this.kind].includes(e.entity.split('.')[0])))throw Error('Unsupported entity: '+e.entity);}
   this._config=c;this._generation++;this._fetching=false;this._cache={};this._lastFetch=0;this._fingerprint=null;this._message='';this._render();this._refresh();
  }
- set hass(h){this._hass=h;this._render();this._refresh();}get hass(){return this._hass;}
+ set hass(h){if(this._hass&&this._hass.connection!==h?.connection){this._generation++;this._fetching=false;this._lastFetch=0;this._cache={};}this._hass=h;this._render();this._refresh();}get hass(){return this._hass;}
  connectedCallback(){if(this.kind==='actions')this._fingerprint=null;this._render();this._refresh();if(this.kind==='waste'){this._observeWaste();if(!this._timer)this._timer=setInterval(()=>{this._render();this._refresh();},30000);}}
  disconnectedCallback(){clearInterval(this._timer);this._timer=null;this._generation++;this._fetching=false;this._lastFetch=0;this._actionsResize?.disconnect();this._wasteResize?.disconnect();}
  getCardSize(){return Math.max(2,(this._config?.entities?.length||this._config?.actions?.length||1)+1);}
@@ -29214,7 +29450,8 @@ class StandaloneCard extends HTMLElement{
   if(this.kind!=='waste'||!this.isConnected||!this._hass?.callApi||!this._config||this._fetching||(!force&&this._lastFetch&&Date.now()-this._lastFetch<300000))return;
   const ids=[...new Set(this._config.entities.filter(e=>e.entity?.startsWith('calendar.')&&available(this.state(e.entity))).map(e=>e.entity))];if(!ids.length)return;
   const generation=this._generation;this._fetching=true;this._lastFetch=Date.now();this._render();const start=new Date();start.setUTCHours(0,0,0,0);start.setUTCDate(start.getUTCDate()-1);const end=new Date(start.getTime()+62*86400000);
-  await Promise.all(ids.map(async id=>{try{const events=await this._hass.callApi('GET',`calendars/${encodeURIComponent(id)}?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`);if(!Array.isArray(events))throw Error('Invalid calendar response');if(generation===this._generation)this._cache[id]={events};}catch{if(generation===this._generation)this._cache[id]={error:true};}}));
+  const hass=this._hass;
+  await Promise.all(ids.map(async id=>{try{const events=await requestWithTimeout(()=>hass.callApi('GET',`calendars/${encodeURIComponent(id)}?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`));if(!Array.isArray(events))throw Error('Invalid calendar response');if(generation===this._generation)this._cache[id]={events};}catch{if(generation===this._generation)this._cache[id]={error:true};}}));
   if(generation===this._generation){this._fetching=false;this._render();}
  }
  _render(){
@@ -29371,20 +29608,22 @@ class ControlsEditor extends HTMLElement{
  render(){
   if(!this._config)return;const focus=this.shadowRoot.activeElement; // Do not rebuild native HA selectors on ordinary hass updates.
   if(this._builtConfig===this._config){this.shadowRoot.querySelectorAll('ha-form').forEach(f=>{f.hass=this._hass;});return;}
+  this._expanded??=[];this.shadowRoot.querySelectorAll('details.item').forEach((box,i)=>{this._expanded[i]=box.open;});
   this._builtConfig=this._config;const key=this.kind==='actions'?'actions':'entities',items=(this._config[key]||[]).map(normalizeItem);
-  this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.item{padding:16px 0;border-top:1px solid var(--divider-color)}.bar{display:flex;align-items:center;gap:4px}.bar strong{flex:1;font-size:14px;overflow-wrap:anywhere}${uiActionButtonStyles()}.add{padding:0 16px;margin-top:12px}p{font-size:12px;color:var(--secondary-text-color);line-height:1.5}ha-form{display:block}</style><div class="main"></div><p>${this.kind==='waste'?this.t('Gebruik een datumsensor, een aftelsensor of een kalender. Automatisch herkent ISO-datums en daysTo. Kalenderafspraken worden 60 dagen vooruit geladen.','Use a date sensor, day-count sensor or calendar. Auto recognizes ISO dates and daysTo. Calendar events are loaded 60 days ahead.'):this.kind==='controls'?this.t('Voeg alleen de apparaten toe die je hier wilt bedienen. De knoppen passen zich aan de mogelijkheden aan.','Add the devices you want to control. Controls follow each entity’s capabilities.'):this.t('Voeg scènes of scripts toe. Elke actie heeft een eigen naam en icoon.','Add scenes or scripts. Each action has its own name and icon.')}</p><div class="items"></div>${uiButton({variant:'action',className:'add',text:this.t('Onderdeel toevoegen','Add item')})}`;
+  this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.item{padding:16px 0;border-top:1px solid var(--divider-color)}.bar{display:flex;align-items:center;gap:4px}.bar strong{flex:1;font-size:14px;overflow-wrap:anywhere}details.item{padding:0}details.item>summary{cursor:pointer;min-height:44px;padding:12px 0;list-style:none}details.item>summary::-webkit-details-marker{display:none}details.item>summary::before{content:"";width:7px;height:7px;flex:none;margin:0 8px 0 4px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg)}details.item[open]>summary::before{transform:rotate(45deg)}details.item>summary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}details.item>.fields{padding-bottom:16px}${uiActionButtonStyles()}.add{padding:0 16px;margin-top:12px}p{font-size:12px;color:var(--secondary-text-color);line-height:1.5}ha-form{display:block}</style><div class="main"></div><p>${this.kind==='waste'?this.t('Gebruik een datumsensor, een aftelsensor of een kalender. Automatisch herkent ISO-datums en daysTo. Kalenderafspraken worden 60 dagen vooruit geladen.','Use a date sensor, day-count sensor or calendar. Auto recognizes ISO dates and daysTo. Calendar events are loaded 60 days ahead.'):this.kind==='controls'?this.t('Voeg alleen de apparaten toe die je hier wilt bedienen. De knoppen passen zich aan de mogelijkheden aan.','Add the devices you want to control. Controls follow each entity’s capabilities.'):this.t('Voeg scènes of scripts toe. Elke actie heeft een eigen naam en icoon.','Add scenes or scripts. Each action has its own name and icon.')}</p><div class="items"></div>${uiButton({variant:'action',className:'add',text:this.t('Onderdeel toevoegen','Add item')})}`;
   this.form(this.shadowRoot.querySelector('.main'),[{name:'title',selector:{text:{}}},...(this.kind==='waste'?[]:[{name:'confirmation',selector:{boolean:{}}}]),...(this.kind==='actions'?[{name:'columns',selector:{number:{min:1,max:6,step:1,mode:'box'}}}]:[])],this.kind==='actions'?{...this._config,columns:this._config.columns??3}:this._config,v=>{this.emit({...this._config,...v});});
   items.forEach((e,i)=>{
-   const box=document.createElement('section');box.className='item';box.innerHTML=`<div class="bar"><strong>${esc(e.name||e.entity||this.t('Nieuw onderdeel','New item'))}</strong>${uiButton({variant:'action-icon',label:this.t('Omhoog','Move up'),text:'↑',disabled:i===0,attrs:{'data-move':-1}})}${uiButton({variant:'action-icon',label:this.t('Omlaag','Move down'),text:'↓',disabled:i===items.length-1,attrs:{'data-move':1}})}${uiButton({variant:'action-danger',label:this.t('Verwijderen','Remove'),text:'×',attrs:{'data-remove':''}})}</div><div class="fields"></div>`;
+   const collapsible=this.kind==='waste',bar=collapsible?'summary':'div';
+   const box=document.createElement(collapsible?'details':'section');box.className='item';if(collapsible)box.open=this._expanded[i]??items.length===1;box.innerHTML=`<${bar} class="bar"><strong>${esc(e.name||e.entity||this.t('Nieuw onderdeel','New item'))}</strong>${uiButton({variant:'action-icon',label:this.t('Omhoog','Move up'),text:'↑',disabled:i===0,attrs:{'data-move':-1}})}${uiButton({variant:'action-icon',label:this.t('Omlaag','Move down'),text:'↓',disabled:i===items.length-1,attrs:{'data-move':1}})}${uiButton({variant:'action-danger',label:this.t('Verwijderen','Remove'),text:'×',attrs:{'data-remove':''}})}</${bar}><div class="fields"></div>`;
    const schema=[{name:'entity',required:true,selector:{entity:{domain:DOMAINS[this.kind]}}},{name:'name',selector:{text:{}}},{name:'icon',selector:{icon:{}}}];
    if(this.kind==='actions')schema.push({name:'description',selector:{text:{}}});
    if(this.kind==='waste')schema.push({name:'source',selector:{select:{options:[{value:'auto',label:this.t('Automatisch','Auto')},{value:'date',label:this.t('Datum','Date')},{value:'days',label:this.t('Aantal dagen','Day count')}]}}},{name:'attribute',selector:{text:{}}},{name:'color',selector:{color_rgb:{}}},{name:'filter',selector:{text:{}}});
    this.form(box.querySelector('.fields'),schema,{...e,...(this.kind==='waste'?{source:e.source||'auto',color:Array.isArray(e.color)?e.color:/^#[\da-f]{6}$/i.test(e.color||'')?[1,3,5].map(n=>parseInt(e.color.slice(n,n+2),16)):undefined}:{})},v=>{const next=(this._config[key]||[]).map(normalizeItem);next[i]={...next[i],...v};this.emit({...this._config,[key]:next});});
-   box.querySelector('[data-remove]').onclick=()=>{const next=(this._config[key]||[]).filter((_,n)=>n!==i);this.emit({...this._config,[key]:next});this.render();};
-   box.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const next=[...this._config[key]],j=i+Number(b.dataset.move);[next[i],next[j]]=[next[j],next[i]];this.emit({...this._config,[key]:next});this.render();});
+   box.querySelector('[data-remove]').onclick=event=>{event.preventDefault();const next=(this._config[key]||[]).filter((_,n)=>n!==i);box.remove();this._expanded.splice(i,1);this.emit({...this._config,[key]:next});this.render();};
+   box.querySelectorAll('[data-move]').forEach(b=>b.onclick=event=>{event.preventDefault();const next=[...this._config[key]],j=i+Number(b.dataset.move);[next[i],next[j]]=[next[j],next[i]];if(collapsible){const entries=[...this.shadowRoot.querySelectorAll('details.item')];[entries[i].open,entries[j].open]=[entries[j].open,entries[i].open];}this.emit({...this._config,[key]:next});this.render();});
    this.shadowRoot.querySelector('.items').append(box);
   });
-  this.shadowRoot.querySelector('.add').onclick=()=>{this.emit({...this._config,[key]:[...(this._config[key]||[]),{entity:''}]});this.render();};
+  this.shadowRoot.querySelector('.add').onclick=()=>{this._expanded[items.length]=true;this.emit({...this._config,[key]:[...(this._config[key]||[]),{entity:''}]});this.render();};
  }
 }
 for(const [tag,cls] of [['eleven-controls-editor',ControlsEditor],[TYPES.actions,ActionsCard],[TYPES.controls,ControlsCard],[TYPES.waste,WasteCard]])if(!customElements.get(tag))customElements.define(tag,tag.endsWith('-editor')?cls:withCardBackground(cls));
@@ -29400,6 +29639,29 @@ for(const kind of Object.keys(TYPES))if(!window.customCards.some(c=>c.type===TYP
 // Eleven Appliance Planner — standalone advice; optional explicit integration
 (()=>{
 'use strict';
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function uiAttributes(values={}){
@@ -30603,6 +30865,7 @@ ha-card>p.muted{margin:12px 0 0;font-size:12px;line-height:1.5}
 
 
 
+
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=v=>JSON.parse(JSON.stringify(v));
 
@@ -30663,18 +30926,18 @@ class ElevenAppliancePlanner extends HTMLElement{
   this.loading=true;this.result=null;this.message='';this.error=false;this.render();
   try{
    const deadline=localInputISO(this.form.deadline,this.zone),now=new Date();
-   const rows=await this.tariffs(now);
+   const rows=await requestWithTimeout(()=>this.tariffs(now));
    if(epoch!==this.epoch)return;
    this.rows=rows;
    let result;
    if(this.entityOnline){
-    try{result=await this.command('preview',this.payload());if(epoch!==this.epoch)return;this.backendOutage=false;}
+    try{result=await requestWithTimeout(()=>this.command('preview',this.payload()));if(epoch!==this.epoch)return;this.backendOutage=false;}
     catch(error){if(!['not_loaded','connection_lost','disconnected','cannot_connect'].includes(error.code))throw error;if(epoch!==this.epoch)return;this.backendOutage=true;result=advise(rows,p,now,deadline);}
    }else result=advise(rows,p,now,deadline);
    if(epoch!==this.epoch)return;
    if(result.price_intervals)this.rows=canonicalPrices(result.price_intervals);
    this.result=result;
-  }catch(err){if(epoch!==this.epoch)return;this.error=true;this.message=err.message||String(err);this.rows=[];}
+  }catch(err){if(epoch!==this.epoch)return;this.tariffRequest=null;this.error=true;this.message=err.message||String(err);this.rows=[];}
   finally{if(epoch===this.epoch){this.loading=false;this.render();}}
  }
  async act(operation,id){
@@ -31546,7 +31809,12 @@ class RoomCard extends HTMLElement{
  ],computeLabel:s=>({name:'Ruimtenaam',icon:'Icoon',scenes:'Scenes',show_scene_names:'Tekst bij sceneknoppen',lights:'Lampen (geen groepen én hun leden)',temperature_entity:'Temperatuursensor',humidity_entity:'Luchtvochtigheidssensor',navigation_path:'Pad naar ruimtepagina',note:'Toelichting / testkoppeling'}[s.name]??s.name)};}
  static getStubConfig(){return {name:'Nieuwe ruimte',icon:'mdi:home-outline',lights:[]};}
  setConfig(c){this._config=normalizeRoom(c);this._sceneError=false;this._render();}
- set hass(h){this._hass=h;this._render();}get hass(){return this._hass;}
+ set hass(h){
+  const c=this._config,signature=JSON.stringify([h?.connected,h?.connection?.connected,typeof h?.callService,h?.language,h?.locale?.language,c&&[...c.lights,...c.scenes,c.temperature_entity,c.humidity_entity].map(id=>h?.states?.[id])]);this._hass=h;
+  // Keep a value snapshot: fixture/custom hosts can mutate their states in place.
+  // Always retain the latest hass for actions, including ignored sensor updates.
+  if(signature!==this._roomSignature){this._roomSignature=signature;this._render();}
+ }get hass(){return this._hass;}
  getCardSize(){return 2;}
  getGridOptions(){return {columns:6,min_columns:6,rows:'auto',min_rows:2};}
  _moreInfo(entityId){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId},bubbles:true,composed:true}));}
@@ -32376,7 +32644,12 @@ class ElevenSceneEngineCard extends HTMLElement {
     validConfig(config); this._config = {...config}; this._generation++; this._feedback = ''; this._error = false; this._refreshed = false; this._watch = null; this._close(); this._render();
   }
   set hass(hass) {
+    const a=hass?.states?.[this._config?.entity]?.attributes??{};
     this._hass = hass;
+    const scenes=[a.effective_request?.scene,a.default_scene,hass?.states?.[this._config?.entity]?.state,...[a.requests,a.active_requests,a.non_active_requests].flatMap(rows=>Array.isArray(rows)?rows.map(row=>row?.scene):[])];
+    const ids=[this._config?.entity,this._config?.reset_entity,...scenes];
+    const signature=JSON.stringify([hass.connected,hass.connection?.connected,!!hass.services?.button?.press,typeof hass.callService,hass.locale?.language,ids.map(id=>hass.states?.[id])]);
+    if(signature===this._sceneSignature)return;this._sceneSignature=signature;
     if (this._watch && this._fingerprint() !== this._watch && this._entityAvailable()) this._refreshed = true;
     this._render();
   }
