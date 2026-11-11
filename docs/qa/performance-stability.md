@@ -118,13 +118,25 @@ from synthetic fixtures, not dashboard-wide speed guarantees or CI thresholds.
 - CI retains the existing all-card render/migration command and adds the new
   update/resource stress case as a separate step.
 
-The optional older `browser-energy-flow.mjs`, `browser-car-evcc.mjs` and
-`browser-weather.mjs` runners encountered pre-existing visual/selector
-expectation failures. They are not counted as passing. The same failures were
-reproduced on the baseline: Energy's `nodes share metric rounding`, EVCC's null
-`getAttribute` selector, and Weather's `background lanes fades on a shared layer
-before clipping`. Required CI uses the maintained all-card suite and Camera
-runner instead.
+Follow-up: all three previously failing browser runners now pass and run in CI.
+Their selectors and expectations follow the current background/editor wrappers,
+HA theme tokens, shared battery bars, image preloading and responsive controls.
+The suites retain interaction, accessibility, narrow layout and lifecycle checks;
+Weather/EVCC comparisons allow their intentional text/numeric typography and
+card-specific density instead of requiring identical pixels.
+
+The full runners also exposed two source regressions: Weather's DOM patcher
+moved live content around the injected background and reset forecast scroll;
+Energy's single distribution bars inherited the new 12px default while stacked
+bars remained 8px. The patcher now preserves wrapper-owned nodes, and Energy
+sets the shared bar height in its own detail scope. Browser checks assert a
+nonzero scroll offset survives telemetry, background/style nodes retain identity,
+and single/stacked/device distribution bars all remain 8px.
+
+Final local Chrome results: 428 Energy example checks plus 166 detail checks;
+72 EVCC interaction checks plus 414 Gallery checks and isolated test-bundle/
+reduced-motion checks; 704 Weather checks plus 16 cross-card comparisons,
+header/icon studies, reduced motion and offscreen lifecycle checks.
 
 ## Limits
 

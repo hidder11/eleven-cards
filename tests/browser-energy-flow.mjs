@@ -1,9 +1,9 @@
-// Optional rendered checks using Chrome DevTools, without screenshots,
+// Rendered CI and local checks using Chrome DevTools, without screenshots,
 // recordings, external services, or production Home Assistant data.
 // Run with Node.js 22+; CHROME_PATH can select a Chrome executable.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile, mkdtemp, access} from 'node:fs/promises';
+import {readFile, mkdtemp, mkdir, access} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {resolve, extname, sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -12,7 +12,8 @@ import {fileURLToPath} from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url)).replace(/[\\/]$/, '');
 const chrome = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 await access(chrome);
-const profile = await mkdtemp(resolve(root, '.cache/evcc-browser-'));
+await mkdir(resolve(root,'.cache'),{recursive:true});
+const profile = await mkdtemp(resolve(root, '.cache/energy-flow-browser-'));
 const mime = {'.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.css': 'text/css'};
 const server = createServer(async (request, response) => {
  const path = resolve(root, '.' + decodeURIComponent(new URL(request.url, 'http://localhost').pathname));
@@ -21,7 +22,7 @@ const server = createServer(async (request, response) => {
  catch { response.writeHead(404).end(); }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const browser = spawn(chrome, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', 'about:blank'], {windowsHide: true, stdio: 'ignore'});
+const browser = spawn(chrome, ['--headless=new', ...(process.platform==='linux'?['--no-sandbox']:[]), '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', 'about:blank'], {windowsHide: true, stdio: 'ignore'});
 const watchdog = setTimeout(() => { browser.kill(); server.closeAllConnections(); console.error('Browser verification timed out'); process.exit(1); }, 45000);
 let socket;
 try {
