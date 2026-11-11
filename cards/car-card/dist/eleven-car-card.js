@@ -782,6 +782,14 @@ button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]
 [data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
 [data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
 @supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
+/* Compact header readings share one geometry across Weather, Energy and Car.
+   Keep diagram endpoints and standard-density card layouts independent. */
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node){padding:8px;min-height:44px;column-gap:6px;row-gap:2px}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-title,.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-info{font-size:11px;line-height:1.4}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-value{display:block;grid-column:1;font-size:20px;line-height:1.25}
+.header-region [data-ui-metric][data-density=compact][data-value-kind=text]:not(.circle-node) .ui-metric-value{font-size:18px;line-height:1.3}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-unit{font-size:11px;line-height:1.4;margin-inline-start:4px}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-icon{grid-row:1/span 2;width:20px;height:20px;transform:translate(2px,-2px)}
 `;}
 
 
@@ -1908,8 +1916,10 @@ ${uiPrimaryValueStyles()}${uiMetricStyles()}
 .content[data-evcc] .car-stage::before,.content[data-evcc] .car-stage::after{content:none}
 .content[data-evcc] .car-stage .battery-row{grid-column:1;grid-row:1;min-width:0;margin:0;z-index:1}
 .content[data-evcc] .battery-row [data-ui-primary-value]{max-width:100%;width:100%}
-.content[data-evcc] .car-stage .picture{position:relative;grid-column:2;grid-row:1;width:100%;height:112px;min-height:0;margin:0;inset:auto;overflow:hidden;z-index:0}
-.content[data-evcc] .picture img{position:absolute;width:100%;height:100%;left:calc(50% + var(--evcc-image-offset-x,0px));bottom:calc(-1 * var(--evcc-image-offset-y,0px));max-width:none;margin:0;object-fit:contain;filter:none;transform:translateX(-50%) scale(var(--evcc-image-scale,1));transform-origin:center center}
+.content[data-evcc] .car-stage .picture{position:relative;grid-column:2;grid-row:1;width:100%;height:auto;aspect-ratio:3.05;min-height:0;margin:0;inset:auto;overflow:hidden;z-index:0}
+.content[data-evcc][data-density=compact] .car-stage .picture{height:auto;aspect-ratio:3.5}
+.content[data-evcc] .car-stage .picture:has(ha-icon),.content[data-evcc] .car-stage .picture:has(img[hidden]){min-height:88px;aspect-ratio:auto}
+.content[data-evcc] .picture img{position:absolute;inset:0;left:var(--evcc-image-offset-x,0px);bottom:auto;top:var(--evcc-image-offset-y,0px);width:100%;height:100%;max-width:none;margin:0;object-fit:contain;filter:none;transform:scale(var(--evcc-image-scale,1));transform-origin:center}
 .content[data-evcc] .picture ha-icon{--mdc-icon-size:64px}
 .content[data-evcc] .battery-meta{display:none}
 .hero>.battery-progress{margin-top:8px}
@@ -2646,7 +2656,7 @@ class CarCard extends EvccCard {
    /* Regular Auto only: EVCC keeps its independent presentation. */
    :host,ha-card{height:auto;min-height:0}.content{height:auto;overflow:visible}
    .gallery-top{margin:0;padding:0;background:none}.hero{margin:0;padding:0}
-   .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;padding:0;min-height:0}
+   .car-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:12px;padding:0;min-height:0}
    .car-stage .battery-row{grid-column:1;grid-row:1;align-items:stretch}
    .car-stage::before,.car-stage::after{content:none}
    .battery-row [data-ui-primary-value]{max-width:100%}

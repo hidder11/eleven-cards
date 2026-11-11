@@ -74,6 +74,14 @@ See [interactive examples](qa/metric-examples.html) for energy, car, weather, un
 
 Text statuses in Car and Weather share the `data-value-kind="text"` metric treatment: 18px, weight 600 and line-height 1.3 in both density modes. Numeric values retain their measurement typography. Native metric buttons use a background-only hover; text, icons and units keep their normal colours and no brightness filter is applied. The [EVCC configuration examples](../review/detail.html?card=car-evcc) demonstrate the shared charging bar, while the [Controls examples](../review/detail.html?card=controls-card) show native sliders.
 
+Compact header metrics in Weather, Energy and Car (including EVCC) share one
+geometry from `uiMetricStyles()`: 8px padding, a 2px title/value gap, 11px labels,
+20px numeric values and 20px icons. Text statuses retain their 18px treatment.
+The shared header rules take precedence over card-specific standard styles;
+diagram endpoint buttons keep their own geometry. Long labels and optional
+information can increase the height naturally. All metric actions retain at
+least a 44px target. Standard-density layouts remain unchanged.
+
 ## Bars and sliders
 
 [ui-bar.js](ui-bar.js) supplies `uiBar()`, `uiSlider()`, `syncUISlider()` and `uiBarStyles()`. Car, EVCC, Energy details and Controls share the selected recessed 12px track, rounded fill and native slider thumb. Include the stylesheet once per shadow root; `uiDetailSurfaceStyles()` already includes it. Bar widths and target markers are clamped to finite values; unknown measurements have no progress value. Text/attributes are escaped. `decorative:true` hides bars whose values are already given in adjacent readings. `min`/`max` support other numeric domains. Slider limits, steps, disabled states and native keyboard behavior are preserved. Call `syncUISlider(input)` from existing input handlers; it only updates the filled track and never sends a service command.

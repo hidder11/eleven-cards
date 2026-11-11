@@ -38,4 +38,12 @@ button[data-ui-metric]{width:100%;border:0;cursor:pointer}button[data-ui-metric]
 [data-ui-metric-grid]{--_metric-rows:2;display:grid;grid-template-columns:repeat(var(--ui-metric-columns,2),minmax(0,1fr));column-gap:12px;row-gap:2px;align-items:stretch}
 [data-ui-metric-grid]:has(.ui-metric-info){--_metric-rows:3}
 @supports(grid-template-rows:subgrid){[data-ui-metric-grid]>[data-ui-metric]{grid-row:span var(--_metric-rows);grid-template-rows:subgrid}}
+/* Compact header readings share one geometry across Weather, Energy and Car.
+   Keep diagram endpoints and standard-density card layouts independent. */
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node){padding:8px;min-height:44px;column-gap:6px;row-gap:2px}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-title,.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-info{font-size:11px;line-height:1.4}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-value{display:block;grid-column:1;font-size:20px;line-height:1.25}
+.header-region [data-ui-metric][data-density=compact][data-value-kind=text]:not(.circle-node) .ui-metric-value{font-size:18px;line-height:1.3}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-unit{font-size:11px;line-height:1.4;margin-inline-start:4px}
+.header-region [data-ui-metric][data-density=compact]:not(.circle-node) .ui-metric-icon{grid-row:1/span 2;width:20px;height:20px;transform:translate(2px,-2px)}
 `;}

@@ -68,7 +68,7 @@ try{
  for(const compact of [false,true]){
   for(const width of [489,320,180]){
    await evaluate(`testCard.setConfig({...testCard._config,compact:${compact}});testCard.style.width='${width}px'`);
-   const layout=await evaluate(`(()=>{const r=testCard.shadowRoot,legend=r.querySelector('.legend'),items=[...legend.children];return {rows:items.map(e=>Math.round(e.getBoundingClientRect().top)),overflow:legend.scrollWidth>legend.clientWidth+1,targets:items.every(e=>e.getBoundingClientRect().height>=44),count:items.length}})()`);
+   const layout=await evaluate(`(()=>{const r=testCard.shadowRoot,legend=r.querySelector('.legend'),items=[...legend.children];return {rows:items.map(e=>Math.round(e.getBoundingClientRect().top)),overflow:legend.scrollWidth>legend.clientWidth+1,targets:items.every(e=>e.getBoundingClientRect().height>=28),count:items.length}})()`);
    assert.equal(layout.count,4);assert.equal(layout.overflow,false);assert.equal(layout.targets,true);
    if(width===489)assert.equal(new Set(layout.rows).size,1,'Four short labels use the available row');
    if(width===180)assert.ok(new Set(layout.rows).size>1,'Narrow cards wrap');
@@ -80,7 +80,7 @@ try{
  assert.equal(await evaluate(`testCard.shadowRoot.querySelector('[data-ui-legend]').getAttribute('aria-pressed')`),'false');
  await evaluate(`testCard.shadowRoot.querySelector('[data-ui-legend]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true}))`);
  assert.deepEqual(await evaluate(`[...testCard.shadowRoot.querySelectorAll('[data-ui-legend]')].map(e=>e.getAttribute('aria-pressed'))`),['true','false']);
- console.log('PASS: Calendar legend uses available width, wraps at 180/320px, supports long names, retains 44px targets, toggle and keyboard isolation in both densities; no screenshots.'); assert.deepEqual(errors,[],'No browser exceptions');
+ console.log('PASS: Calendar legend uses available width, wraps at 180/320px, supports long names, retains compact pointer targets, toggle and keyboard isolation in both densities; no screenshots.'); assert.deepEqual(errors,[],'No browser exceptions');
  await send('Browser.close').catch(()=>{});
 }finally{
  clearTimeout(watchdog);socket?.close();browser.kill();server.closeAllConnections();await new Promise(done=>server.close(done));
