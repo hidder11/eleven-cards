@@ -49,6 +49,10 @@ jobs:
           node tests/browser-camera.mjs
       - name: All-card cold-start render and migration regressions (synthetic HA)
         run: python tests/browser-all-cards-render.py
+      - name: History axis and legend units (synthetic HA, no screenshots)
+        run: |
+          python tests/browser-history-axis-units.py
+          HISTORY_UNITS_ARTIFACT=standalone python tests/browser-history-axis-units.py
       - name: Decorative background defaults and graph exclusion (synthetic HA)
         run: |
           python tests/browser-background-default.py

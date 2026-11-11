@@ -19,7 +19,7 @@ for(const Class of [HistoryGraphCard,BarChartCard])test(`${Class.name}: live sta
   assert.equal(card._legendValue(card._series[0]),4);
   card.hass={...base,states:{...base.states,'sensor.b':{state:'3',attributes:{unit_of_measurement:'W'}}}};
   assert.equal(card._legendValue(card._series[0]),5);
-  assert.match(card.shadowRoot.innerHTML,Class===BarChartCard?/<strong>5 W<\/strong>/:/<strong>5<\/strong>/);
+  assert.match(card.shadowRoot.innerHTML,/<strong>5 W<\/strong>/);
   card.hass={...base,states:{...base.states,'sensor.b':{state:'unavailable',attributes:{unit_of_measurement:'W'}}}};
   assert.equal(card._legendValue(card._series[0]),null,'missing contributor is not zero');
  }finally{card.disconnectedCallback();}
