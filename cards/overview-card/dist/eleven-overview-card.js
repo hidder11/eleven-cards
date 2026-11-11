@@ -989,7 +989,7 @@ class OverviewCard extends HTMLElement{
   const title=this.shadowRoot.querySelector('h2'),period=this.shadowRoot.querySelector('.period');
   const titleMinimum=wordWidth(title);ctx.font=getComputedStyle(period).font;
   this.shadowRoot.querySelector('header').classList.toggle('stacked',titleMinimum+12+ctx.measureText(period.textContent).width>grid.clientWidth);
-  const layout=overviewSectionLayout(this._config),gap=layout.gap,inset=layout.padding*2+2;
+  const layout=overviewSectionLayout(this._config),gap=layout.gap,inset=layout.padding*2;
   let minimum=layout.minimum;const values=[];
   this.shadowRoot.querySelectorAll('.metric').forEach(metric=>{
    const value=metric.querySelector('.value');value.style.removeProperty('font-size');
@@ -1033,7 +1033,7 @@ header.stacked .period{text-align:start}
 .period{font-size:12px;line-height:1.4;text-align:end;white-space:nowrap;flex:0 0 auto;color:var(--secondary-text-color,#666)}
 .period.synced{flex:0 1 auto;white-space:normal;overflow-wrap:normal;max-width:100%;text-align:start}
 .grid{display:grid;grid-template-columns:repeat(var(--overview-columns,1),minmax(0,1fr));column-gap:${layout.gap}px;row-gap:0;align-items:stretch}
-.metric{appearance:none;font:inherit;color:inherit;background:var(--eleven-material-plot-background,transparent);border:1px solid var(--divider-color,#ddd);border-radius:10px;text-align:start;min-width:0;min-height:44px;padding:${layout.padding}px;cursor:pointer;display:grid;grid-template-rows:subgrid;grid-row:span ${2+(c.show_graph?1:0)+(c.show_delta?2:0)};align-content:start;margin-bottom:${layout.gap}px}
+.metric{appearance:none;font:inherit;color:inherit;background:var(--eleven-material-plot-background,transparent);border:0;border-radius:10px;text-align:start;min-width:0;min-height:44px;padding:${layout.padding}px;cursor:pointer;display:grid;grid-template-rows:subgrid;grid-row:span ${2+(c.show_graph?1:0)+(c.show_delta?2:0)};align-content:start;margin-bottom:${layout.gap}px}
 .metric:focus-visible,.retry:focus-visible{outline:2px solid var(--primary-color,#2196f3);outline-offset:3px}
 .label{font-size:13px;color:var(--secondary-text-color,#666);line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:baseline;gap:7px;min-width:0}
 .label i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--series-color);flex-shrink:0}
@@ -1065,7 +1065,7 @@ ${c.section_size==='compact'?`
 .compact-change .caption{flex:1 1 0;min-width:0}
 `:''}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
-${cardThemeStyles({wells:'.metric',controls:'.retry'})}</style><ha-card><div class="content"><header><h2>${esc(c.title)}</h2><span class="period${synced?' synced':''}">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span>${uiButton({variant:'action',className:'retry',text:dutch?'Opnieuw':'Retry'})}</div>`:''}</div></ha-card>`;
+${cardThemeStyles({plots:'.metric',controls:'.retry'})}</style><ha-card><div class="content"><header><h2>${esc(c.title)}</h2><span class="period${synced?' synced':''}">${period}</span></header><div class="grid">${cells}</div>${this._status==='error'?`<div class="error" role="status"><span>${synced?(dutch?'Geschiedenis kon niet worden geladen.':'History could not be loaded.'):(dutch?'Geschiedenis kon niet worden geladen. Actuele waarden blijven beschikbaar.':'History could not be loaded. Live values remain available.')}</span>${uiButton({variant:'action',className:'retry',text:dutch?'Opnieuw':'Retry'})}</div>`:''}</div></ha-card>`;
   this.shadowRoot.querySelectorAll('.metric').forEach(b=>{b.onclick=()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:b.dataset.entity},bubbles:true,composed:true}));if(b.dataset.entity===focus)b.focus();});const retry=this.shadowRoot.querySelector('.retry');if(retry)retry.onclick=()=>this._refresh();if(retryFocus)(retry??this.shadowRoot.querySelector('.metric'))?.focus();this._observeLayout();
  }
 }

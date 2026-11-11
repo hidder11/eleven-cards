@@ -92,3 +92,20 @@ test('missing or unsafe entity URLs use bounded retries and recover when attribu
  hass.states['image.car'].attributes.entity_picture='/local/car.png';image.update(hass,'image.car');
  assert.equal(images.length,1);images[0].onload();assert.equal(image.status,'ready');
 });
+
+test('image entities use the current access token before entity_picture is populated or refreshed',t=>{
+ const {image,hass,images}=fixture(t),entity=hass.states['image.car'];
+ entity.state='unknown';entity.attributes={access_token:'first & token'};
+ image.update(hass,'image.car');
+ let url=new URL(images[0].src);
+ assert.equal(url.pathname,'/api/image_proxy/image.car');
+ assert.equal(url.searchParams.get('token'),'first & token');
+ assert.equal(url.searchParams.get('state'),'unknown');
+ images[0].onload();
+ entity.attributes={access_token:'new-token',entity_picture:'/api/image_proxy/image.car?token=stale'};
+ image.update(hass,'image.car');
+ url=new URL(images[1].src);assert.equal(url.searchParams.get('token'),'new-token');
+ assert.equal(image.image,images[0],'keep the last successful image during token renewal');
+ images[1].onload();assert.equal(image.image,images[1]);
+ image.update(hass,'image.car');assert.equal(images.length,2,'no reload on ordinary hass updates');
+});
