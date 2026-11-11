@@ -93,3 +93,17 @@ test('thumbnail snapshots render a plain image without nested controls or pollin
  assert.equal(f.container.child,f.images[0]);assert.equal(f.snapshot.button,null);assert.equal(f.scheduled.length,0);
  f.snapshot.stop();assert.equal(f.images[0].removed,true);assert.equal(f.revoked.length,1);assert.equal(f.snapshot.picture,null);
 });
+
+for(const stage of ['request','body','decode'])test(`snapshot deadline recovers a hung ${stage} and releases its resources`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ let signal;
+ const f=snapshotFixture((...args)=>{signal=args.at(-1);return stage==='request'?new Promise(()=>{}):Promise.resolve({ok:true,blob:()=>stage==='body'?new Promise(()=>{}):Promise.resolve({type:'image/jpeg'})});});
+ f.snapshot.update(f.hass,'camera.front',{interval:10,interactive:false},true);await tick();
+ assert.equal(f.snapshot.pending,true);
+ t.mock.timers.tick(15000);await tick();
+ assert.equal(signal.aborted,true);assert.equal(f.snapshot.pending,false);assert.equal(f.statuses.at(-1),'error');assert.equal(f.loaded.length,0);
+ assert.equal(f.scheduled.at(-1).delay,10000);
+ if(stage==='decode'){assert.equal(f.revoked.length,1);assert.equal(f.images[0].onload,null);}
+ f.scheduled.at(-1).callback();assert.equal(f.snapshot.pending,true);
+ f.snapshot.stop();await tick();assert.equal(f.snapshot.pending,false);
+});

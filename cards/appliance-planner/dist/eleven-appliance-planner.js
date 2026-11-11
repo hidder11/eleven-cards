@@ -1,6 +1,29 @@
 // Eleven Appliance Planner — standalone advice; optional explicit integration
 (()=>{
 'use strict';
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
 function uiEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function uiAttributes(values={}){
@@ -1204,6 +1227,7 @@ ha-card>p.muted{margin:12px 0 0;font-size:12px;line-height:1.5}
 
 
 
+
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=v=>JSON.parse(JSON.stringify(v));
 
@@ -1264,18 +1288,18 @@ class ElevenAppliancePlanner extends HTMLElement{
   this.loading=true;this.result=null;this.message='';this.error=false;this.render();
   try{
    const deadline=localInputISO(this.form.deadline,this.zone),now=new Date();
-   const rows=await this.tariffs(now);
+   const rows=await requestWithTimeout(()=>this.tariffs(now));
    if(epoch!==this.epoch)return;
    this.rows=rows;
    let result;
    if(this.entityOnline){
-    try{result=await this.command('preview',this.payload());if(epoch!==this.epoch)return;this.backendOutage=false;}
+    try{result=await requestWithTimeout(()=>this.command('preview',this.payload()));if(epoch!==this.epoch)return;this.backendOutage=false;}
     catch(error){if(!['not_loaded','connection_lost','disconnected','cannot_connect'].includes(error.code))throw error;if(epoch!==this.epoch)return;this.backendOutage=true;result=advise(rows,p,now,deadline);}
    }else result=advise(rows,p,now,deadline);
    if(epoch!==this.epoch)return;
    if(result.price_intervals)this.rows=canonicalPrices(result.price_intervals);
    this.result=result;
-  }catch(err){if(epoch!==this.epoch)return;this.error=true;this.message=err.message||String(err);this.rows=[];}
+  }catch(err){if(epoch!==this.epoch)return;this.tariffRequest=null;this.error=true;this.message=err.message||String(err);this.rows=[];}
   finally{if(epoch===this.epoch){this.loading=false;this.render();}}
  }
  async act(operation,id){

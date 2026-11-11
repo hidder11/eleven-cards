@@ -1,4 +1,5 @@
 import {cardThemeStyles} from '../../../shared/card-theme.js';
+import {stopSubscription} from '../../../shared/request.js';
 import {uiPrimaryValue,uiPrimaryValueStyles} from '../../../shared/ui-primary-value.js';
 import {uiMetric,uiMetricStyles} from '../../../shared/ui-metric.js';
 import {uiEscape,uiButton} from '../../../shared/ui-button.js';
@@ -41,7 +42,7 @@ export class WeatherCard extends HTMLElement {
  getGridOptions(){return {columns:12,min_columns:6,rows:this.getCardSize(),min_rows:3};}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}
  _forecastEnabled(){return weatherVisibleTabs(this._config).length>0;}
- _stopForecast(){this._generation++;try{this._unsubscribe?.();}catch{}this._unsubscribe=null;}
+ _stopForecast(){this._generation++;stopSubscription(this._unsubscribe);this._unsubscribe=null;}
  _statusMarkup(attributes,available,state,nl){
   const metric=weatherField(this._config,'metric_status',attributes,this._hass,available);if(!metric)return '';
   const condition=this._config.metric_status==='condition',id=metric.entity||(this._config.metric_status==='custom'?'':this._config.entity);
@@ -78,7 +79,7 @@ export class WeatherCard extends HTMLElement {
     this._forecast=Array.isArray(payload?.forecast)?payload.forecast:[];this._render();
    },{type:'weather/subscribe_forecast',entity_id:this._config.entity,forecast_type:type})).then(unsubscribe=>{
     if(typeof unsubscribe!=='function')return;
-    if(!this._attached||generation!==this._generation){try{unsubscribe();}catch{}}else this._unsubscribe=unsubscribe;
+    if(!this._attached||generation!==this._generation)stopSubscription(unsubscribe);else this._unsubscribe=unsubscribe;
    },fail);
   }catch{fail();}
  }

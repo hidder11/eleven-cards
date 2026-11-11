@@ -1598,7 +1598,7 @@ const evccHistoryMethods = {
   this._historyVersion = (this._historyVersion || 0) + 1; this._historyKey = null; this._historyConnectionKey = null; this._historySession = null; this._historyMissingSession = false; this._historyData = []; this._historyLoading = false; this._historyError = false; this._historyRequestedAt = 0; this._historyIndex = null;
  },
  _syncHistory() {
-  if (!this.isConnected || this._offline() || !this._config?.show_session || this._activeTab !== 'session') return;
+  if (!this.isConnected || globalThis.document?.hidden || this.hasAttribute?.('data-motion-paused') || this._offline() || !this._config?.show_session || this._activeTab !== 'session') return;
   const id = this._entities.power, unit = this._hass.states?.[id]?.attributes?.unit_of_measurement;
   const key = `${id}|${unit}`;
   const connectedId = this._entities.connected, connected = this._hass.states?.[connectedId];
@@ -1986,9 +1986,10 @@ class EvccCard extends HTMLElement {
  constructor() { super(); this.attachShadow({mode: 'open'}); this._registry = []; this._actionVersion = 0; this._solarVersion = 0; }
  setConfig(config) { this._cancelMode(); this._cancelSolar(); this._actionError = null; this._solarError = null; this._config = normalizeEvccConfig(config); this._signature = null; this._render(); }
  connectedCallback() { this._observeMotion(); this._ensureClock(); this._render(); }
- _observeMotion() { this._motionCleanup?.(); this._motionCleanup=observeCardMotion(this); }
+ _observeMotion() { this._motionCleanup?.(); this._motionCleanup=observeCardMotion(this,()=>{this._ensureClock();this._render();this._syncHistory();}); }
  _ensureClock() {
-  if (!this.isConnected || this._clockTimer) return;
+  if (!this.isConnected || this._config?.evcc_enabled===false || globalThis.document?.hidden || this.hasAttribute?.('data-motion-paused')) { clearInterval(this._clockTimer);this._clockTimer=null;return; }
+  if (this._clockTimer) return;
   this._clockTimer = setInterval(() => { this._render(); this._syncHistory(); }, 1000);
  }
  set hass(hass) {

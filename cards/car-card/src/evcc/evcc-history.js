@@ -47,7 +47,7 @@ export const evccHistoryMethods = {
   this._historyVersion = (this._historyVersion || 0) + 1; this._historyKey = null; this._historyConnectionKey = null; this._historySession = null; this._historyMissingSession = false; this._historyData = []; this._historyLoading = false; this._historyError = false; this._historyRequestedAt = 0; this._historyIndex = null;
  },
  _syncHistory() {
-  if (!this.isConnected || this._offline() || !this._config?.show_session || this._activeTab !== 'session') return;
+  if (!this.isConnected || globalThis.document?.hidden || this.hasAttribute?.('data-motion-paused') || this._offline() || !this._config?.show_session || this._activeTab !== 'session') return;
   const id = this._entities.power, unit = this._hass.states?.[id]?.attributes?.unit_of_measurement;
   const key = `${id}|${unit}`;
   const connectedId = this._entities.connected, connected = this._hass.states?.[connectedId];

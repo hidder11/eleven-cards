@@ -49,6 +49,8 @@ jobs:
           node tests/browser-camera.mjs
       - name: All-card cold-start render and migration regressions (synthetic HA)
         run: python tests/browser-all-cards-render.py
+      - name: All-card update bursts and resource cleanup (synthetic HA)
+        run: python tests/browser-performance-stability.py PerformanceStabilityAudit.test_04_update_bursts_reconnects_and_resource_cleanup
       - name: Decorative background defaults and graph exclusion (synthetic HA)
         run: |
           python tests/browser-background-default.py

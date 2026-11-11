@@ -1,5 +1,28 @@
 // Eleven standalone Actions, Controls and Waste
 (()=>{
+function retryDelay(failures, base = 60000, maximum = 300000) {
+  return Math.min(maximum, base * 2 ** Math.max(0, failures - 1));
+}
+
+// Bound read operations even when the HA transport never settles. A timeout
+// releases the caller; it does not cancel an underlying HA WebSocket request.
+async function requestWithTimeout(work, milliseconds = 15000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(work),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Request timeout')), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+// HA unsubscribe callbacks may throw or return a rejected promise while the
+// connection is closing. Teardown must still release the other resources.
+function stopSubscription(unsubscribe) {
+  if (typeof unsubscribe !== 'function') return;
+  try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
+}
+
 // Paint only, scoped to each caller's shadow root and explicit semantic roles.
 // Material recipes/palettes belong to the optional YAML theme, never this helper.
 // Do not use generic control selectors: swatches, state tracks and chart colors
@@ -927,7 +950,7 @@ class StandaloneCard extends HTMLElement{
   const c=structuredClone(config);c[key]=(c[key]||[]).map(normalizeItem);for(const e of c[key]){if(e.entity&&(!/^[a-z_]+\.[a-z0-9_]+$/.test(e.entity)||!DOMAINS[this.kind].includes(e.entity.split('.')[0])))throw Error('Unsupported entity: '+e.entity);}
   this._config=c;this._generation++;this._fetching=false;this._cache={};this._lastFetch=0;this._fingerprint=null;this._message='';this._render();this._refresh();
  }
- set hass(h){this._hass=h;this._render();this._refresh();}get hass(){return this._hass;}
+ set hass(h){if(this._hass&&this._hass.connection!==h?.connection){this._generation++;this._fetching=false;this._lastFetch=0;this._cache={};}this._hass=h;this._render();this._refresh();}get hass(){return this._hass;}
  connectedCallback(){if(this.kind==='actions')this._fingerprint=null;this._render();this._refresh();if(this.kind==='waste'){this._observeWaste();if(!this._timer)this._timer=setInterval(()=>{this._render();this._refresh();},30000);}}
  disconnectedCallback(){clearInterval(this._timer);this._timer=null;this._generation++;this._fetching=false;this._lastFetch=0;this._actionsResize?.disconnect();this._wasteResize?.disconnect();}
  getCardSize(){return Math.max(2,(this._config?.entities?.length||this._config?.actions?.length||1)+1);}
@@ -943,7 +966,8 @@ class StandaloneCard extends HTMLElement{
   if(this.kind!=='waste'||!this.isConnected||!this._hass?.callApi||!this._config||this._fetching||(!force&&this._lastFetch&&Date.now()-this._lastFetch<300000))return;
   const ids=[...new Set(this._config.entities.filter(e=>e.entity?.startsWith('calendar.')&&available(this.state(e.entity))).map(e=>e.entity))];if(!ids.length)return;
   const generation=this._generation;this._fetching=true;this._lastFetch=Date.now();this._render();const start=new Date();start.setUTCHours(0,0,0,0);start.setUTCDate(start.getUTCDate()-1);const end=new Date(start.getTime()+62*86400000);
-  await Promise.all(ids.map(async id=>{try{const events=await this._hass.callApi('GET',`calendars/${encodeURIComponent(id)}?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`);if(!Array.isArray(events))throw Error('Invalid calendar response');if(generation===this._generation)this._cache[id]={events};}catch{if(generation===this._generation)this._cache[id]={error:true};}}));
+  const hass=this._hass;
+  await Promise.all(ids.map(async id=>{try{const events=await requestWithTimeout(()=>hass.callApi('GET',`calendars/${encodeURIComponent(id)}?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`));if(!Array.isArray(events))throw Error('Invalid calendar response');if(generation===this._generation)this._cache[id]={events};}catch{if(generation===this._generation)this._cache[id]={error:true};}}));
   if(generation===this._generation){this._fetching=false;this._render();}
  }
  _render(){

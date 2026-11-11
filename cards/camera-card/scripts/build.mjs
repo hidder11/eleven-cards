@@ -1,6 +1,8 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 const root=new URL('../',import.meta.url);
+// The activity reader shares the bounded HA-read helper.
 const files=['../../shared/ui-surface.js','../../shared/ui-button.js','../../shared/ui-primary-value.js','../../shared/ui-metric.js','../../shared/ui-bar.js','../../shared/ui-detail-surface.js','../../shared/ui-tabs.js','../../shared/header-atmosphere.js','../../shared/header-backgrounds.js','../../shared/header-scene.js','src/camera-features.js','src/camera-activity-pages.js','src/camera-utils.js','src/camera-player.js','src/camera-snapshot.js','src/camera-viewer-picker.js','src/camera-feature-styles.js','src/security-status.js','src/security-art.js','src/camera-styles.js','src/camera-editor.js','src/camera-security.js','src/camera-features-view.js','src/camera-card.js'];
+files.unshift('../../shared/request.js');
 files.splice(files.indexOf('src/camera-styles.js'),0,'src/camera-alarm.js');
 files.splice(2,0,'../../shared/ui-action-button.js','../../shared/card-theme.js');
 files.splice(files.indexOf('src/camera-features.js'),0,'../../shared/ui-card-background.js','../../shared/card-background.js');

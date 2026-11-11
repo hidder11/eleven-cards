@@ -112,7 +112,12 @@ export class ElevenSceneEngineCard extends HTMLElement {
     validConfig(config); this._config = {...config}; this._generation++; this._feedback = ''; this._error = false; this._refreshed = false; this._watch = null; this._close(); this._render();
   }
   set hass(hass) {
+    const a=hass?.states?.[this._config?.entity]?.attributes??{};
     this._hass = hass;
+    const scenes=[a.effective_request?.scene,a.default_scene,hass?.states?.[this._config?.entity]?.state,...[a.requests,a.active_requests,a.non_active_requests].flatMap(rows=>Array.isArray(rows)?rows.map(row=>row?.scene):[])];
+    const ids=[this._config?.entity,this._config?.reset_entity,...scenes];
+    const signature=JSON.stringify([hass.connected,hass.connection?.connected,!!hass.services?.button?.press,typeof hass.callService,hass.locale?.language,ids.map(id=>hass.states?.[id])]);
+    if(signature===this._sceneSignature)return;this._sceneSignature=signature;
     if (this._watch && this._fingerprint() !== this._watch && this._entityAvailable()) this._refreshed = true;
     this._render();
   }

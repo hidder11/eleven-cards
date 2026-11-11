@@ -43,7 +43,15 @@ export class EnergyFlowCard extends HTMLElement{
   if(!previous||changedView||changedGroup||previous.hours_to_show!==next.hours_to_show)this._reloadPeriod();else this.render();
   this._sync();
  }
- set hass(hass){const changed=this._hass?.connection!==hass?.connection||this._offline()!==(hass?.connected===false||hass?.connection?.connected===false);this._hass=hass;if(changed)this._reset();this.render();this._sync();}
+ set hass(hass){const previous=this._hass,offline=hass?.connected===false||hass?.connection?.connected===false,changed=previous?.connection!==hass?.connection||this._lastOffline!==offline;this._lastOffline=offline;this._hass=hass;if(changed)this._reset();const renderChanged=this._hassRenderChanged(hass);if(changed||renderChanged)this.render();this._sync();}
+ _hassRenderChanged(hass){
+  if(!this._entityContext||this._entityContext.config!==this._config||this._entityContext.prefs!==this._prefs){
+   const ids=new Set(),visit=value=>{if(typeof value==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(value))ids.add(value);else if(value&&typeof value==='object')for(const item of Object.values(value))visit(item);};
+   visit(this._config);visit(this._prefs);this._entityContext={config:this._config,prefs:this._prefs,ids};
+  }
+  const signature=JSON.stringify([hass.config?.time_zone,hass.config?.currency,hass.locale,hass.language,hass.themes?.darkMode,[...this._entityContext.ids].map(id=>hass.states?.[id])]),changed=signature!==this._renderContextSignature;
+  this._renderContextSignature=signature;return changed;
+ }
  get hass(){return this._hass;}
  cardBackgroundStatusColor(){return energyFlowStatusColor(this._offline()||this._error?null:this._displayData,!!this._hass?.themes?.darkMode);}
  _offline(){return this._hass?.connected===false||this._hass?.connection?.connected===false;}

@@ -18,7 +18,7 @@ export function loadCards(){
   customElements:{get:tag=>elements.get(tag),define:(tag,cls)=>elements.set(tag,cls)},
   document:{createElement:tag=>new (elements.get(tag)||Element)()},
   window:{confirm:()=>{throw Error('Unexpected confirmation');}},
-  setInterval:()=>1,clearInterval:()=>{}
+  setInterval:()=>1,clearInterval:()=>{},setTimeout,clearTimeout
  });
  vm.runInContext(readFileSync(new URL('../dist/eleven-home-controls-card.js',import.meta.url),'utf8'),context);
  return {elements,context,create:tag=>new (elements.get(tag))()};
