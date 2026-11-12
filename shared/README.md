@@ -239,3 +239,7 @@ The camera card adds a collapsible editor with a `cardBackgroundSlot` under Appe
 `CARD_BACKGROUND_CHOICES` in [ui-card-background.js](ui-card-background.js) lists the nine approved editor choices, including Satin waves, Isometric depth, Comet trails and Lenticular glow. All support the common colour, transparency, coverage and motion settings. Top-section backgrounds fade from 45% via 78% to transparent at 100%. Legacy catalog identifiers remain supported.
 
 The standard and balanced tabs share `uiTabIndicatorStyles()` in [ui-tabs.js](ui-tabs.js): a 2 px underline above a separate 1 px divider without overlap. The camera card uses this same generic component.
+
+## Card text titles
+
+ui-card-title.js exports uiCardTitleStyles(selector) for the text headings in Camera Viewer and Media Player. The caller supplies the heading selector; the shared recipe defines font size and weight.

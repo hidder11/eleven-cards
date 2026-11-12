@@ -4,7 +4,7 @@ Home Assistant dashboard cards for energy, sensor history, calendars, weather, v
 
 ## Shared card background
 
-All eighteen production card types have a **Card background / Kaartachtergrond** section in their visual editor. The separately identified Material House pilot retains its own approved editor and appearance controls; the shared `card_background` contract does not apply to that pilot. Choose Aurora sky, Silk Flow, Atmospheric flow, Ink bloom or Holographic grid; theme accent, up to three custom colours or the card's status colour; transparency; animation; and coverage of the whole card or the top X pixels. A top section fades at its lower edge, and decoration stays within the theme's rounded card corners. Decorative backgrounds are off by default; the normal Home Assistant theme surface is unchanged. Enabling a background uses Atmospheric flow over the top 240 px with 65% transparency unless configured otherwise. Explicit existing background YAML stays usable. When enabled, decoration is excluded from graph surfaces, including their axes, and follows layout changes without changing the graph's theme surface.
+Production card types have a **Card background / Kaartachtergrond** section in their visual editor. The separately identified Material House pilot retains its own approved editor and appearance controls; the shared `card_background` contract does not apply to that pilot. Choose Aurora sky, Silk Flow, Atmospheric flow, Ink bloom or Holographic grid; theme accent, up to three custom colours or the card's status colour; transparency; animation; and coverage of the whole card or the top X pixels. A top section fades at its lower edge, and decoration stays within the theme's rounded card corners. Decorative backgrounds are off by default; the normal Home Assistant theme surface is unchanged. Enabling a background uses Atmospheric flow over the top 240 px with 65% transparency unless configured otherwise. Explicit existing background YAML stays usable. When enabled, decoration is excluded from graph surfaces, including their axes, and follows layout changes without changing the graph's theme surface.
 
 Add the same object to any card configuration:
 
@@ -36,6 +36,8 @@ Use `card_background: false` to turn it off. Dynamic colours use the calling car
 | **Weather (beta)** | Compact current weather and a short hourly or daily forecast, with state-colored artwork. | [Weather documentation](cards/weather-card/README.md) |
 | **Energy Flow (beta)** | Solar, grid and home distribution using Home Assistant Energy configuration and Recorder, with live/history buttons. | [Energy Flow documentation](cards/energy-flow-card/README.md) |
 | **Camera (beta)** | Camera feeds, alarm controls, doors/windows and paginated activity. | [Camera documentation](cards/camera-card/README.md) |
+| **Camera Viewer (beta)** | Camera selected in a linked Camera card on the same dashboard page. | [Camera Viewer documentation](cards/camera-card/README.md#separate-camera-viewer) |
+| **Media Player (beta)** | Radio favourites, playback controls and five layouts, including Studio and Horizontal. | [Media Player documentation](cards/media-player-card/README.md) |
 | **Calendar (beta)** | Calendar events in a day list, day columns or month view, with optional weather. | [Calendar documentation](cards/calendar-card/README.md) |
 | **House (beta)** | Configurable transparent house rendering, lighting, people and optional current-weather decoration. | [House documentation](cards/house-card/README.md) |
 | **Shopping** | Any to-do list, with non-blocking additions, integrated saving/retry rows and provider-driven editing. | [Shopping documentation](cards/shopping-card/README.md) |
@@ -59,7 +61,7 @@ Weather, Car and Energy Flow share one header fade that ends before tab content,
 
 ## Standalone alternatives and integration requirements
 
-The collection includes all nineteen card types listed above. These standalone modules remain available for existing installations; they are alternatives, not additional resources required by HACS. Building this source tree does not itself publish a release or update an installed dashboard.
+The collection includes twenty-two card types. These standalone modules remain available for existing installations; they are alternatives, not additional resources required by HACS. Building this source tree does not itself publish a release or update an installed dashboard.
 
 | Card | What it shows | Resource and documentation |
 | --- | --- | --- |
@@ -310,3 +312,9 @@ npm run check
 Edit the source files, not the generated bundles. The root build produces `dist/eleven-cards.js` for all nineteen card types and standalone modules in their respective `dist/` directories, including the packaged pilot under `experiments/material-house/dist/`. Always use the root build for distributable pilot output: running its isolated Python builder alone emits the intermediate experimental baseline registrations, which the root packager intentionally removes. Collection registration tests exercise repeat loads, both standalone/collection load orders, unchanged House aliases and byte-identical source rebuilds.
 
 Reusable buttons, tabs and popups live in `shared/ui-*.js`. See [Shared UI components](shared/README.md) for their rendering, styling and lifecycle APIs.
+
+## Camera Viewer and Media Player (beta)
+
+[Camera Viewer](cards/camera-card/README.md#separate-camera-viewer) shows the camera selected in a linked Camera card on the same page. [Media Player](cards/media-player-card/README.md) adds radio favourites, supported playback controls and five layouts, with Studio and Horizontal examples. Both are included in the collection and card picker.
+
+Migration: Camera privacy mappings and controls have been removed; legacy privacy fields no longer hide feeds. See the [migration notes](cards/camera-card/README.md#migration-removed-privacy-settings).

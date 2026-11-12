@@ -9,6 +9,8 @@ import {CameraEditor} from './camera-editor.js';
 import {cameraFeaturesView} from './camera-features-view.js';
 import {cameraDetectionIndicators} from './camera-security.js';
 
+import {cameraViewerChannel,updateCameraViewer,releaseCameraViewer} from './camera-viewer-link.js';
+
 let cameraCardSequence=0;
 class CameraCardBase extends HTMLElement{
  constructor(){super();this.attachShadow({mode:'open'});this._id='eleven-camera-'+(++cameraCardSequence);this._tiles=new Map();this._detections=new Map();this._cycle=new CameraCycle(()=>this._advanceCycle());this._fullscreenChange=()=>this._updateFullscreen();}
@@ -29,18 +31,18 @@ class CameraCardBase extends HTMLElement{
  _syncTile(tile,row,active){tile.player.update(this._hass,cameraPictureConfig(row.entity,this._config),active);}
  _retryTile(entity){this._tiles.get(entity)?.player.retry();this._syncPlayers();}
  connectedCallback(){this._attached=true;this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._syncPlayers());document.addEventListener('fullscreenchange',this._fullscreenChange);this._render();}
- disconnectedCallback(){this._attached=false;this._motionCleanup?.();this._motionCleanup=null;this._tabs?.disconnect();this._layoutKey=null;this._cycle.stop();this._hovered=false;this._focused=false;document.removeEventListener('fullscreenchange',this._fullscreenChange);for(const tile of this._tiles.values())tile.player.stop();this._helpers=null;}
+ disconnectedCallback(){this._attached=false;releaseCameraViewer(this._viewerTarget,this);this._motionCleanup?.();this._motionCleanup=null;this._tabs?.disconnect();this._layoutKey=null;this._cycle.stop();this._hovered=false;this._focused=false;document.removeEventListener('fullscreenchange',this._fullscreenChange);for(const tile of this._tiles.values())tile.player.stop();this._helpers=null;}
  async _createNative(config){
   if(!this._helpers)this._helpers=Promise.resolve().then(()=>{if(typeof window.loadCardHelpers!=='function')throw Error('HA helpers unavailable');return window.loadCardHelpers();}).catch(error=>{this._helpers=null;throw error;});
   const helpers=await this._helpers;return helpers.createCardElement(config);
  }
  _ensureShell(){
   if(this._shell)return;
-  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${cameraStyles}</style><ha-card><div class="content"><div class="header-region"><div class="scene-background" aria-hidden="true"></div><header class="camera-header"><span class="camera-icon" aria-hidden="true"><ha-icon icon="mdi:cctv"></ha-icon></span><div><h2 class="camera-title"></h2><p class="camera-count"></p></div></header></div><p class="camera-empty" role="status"></p><div class="camera-body"></div><div class="camera-navigation">${uiButton({variant:'action-icon',content:'<ha-icon icon="mdi:chevron-left"></ha-icon>',attrs:{'data-camera-prev':true}})}<span class="camera-position" aria-live="polite"></span>${uiButton({variant:'action-icon',content:'<ha-icon icon="mdi:chevron-right"></ha-icon>',attrs:{'data-camera-next':true}})}${uiButton({variant:'action',attrs:{'data-camera-cycle':true}})}</div><p class="camera-action-error" role="status" hidden></p></div></ha-card>`;
+  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${cameraStyles}</style><ha-card><div class="content"><div class="header-region"><div class="scene-background" aria-hidden="true"></div><header class="camera-header"><span class="camera-icon" aria-hidden="true"><ha-icon icon="mdi:cctv"></ha-icon></span><div><h2 class="camera-title"></h2><p class="camera-count"></p></div></header></div><p class="camera-empty" role="status"></p><div class="camera-body"></div><div class="camera-navigation">${uiButton({variant:'action-icon',content:'<ha-icon icon="mdi:chevron-left"></ha-icon>',attrs:{'data-camera-prev':true}})}<span class="camera-position" aria-live="polite"></span>${uiButton({variant:'action-icon',content:'<ha-icon icon="mdi:chevron-right"></ha-icon>',attrs:{'data-camera-next':true}})}${uiButton({variant:'action',attrs:{'data-camera-cycle':true}})}</div><p class="camera-viewer-feedback" role="status" hidden></p><p class="camera-action-error" role="status" hidden></p></div></ha-card>`;
   this._shell=true;
   this.shadowRoot.addEventListener('click',event=>{
    const details=event.target.closest?.('[data-camera-details]');
-   if(details)this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:details.dataset.cameraDetails},bubbles:true,composed:true}));
+   if(details&&!this._openLinkedViewer(details.dataset.cameraDetails))this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:details.dataset.cameraDetails},bubbles:true,composed:true}));
    const retry=event.target.closest?.('[data-camera-retry]');
    if(retry)this._retryTile(retry.dataset.cameraRetry);
    const fullscreen=event.target.closest?.('[data-camera-fullscreen]');if(fullscreen)this._toggleFullscreen(fullscreen.dataset.cameraFullscreen);
@@ -54,10 +56,16 @@ class CameraCardBase extends HTMLElement{
   this.shadowRoot.addEventListener('focus',()=>{this._focused=true;this._syncCycle();},true);
   this.shadowRoot.addEventListener('blur',()=>queueMicrotask(()=>{this._focused=!!this.shadowRoot.activeElement;this._syncCycle();}),true);
  }
+ _openLinkedViewer(entity){
+  if(!this._attached||!this._config.viewer_target||!visibleCameras(this._config).some(row=>row.entity===entity))return false;
+  this._manualInteraction?.();updateCameraViewer(this._config.viewer_target,this,entity);this._render();return true;
+ }
  _makeTile(row){
   const section=document.createElement('section');section.className='camera-tile';
   section.innerHTML=`<div class="camera-tile-header"><button type="button" class="camera-name" data-camera-details="${uiEscape(row.entity)}"><ha-icon aria-hidden="true"></ha-icon><span></span></button>${uiButton({className:'camera-fullscreen',content:'<ha-icon icon="mdi:fullscreen" aria-hidden="true"></ha-icon>',attrs:{'data-camera-fullscreen':row.entity}})}</div><div class="camera-frame"><div class="camera-native"></div><div class="camera-message" role="status"><span></span>${uiButton({variant:'action',text:'',attrs:{'data-camera-retry':row.entity,hidden:true}})}</div></div><div class="camera-status"></div><p class="camera-last-detection"></p>`;
   const tile={section,name:section.querySelector('.camera-name'),frame:section.querySelector('.camera-frame'),message:section.querySelector('.camera-message'),status:'idle'};
+  tile.frame.addEventListener('click',event=>{if(!this._config.viewer_target||event.composedPath().some(node=>node.matches?.('button,[data-ui-button],a')))return;if(this._openLinkedViewer(row.entity)){event.preventDefault();event.stopPropagation();}},true);
+  tile.frame.addEventListener('hass-more-info',event=>{if(this._openLinkedViewer(row.entity))event.stopPropagation();});
   tile.player=new CameraPlayer(section.querySelector('.camera-native'),config=>this._createNative(config),status=>{tile.status=status;this._updateMessage(tile,row.entity);});
   return tile;
  }
@@ -66,13 +74,15 @@ class CameraCardBase extends HTMLElement{
   const paused=!this._attached||document.hidden||(!this._viewerEntity&&!this.shadowRoot.fullscreenElement&&this.hasAttribute('data-motion-paused'));
   const status=unavailable??(paused?'paused':tile.status);
   const messages={offline:t('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'),missing:t('Camera niet gevonden.','Camera not found.'),off:t('Camera uit.','Camera is off.'),unknown:t('Camera niet beschikbaar.','Camera unavailable.'),unavailable:t('Camera niet beschikbaar.','Camera unavailable.'),paused:t('Camerabeeld gepauzeerd.','Camera view paused.'),idle:t('Camerabeeld laden…','Loading camera view…'),loading:t('Camerabeeld laden…','Loading camera view…'),error:t('Camerabeeld laden mislukt.','Could not load camera view.')};
-  messages.privacy=t('Privacymodus actief.','Privacy mode active.');messages.privacy_unknown=t('Privacystatus onbekend. Beeld verborgen.','Privacy status unknown. Feed hidden.');
   tile.message.hidden=status==='ready';const message=tile.message.querySelector('span'),text=messages[status]??'';if(message.textContent!==text)message.textContent=text;
   const retry=tile.message.querySelector('button');retry.hidden=status!=='error';retry.textContent=t('Opnieuw proberen','Retry');
   tile.frame.setAttribute('aria-busy',String(status==='loading'));
  }
  _render(){
   if(!this._config)return;this._ensureShell();
+  if(this._viewerTarget!==this._config.viewer_target){releaseCameraViewer(this._viewerTarget,this);this._viewerTarget=this._config.viewer_target;}
+  if(this._attached)updateCameraViewer(this._viewerTarget,this);
+  const feedback=this.shadowRoot.querySelector('.camera-viewer-feedback'),missingViewer=this._config.viewer_target&&!cameraViewerChannel(this._config.viewer_target).listeners.size;feedback.hidden=!missingViewer;feedback.textContent=missingViewer?this._t('Geen cameraviewer gevonden met ID: ','No camera viewer found with ID: ')+this._config.viewer_target:'';
   const config=this._config,layout=this._layout(),nl=cameraDutch(this._hass),content=this.shadowRoot.querySelector('.content'),title=config.title||(nl?'Camera’s':'Cameras');
   content.dataset.dark=String(!!this._hass?.themes?.darkMode);content.dataset.color=config.color;content.dataset.compact=String(config.compact);
   content.dataset.animated=String(config.animate_background&&this._hass?.connected!==false&&this._hass?.connection?.connected!==false);

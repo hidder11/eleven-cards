@@ -46,7 +46,7 @@ columns: auto
 camera_view: live
 ```
 
-Load the collection module or the standalone dist/eleven-camera-card.js, then choose **Eleven Camera (beta)** in the card picker. The visual editor offers five consistent collapsible sections: Cameras, Alarm, Doors and windows, Activity, and Appearance. Per-camera image/privacy settings and door/window name editors are nested within their respective sections; the shared background editor is nested under Appearance. An empty camera list shows setup guidance. `entity: camera.voordeur` is also accepted for a single feed. Camera IDs must be unique and belong to the camera domain.
+Load the collection module or the standalone dist/eleven-camera-card.js, then choose **Eleven Camera (beta)** in the card picker. The visual editor offers five consistent collapsible sections: Cameras, Alarm, Doors and windows, Activity, and Appearance. Per-camera image settings and door/window name editors are nested within their respective sections; the shared background editor is nested under Appearance. An empty camera list shows setup guidance. `entity: camera.voordeur` is also accepted for a single feed. Camera IDs must be unique and belong to the camera domain.
 
 For custom camera names and one feed at a time:
 
@@ -75,7 +75,7 @@ cameras:
 | `show_status` | `true` | Camera availability/streaming/recording and configured detection badges |
 | `show_last_detection` | `true` | Last detection timestamp for cameras with detector mappings |
 | `show_navigation` | `true` | Previous/next buttons and camera position in tabs/focus |
-| `auto_cycle` | `false` | Automatically switch cameras in tabs/focus; unavailable, private and unknown-privacy cameras are skipped |
+| `auto_cycle` | `false` | Automatically switch cameras in tabs/focus; unavailable cameras are skipped |
 | `cycle_interval` | `10` | Seconds between switches, 5–3600 |
 | `compact` | `false` | Reduced header and grid spacing |
 | `color` | `charging` | Same gold/blue/green/purple/grey presets as Car |
@@ -84,7 +84,7 @@ cameras:
 | `background_strength` | `100` | Decorative header intensity, 0–100 |
 | `animate_background` | `true` | Header motion; respects reduced motion and off-screen pausing |
 
-The native Home Assistant `picture-entity` card handles normal live playback, native snapshots and media controls. Live requires streaming supported/configured in Home Assistant. Managed snapshots use the authenticated HA camera image API when a refresh interval is set or Refresh is clicked. Tap a feed/name for camera details. Only explicitly applied alarm actions and confirmed privacy actions issue service calls. Choosing another alarm mode sends its command immediately when the integration allows code-free arming. A code-required alarm opens native HA controls instead. Opening a card or receiving a detection never sends control commands.
+The native Home Assistant `picture-entity` card handles normal live playback, native snapshots and media controls. Live requires streaming supported/configured in Home Assistant. Managed snapshots use the authenticated HA camera image API when a refresh interval is set or Refresh is clicked. Tap a feed/name for camera details. Only explicitly applied alarm actions and confirmed custom actions issue service calls. Choosing another alarm mode sends its command immediately when the integration allows code-free arming. A code-required alarm opens native HA controls instead. Opening a card or receiving a detection never sends control commands.
 
 Grid loads all available visible feeds. Tabs only load the selected camera. Native players are preserved on sensor and cosmetic configuration updates, and removed on unavailable/off states, leaving a tab, hiding the card/page or removing the card. Reconnection recreates players. Initial player/helper failures offer Retry; playback errors inside the native player remain handled by Home Assistant. Offline, missing, off and unavailable cameras have distinct Dutch/English messages. Custom names entered in YAML are preserved by the visual picker.
 
@@ -136,7 +136,7 @@ The isolated [large-camera design studies](qa/security-camera-designs.html) comp
 
 First observations and reconnects establish a baseline for contact activity. Motion and person sensors provide indicators and activity only; they never change the selected camera automatically.
 
-Grid, sidebar, wall and filmstrip can play multiple visible feeds; tabs/focus play one. The expand icon beside the detection icons opens a large native dialog with camera navigation and a labelled close button. The selected player is reused and other feeds pause. Escape or Close restores the original layout, selection and keyboard focus. Privacy, snapshots and detection indicators remain available. Hiding or removing the viewed camera closes the viewer. The live image sits flush with the top and sides of its surface, without status text or a fullscreen button.
+Grid, sidebar, wall and filmstrip can play multiple visible feeds; tabs/focus play one. The expand icon beside the detection icons opens a large native dialog with camera navigation and a labelled close button. The selected player is reused and other feeds pause. Escape or Close restores the original layout, selection and keyboard focus. Snapshots and detection indicators remain available. Hiding or removing the viewed camera closes the viewer. The live image sits flush with the top and sides of its surface, without status text or a fullscreen button.
 
 Alarm and contact values come from HA entities. Binary on means open and off means closed; unavailable values remain unknown. A full-width custom alarm control sits above the Doors and Windows metrics. Its mode group includes Off and every arming mode supported by the entity: Home, Away, Night, Vacation and Custom bypass. Selecting an arming mode immediately sends its HA action without a code or a second button. Off asks for the alarm code when `alarm_disarm_code` is true and the entity advertises a code format; only this flow has an explicit Disarm button. Set the option to false for a direct disarm request. Entered codes are masked and cleared on submission, mode changes, entity changes and disconnect. The alarm integration still enforces its own code policy; for example, a Manual alarm must have `code_arm_required: false` to accept arming without a code. Commands use HA alarm services; the status only follows reported entity state. Failed commands and unacknowledged state changes offer feedback; missing or offline data disables the controls. Contact surfaces retain the same background for open, closed and unknown states.
 
@@ -159,7 +159,6 @@ cameras:
     name: Voordeur
     motion_entity: binary_sensor.voordeur_beweging
     person_entity: binary_sensor.voordeur_persoon
-    privacy_entity: switch.voordeur_privacy
   - entity: camera.tuin
     name: Tuin
     camera_view: auto
@@ -168,11 +167,10 @@ cameras:
 
 Replace all example IDs with your own entities. Use the normal card type instead when loading the production collection.
 
-## Privacy and still images
+## Still images
 
-Per camera, `privacy_entity` accepts `switch`, `input_boolean` or a read-only `binary_sensor`. `privacy_state` is `on` by default; set it to `off` for inverted switches. Active **or unknown** privacy removes live players and still images and cancels pending image requests. Privacy controls ask for confirmation. A helper is only a display gate unless your HA automation also connects it to the camera's actual privacy mode. No background profile or alert changes this entity.
 
-Per-camera `snapshot_interval` overrides the card setting; clear it in the editor to inherit. A managed still image is attached only after successful image decoding. “Image loaded” is the last successful load time, not the camera capture time. Failed refreshes do not update this timestamp. Polling stops off-screen, on inactive tabs, during privacy, offline and on disconnect. Old image URLs are revoked. Refresh requires HA's `callApiRaw` frontend method (HA 2024.11+); live/native mode remains available without it.
+Per-camera `snapshot_interval` overrides the card setting; clear it in the editor to inherit. A managed still image is attached only after successful image decoding. “Image loaded” is the last successful load time, not the camera capture time. Failed refreshes do not update this timestamp. Polling stops off-screen, on inactive tabs, offline and on disconnect. Old image URLs are revoked. Refresh requires HA's `callApiRaw` frontend method (HA 2024.11+); live/native mode remains available without it.
 
 ## Security overview and detection details
 
@@ -184,13 +182,13 @@ Each camera has compact Motion and Person icons for its configured `motion_entit
 
 Contact surfaces show Status and Last opened, with time and date on one line as `14:22 28-10-2026` in Home Assistant's time zone. Opening timestamps come from an open sensor's `last_changed`, openings remembered while the card is loaded, or Recorder history when `activity_source: history` is enabled. Closing timestamps are never used as opening times. Unknown opening times show a dash. Remembered openings survive activity-list truncation while the card remains loaded; after a reload, older openings depend on the configured Recorder history window.
 
-Tabs are Cameras, Doors, Windows and Activity (Camera’s / Deuren / Ramen / Activiteiten in Dutch). A contact tab appears only when its sensors are configured and `show_security` is enabled. Cameras keeps the configured feed layout and controls, without a duplicate recent-activity list. Each feed and its configured detection icons share one raised surface; the icons sit together beneath the image. Camera names, detector icons and the expand action share a quiet footer below the image; the feed has no overlay text. Activity shows a compact timeline grouped into local calendar days, with time on the left, an event icon, source name and event text. Source/type filters, the Current section and separate information buttons are omitted. The entire event row opens its details. With `show_activity: false`, the Activity tab is omitted. The tab bar hides only when Cameras is the sole remaining tab. Without mapped detectors, Activity explains how to configure them. Selecting a camera event opens that camera's **current** feed in the large-view popup; it does not replay the event. Closing the popup returns focus to the event. Contact events open native sensor details. Streams and auto-cycling stop while any other tab is selected and resume on returning to Cameras. Existing privacy gating still applies. Removing the sensors for a selected contact tab returns to Cameras.
+Tabs are Cameras, Doors, Windows and Activity (Camera’s / Deuren / Ramen / Activiteiten in Dutch). A contact tab appears only when its sensors are configured and `show_security` is enabled. Cameras keeps the configured feed layout and controls, without a duplicate recent-activity list. Each feed and its configured detection icons share one raised surface; the icons sit together beneath the image. Camera names, detector icons and the expand action share a quiet footer below the image; the feed has no overlay text. Activity shows a compact timeline grouped into local calendar days, with time on the left, an event icon, source name and event text. Source/type filters, the Current section and separate information buttons are omitted. The entire event row opens its details. With `show_activity: false`, the Activity tab is omitted. The tab bar hides only when Cameras is the sole remaining tab. Without mapped detectors, Activity explains how to configure them. Selecting a camera event opens that camera's **current** feed in the large-view popup; it does not replay the event. Closing the popup returns focus to the event. Contact events open native sensor details. Streams and auto-cycling stop while any other tab is selected and resume on returning to Cameras. Removing the sensors for a selected contact tab returns to Cameras.
 
 For events from before opening the dashboard, set `activity_source: history` and choose `activity_hours` (1-72); the existing editor includes these settings. Recorder must retain the mapped binary sensors or doorbell events. The default `session` source only collects fresh events observed while the card is loaded. Configure `motion_entity` / `person_entity` per camera to populate detections. These binary sensors provide events and timestamps, not object images, saved video or clips. Unconfigured detection types cannot be inferred from a camera feed. History errors offer Refresh while keeping observed events available.
 
 `show_alarm` and `show_contacts` independently control the alarm UI and contact overview/tabs. Both fall back to legacy `show_security` when omitted; an explicit new setting overrides that fallback. Hiding contact UI retains the sensor mappings and their activity events. The visual editor writes the independent settings without discarding legacy YAML.
 
-The implemented card can be reviewed in qa/security.html with synthetic detection history, active detections, open windows, alarm, unknown/offline states, narrow width and theme controls. qa/camera.html runs the broader player, privacy, actions, editor and security interaction checks. Neither page uses real household data or commands.
+The implemented card can be reviewed in qa/security.html with synthetic detection history, active detections, open windows, alarm, unknown/offline states, narrow width and theme controls. qa/camera.html runs the broader player, actions, editor and security interaction checks. Neither page uses real household data or commands.
 
 Activity also includes opening and closing transitions from configured door_sensors and window_sensors. Initial readings, reconnect baselines and recovery from unavailable states do not create session events. Selecting a contact event opens that sensor's native details. Recorder history uses the same configured contact entities. Clear contact readings are valid closed events, not camera detections, and never trigger automatic camera focus. Historical events require Recorder retention for the contact sensors.
 
@@ -202,11 +200,11 @@ Custom contact names can be set in the visual editor: expand the door/window ent
 
 Three interactive camera-grid and custom alarm-control proposals are in [qa/security-refinements.html](qa/security-refinements.html). They compare footer, overlay and taller camera tiles, and direct mode buttons, mode selection with a primary action, and a compact control opening a mode dialog. The examples simulate PIN validation and command failures; they never send HA commands and do not replace the current production alarm controls.
 
-The chosen camera design uses an edge-to-edge image and a footer with the name, compact detection icons and expand action. Refresh and privacy controls remain in that footer when configured. Three isolated activity proposals are available in [qa/security-activity-designs.html](qa/security-activity-designs.html): a day journal, a vertical timeline and collapsible groups per source. All use fictional Recorder records and simulated commands. The production card now uses a more compact version of the vertical timeline, without source/type filters.
+The chosen camera design uses an edge-to-edge image and a footer with the name, compact detection icons and expand action. Refresh remains in that footer when configured. Three isolated activity proposals are available in [qa/security-activity-designs.html](qa/security-activity-designs.html): a day journal, a vertical timeline and collapsible groups per source. All use fictional Recorder records and simulated commands. The production card now uses a more compact version of the vertical timeline, without source/type filters.
 
 The alarm surface shares the Doors/Windows metric background. The editor includes **Ask for a code when disarming**. This controls the card prompt, not the alarm integration's code validation. See [Manual alarm code requirements](https://www.home-assistant.io/integrations/manual/#configuration).
 
-The camera-grid footer uses a compact 32 px row for ordinary names, with 28 px controls; long names can wrap. Three interactive large-view proposals are in [qa/security-popup-designs.html](qa/security-popup-designs.html): image-first with one bottom toolbar, a thumbnail picker below the image, and a camera list beside the image. Each uses the real viewer/player lifecycle with synthetic drawn feeds. The production popup uses option 2: a compact title and detection toolbar, an edge-to-edge feed and a thumbnail picker below it. The picker uses authenticated still images with no polling or extra livestreams; closing, privacy and disconnection release the images and pending requests. A single camera hides the picker. Missing snapshot support shows a camera icon while camera selection remains available. Add `?checks=1` to run their optional browser checks without screenshots.
+The camera-grid footer uses a compact 32 px row for ordinary names, with 28 px controls; long names can wrap. Three interactive large-view proposals are in [qa/security-popup-designs.html](qa/security-popup-designs.html): image-first with one bottom toolbar, a thumbnail picker below the image, and a camera list beside the image. Each uses the real viewer/player lifecycle with synthetic drawn feeds. The production popup uses option 2: a compact title and detection toolbar, an edge-to-edge feed and a thumbnail picker below it. The picker uses authenticated still images with no polling or extra livestreams; closing and disconnection release the images and pending requests. A single camera hides the picker. Missing snapshot support shows a camera icon while camera selection remains available. Add `?checks=1` to run their optional browser checks without screenshots.
 
 [security-color-examples.html](qa/security-color-examples.html) compares the five existing card colours with the shared dynamic background source and three quieter illustration treatments: soft layered, tonal and fine lines. Background style, alarm state, width and light/dark theme are interactive. This isolated study uses synthetic feeds and does not modify the production artwork or test bundle.
 
@@ -221,3 +219,25 @@ The camera-grid footer uses a compact 32 px row for ordinary names, with 28 px c
 [security-aurora-examples.html](qa/security-aurora-examples.html) compares the actual shared Aurora sky renderer with four isolated Aurora variations (curtains, horizon, veil and ribbons) and the unchanged Satin waves option 2. All previews retain live status colours, subtle animation, the longer fade and background controls. Production and test bundles are unchanged.
 
 The Aurora study also includes five further distinct designs (options 7-11): Paper fans, Isometric depth, Comet trails, Lenticular glow and Honeycomb satin. Each has a separate slow animation and retains the same controls; existing options 1-6 are preserved.
+
+## Separate Camera Viewer
+
+The new **Eleven Camera Viewer (beta)** card displays the camera selected in a source Camera card on the same dashboard page. Set the same ID in the source's `viewer_target` and viewer's `viewer_id`. Click a feed, camera name or expand button to select it. Without a target, the existing native details and built-in large-view popup remain available. A missing viewer displays a status message. Removing/hiding the source camera clears the viewer; the viewer follows the effective source camera list, image settings and availability. It sends no device commands.
+
+```yaml
+type: custom:eleven-camera-card
+viewer_target: woonkamer
+cameras:
+  - camera.voordeur
+  - camera.tuin
+
+# Add this as a separate dashboard card:
+# type: custom:eleven-camera-viewer-card
+# viewer_id: woonkamer
+```
+
+The viewer supports title, show_names, show_status, show_last_detection, show_fullscreen, compact and the shared card_background options. Its editor includes these fields and the shared background editor. Sections height is automatic; masonry height follows rendered content, including portrait feeds. [Interactive viewer example](qa/viewer.html).
+
+## Migration: removed privacy settings
+
+The Camera card and Viewer no longer offer privacy status, controls or feed gating. Legacy per-camera `privacy_entity` and `privacy_state` fields are ignored. **Previously hidden feeds may now be displayed.** Remove these fields from YAML and use Home Assistant/integration controls to restrict camera access when needed. This change does not toggle privacy switches or change camera settings.

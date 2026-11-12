@@ -23,13 +23,8 @@ function stopSubscription(unsubscribe) {
   try { Promise.resolve(unsubscribe()).catch(() => {}); } catch {}
 }
 
-// One recipe for raised information surfaces across all cards.
-const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
-function uiSurfaceStyles(selector){return `
-:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
-${selector}{box-shadow:var(--eleven-surface-shadow)}
-@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
-`;}
+// Shared typography for text titles; the caller owns the heading and its content.
+function uiCardTitleStyles(selector){return `${selector}{font-size:18px;line-height:1.25;font-weight:650;letter-spacing:-.01em;margin:0;overflow-wrap:anywhere}`;}
 
 
 // Opt-in ordinary actions. Legacy uiButtonStyles() and its callers stay unchanged.
@@ -114,6 +109,14 @@ ${last?`:is(${buttons}):is(${last}){border-start-end-radius:var(--eleven-materia
 :is(${buttons}):not(:disabled):active{background:color-mix(in srgb,var(--primary-text-color,#20252b) 7%,transparent);box-shadow:var(--eleven-material-well,inset 0 2px 3px rgb(0 0 0 / 15%))}
 :is(${buttons}):focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:-3px}
 @media(forced-colors:active){${group}{box-shadow:none;outline:1px solid CanvasText}:is(${buttons}):not(:disabled):active{background:Highlight;color:HighlightText;box-shadow:none}}
+`;}
+
+// One recipe for raised information surfaces across all cards.
+const UI_SURFACE_SHADOW='inset 0 1px 0 color-mix(in srgb,var(--primary-text-color,#20252b) 5%,transparent),inset 0 -1px 0 rgb(0 0 0 / 4%),0 4px 10px rgb(0 0 0 / 12%)';
+function uiSurfaceStyles(selector){return `
+:host{--eleven-surface-shadow:${UI_SURFACE_SHADOW}}
+${selector}{box-shadow:var(--eleven-surface-shadow)}
+@media(forced-colors:active){${selector}{box-shadow:none;outline:1px solid CanvasText;outline-offset:-1px}}
 `;}
 
 // Native controls: text/attributes are escaped; content is trusted, caller-owned HTML.
@@ -1100,12 +1103,6 @@ function effectiveCameraConfig(config,hass,selection='auto'){
 }
 const cameraShowAlarm=config=>config.show_alarm??(config.show_security!==false);
 const cameraShowContacts=config=>config.show_contacts??(config.show_security!==false);
-function cameraPrivacy(hass,row){
- if(!row?.privacy_entity)return null;
- const value=hass?.states?.[row.privacy_entity]?.state;
- if(hass?.connected===false||hass?.connection?.connected===false||!['on','off'].includes(value))return 'privacy_unknown';
- return value===(row.privacy_state??'on')?'privacy':null;
-}
 function cameraActivitySources(config){
  const sources=[];
  for(const row of config.cameras){
@@ -1241,7 +1238,6 @@ function normalizeCameraConfig(input={}){
    if(CAMERA_RATIOS.includes(row.aspect_ratio))item.aspect_ratio=row.aspect_ratio;
    if(['cover','contain'].includes(row.fit_mode))item.fit_mode=row.fit_mode;
    if(['auto','live'].includes(row.camera_view))item.camera_view=row.camera_view;
-   if(cameraEntity(row.privacy_entity,['switch','input_boolean','binary_sensor'])){item.privacy_entity=row.privacy_entity;item.privacy_state=row.privacy_state==='off'?'off':'on';}
    if(row.snapshot_interval!=null&&row.snapshot_interval!=='')item.snapshot_interval=cameraSnapshotInterval(row.snapshot_interval);
    for(const field of ['motion_entity','person_entity','last_detection_entity']){
     const value=row[field],domain=field==='last_detection_entity'?'sensor':'binary_sensor';
@@ -1251,7 +1247,7 @@ function normalizeCameraConfig(input={}){
   return item;
  });
  const {activity_limit:legacyLimit,background,...settings}=input;
- return {...settings,...normalizeCameraFeatures(input,cameras),cameras,title:typeof input.title==='string'?input.title:'',layout:CAMERA_LAYOUTS.includes(input.layout)?input.layout:'grid',
+ return {...settings,...normalizeCameraFeatures(input,cameras),cameras,viewer_target:typeof input.viewer_target==='string'?input.viewer_target.trim():'',viewer_id:typeof input.viewer_id==='string'?input.viewer_id.trim():'',title:typeof input.title==='string'?input.title:'',layout:CAMERA_LAYOUTS.includes(input.layout)?input.layout:'grid',
   columns:[1,2,3].includes(Number(input.columns))?Number(input.columns):'auto',camera_view:input.camera_view==='auto'?'auto':'live',
   aspect_ratio:CAMERA_RATIOS.includes(input.aspect_ratio)?input.aspect_ratio:'16:9',fit_mode:input.fit_mode==='contain'?'contain':'cover',
   show_status:input.show_status!==false,show_last_detection:input.show_last_detection!==false,show_navigation:input.show_navigation!==false,show_fullscreen:input.show_fullscreen!==false,
@@ -1402,7 +1398,7 @@ class CameraViewerPicker{
   this.sync(hass,options.active);
  }
  fallback(item){
-  const existing=item.image.querySelector('ha-icon'),icon=existing??document.createElement('ha-icon');icon.setAttribute('icon',this.options?.blocked(item.row)?.startsWith('privacy')?'mdi:shield-lock-outline':'mdi:cctv');if(!existing)item.image.replaceChildren(icon);
+  const existing=item.image.querySelector('ha-icon'),icon=existing??document.createElement('ha-icon');icon.setAttribute('icon','mdi:cctv');if(!existing)item.image.replaceChildren(icon);
  }
  sync(hass,active){
   for(const item of this.rows.values()){
@@ -1781,8 +1777,8 @@ ${uiSurfaceStyles('.camera-tile-header>button[data-ui-button],.camera-confirm')}
 @media(forced-colors:active){.camera-alarm[data-triggered=true],.camera-contact[data-open=true]{box-shadow:none}}
 ${cameraThemeStyles}
 ${cameraActivityStyles}
+.camera-viewer-feedback{margin:12px 0 0;font-size:12px;color:var(--secondary-text-color);overflow-wrap:anywhere}
 `;
-
 
 
 
@@ -1817,15 +1813,15 @@ class CameraEditor extends HTMLElement{
   const number=(name,min,max)=>({name,selector:{number:{min,max,step:1,mode:'box'}}}),select=(name,options)=>({name,selector:{select:{mode:'dropdown',options}}});
   const option=(value,nl,en=nl)=>({value,label:t(nl,en)}),inherit=option('','Kaartinstelling','Card default');
   const views=[option('live','Live'),option('auto','Momentopnamen','Snapshots')],fits=[option('cover','Vullen (bijsnijden)','Fill (crop)'),option('contain','Volledig beeld (met randen)','Full image (with borders)')];
-  this._labels={title:t('Kaartnaam (voor schermlezers)','Card name (for screen readers)'),camera_entities:t('Camera-entiteiten','Camera entities'),name:t('Eigen naam (optioneel)','Custom name (optional)'),motion_entity:t('Sensor voor beweging','Motion sensor'),person_entity:t('Sensor voor personen','Person sensor'),last_detection_entity:t('Tijdstip laatste detectie (optioneel)','Last detection timestamp (optional)'),show:t('Camera tonen','Show camera'),icon:t('Icoon','Icon'),camera_view:t('Beeldbron','Image source'),aspect_ratio:t('Beeldverhouding','Aspect ratio'),fit_mode:t('Beeldvulling','Image fit'),snapshot_interval:t('Momentopname vernieuwen (seconden)','Snapshot refresh (seconds)'),privacy_entity:t('Entiteit voor privacymodus','Privacy entity'),privacy_state:t('Privacy actief bij','Privacy active when'),show_alarm:t('Alarm tonen','Show alarm'),alarm_entity:t('Alarm-entiteit','Alarm entity'),alarm_disarm_code:t('Code vragen bij uitschakelen','Ask for a code when disarming'),show_contacts:t('Deuren en ramen tonen','Show doors and windows'),door_entities:t('Deursensoren','Door sensors'),window_entities:t('Raamsensoren','Window sensors'),show_activity:t('Activiteiten tonen','Show activity'),activity_source:t('Gebeurtenissen ophalen uit','Get events from'),activity_hours:t('Terugkijken (uren)','Look back (hours)'),activity_page_size:t('Gebeurtenissen per pagina','Events per page'),layout:t('Indeling camerabeelden','Camera layout'),columns:t('Aantal kolommen','Number of columns'),default_camera:t('Camera bij openen','Initial camera'),compact:t('Compacte kaartweergave','Compact card layout'),show_names:t('Cameranamen tonen','Show camera names'),show_status:t('Status en detectie-iconen tonen','Show status and detection icons'),show_last_detection:t('Laatste detectie tonen','Show last detection'),show_navigation:t('Navigatieknoppen tonen','Show navigation buttons'),auto_cycle:t('Automatisch wisselen','Automatically switch cameras'),cycle_interval:t('Wisselinterval (seconden)','Switch interval (seconds)'),background:t('Bestaande achtergrond','Existing background'),background_strength:t('Achtergrondsterkte','Background intensity'),animate_background:t('Achtergrond animeren','Animate background')};
-  this._helpers={name:t('Laat leeg om de naam uit Home Assistant te gebruiken.','Leave empty to use the Home Assistant name.'),camera_entities:t('Kies camera’s; pas de volgorde hieronder aan.','Choose cameras; reorder them below.'),snapshot_interval:t('Leeg = kaartinstelling; 0 = normale HA-weergave; vanaf 5 seconden automatisch vernieuwen.','Empty = card default; 0 = native HA view; automatic refresh from 5 seconds.'),privacy_entity:t('Actieve of onbekende privacy verbergt het beeld. Deze koppeling schakelt de camera zelf niet uit.','Active or unknown privacy hides the image. This mapping does not switch off the camera itself.'),alarm_disarm_code:t('Inschakelen gebeurt direct, behalve als de integratie een code vereist; dan opent de HA-alarmbediening. Bij uitschakelen vraagt de kaart een code, met een numpad voor cijfercodes. De alarmintegratie controleert de code.','Arming is immediate unless the integration requires a code; then HA alarm controls open. Disarming asks for a code, with a keypad for numeric codes. The alarm integration validates it.'),show_contacts:t('Verbergt alleen het overzicht en de tabbladen. De sensoren blijven beschikbaar voor Activiteiten.','Only hides the overview and tabs. Sensors remain available for Activity.'),activity_source:t('Eerdere gebeurtenissen vereisen Recorder-geschiedenis voor de gekoppelde sensoren. De kaart bewaart geen beelden of videoclips.','Earlier events require Recorder history for mapped sensors. The card stores no images or clips.'),activity_page_size:t('Herhalingen van dezelfde bron, gebeurtenis en status binnen één minuut delen één regel. Openen en sluiten blijven apart.','Repeats of the same source, event and state within one minute share one row. Opening and closing remain separate.'),last_detection_entity:t('Optionele tijdstipsensor voor eerdere detecties.','Optional timestamp sensor for earlier detections.')};
+  this._labels={viewer_target:t('Viewer-ID (optioneel)','Viewer ID (optional)'),title:t('Kaartnaam (voor schermlezers)','Card name (for screen readers)'),camera_entities:t('Camera-entiteiten','Camera entities'),name:t('Eigen naam (optioneel)','Custom name (optional)'),motion_entity:t('Sensor voor beweging','Motion sensor'),person_entity:t('Sensor voor personen','Person sensor'),last_detection_entity:t('Tijdstip laatste detectie (optioneel)','Last detection timestamp (optional)'),show:t('Camera tonen','Show camera'),icon:t('Icoon','Icon'),camera_view:t('Beeldbron','Image source'),aspect_ratio:t('Beeldverhouding','Aspect ratio'),fit_mode:t('Beeldvulling','Image fit'),snapshot_interval:t('Momentopname vernieuwen (seconden)','Snapshot refresh (seconds)'),show_alarm:t('Alarm tonen','Show alarm'),alarm_entity:t('Alarm-entiteit','Alarm entity'),alarm_disarm_code:t('Code vragen bij uitschakelen','Ask for a code when disarming'),show_contacts:t('Deuren en ramen tonen','Show doors and windows'),door_entities:t('Deursensoren','Door sensors'),window_entities:t('Raamsensoren','Window sensors'),show_activity:t('Activiteiten tonen','Show activity'),activity_source:t('Gebeurtenissen ophalen uit','Get events from'),activity_hours:t('Terugkijken (uren)','Look back (hours)'),activity_page_size:t('Gebeurtenissen per pagina','Events per page'),layout:t('Indeling camerabeelden','Camera layout'),columns:t('Aantal kolommen','Number of columns'),default_camera:t('Camera bij openen','Initial camera'),compact:t('Compacte kaartweergave','Compact card layout'),show_names:t('Cameranamen tonen','Show camera names'),show_status:t('Status en detectie-iconen tonen','Show status and detection icons'),show_last_detection:t('Laatste detectie tonen','Show last detection'),show_navigation:t('Navigatieknoppen tonen','Show navigation buttons'),auto_cycle:t('Automatisch wisselen','Automatically switch cameras'),cycle_interval:t('Wisselinterval (seconden)','Switch interval (seconds)'),background:t('Bestaande achtergrond','Existing background'),background_strength:t('Achtergrondsterkte','Background intensity'),animate_background:t('Achtergrond animeren','Animate background')};
+  this._helpers={name:t('Laat leeg om de naam uit Home Assistant te gebruiken.','Leave empty to use the Home Assistant name.'),camera_entities:t('Kies camera’s; pas de volgorde hieronder aan.','Choose cameras; reorder them below.'),snapshot_interval:t('Leeg = kaartinstelling; 0 = normale HA-weergave; vanaf 5 seconden automatisch vernieuwen.','Empty = card default; 0 = native HA view; automatic refresh from 5 seconds.'),alarm_disarm_code:t('Inschakelen gebeurt direct, behalve als de integratie een code vereist; dan opent de HA-alarmbediening. Bij uitschakelen vraagt de kaart een code, met een numpad voor cijfercodes. De alarmintegratie controleert de code.','Arming is immediate unless the integration requires a code; then HA alarm controls open. Disarming asks for a code, with a keypad for numeric codes. The alarm integration validates it.'),show_contacts:t('Verbergt alleen het overzicht en de tabbladen. De sensoren blijven beschikbaar voor Activiteiten.','Only hides the overview and tabs. Sensors remain available for Activity.'),activity_source:t('Eerdere gebeurtenissen vereisen Recorder-geschiedenis voor de gekoppelde sensoren. De kaart bewaart geen beelden of videoclips.','Earlier events require Recorder history for mapped sensors. The card stores no images or clips.'),activity_page_size:t('Herhalingen van dezelfde bron, gebeurtenis en status binnen één minuut delen één regel. Openen en sluiten blijven apart.','Repeats of the same source, event and state within one minute share one row. Opening and closing remain separate.'),last_detection_entity:t('Optionele tijdstipsensor voor eerdere detecties.','Optional timestamp sensor for earlier detections.')};
   if(!this._shell){
    this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}
     :host{display:block;min-width:0;color:var(--primary-text-color);container-type:inline-size}*{box-sizing:border-box}ha-form{display:block;min-width:0}details{min-width:0}summary{display:grid;grid-template-columns:10px minmax(0,1fr);gap:2px 10px;align-items:center;min-height:52px;padding:12px;cursor:pointer;list-style:none;font-size:13px;font-weight:500;overflow-wrap:anywhere}summary::-webkit-details-marker{display:none}summary::before{content:'';grid-column:1;grid-row:1;width:7px;height:7px;border-right:2px solid var(--secondary-text-color);border-bottom:2px solid var(--secondary-text-color);transform:rotate(-45deg)}details[open]>summary::before{transform:rotate(45deg)}summary>span,summary>small{grid-column:2}summary>small{font-size:12px;font-weight:400;color:var(--secondary-text-color)}.section{border-bottom:1px solid var(--divider-color)}.section>summary{padding:12px 0;min-height:72px;font-size:14px;font-weight:600}.section:last-child{border-bottom:0}.group-body{display:grid;gap:12px;min-width:0;padding:0 0 16px 20px}.subsection,.camera-row,.contact-row{border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px));background:var(--secondary-background-color);box-shadow:var(--eleven-material-well,none)}.subsection>.group-body,.camera-row>.group-body,.contact-row>.group-body{padding:0 12px 12px 32px}.camera-row .subsection{background:transparent;box-shadow:none;border:1px solid var(--divider-color)}.camera-settings{display:grid;gap:8px;min-width:0}.row-actions{display:flex;justify-content:flex-end;gap:8px}.row-actions button{min-width:44px;min-height:44px}.row-actions ha-icon{--mdc-icon-size:20px}summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}[hidden]{display:none!important}@container(max-width:340px){.section>.group-body{padding-left:0}.subsection>.group-body,.camera-row>.group-body,.contact-row>.group-body{padding-left:12px}}
    </style><div class="editor-sections"></div>`;this._shell=this.shadowRoot.querySelector('.editor-sections');
   }
   const save=value=>this._save({...this._config,...value});
-  this._form=this._formAt(this._shell,'title',[text('title')],c,save);
+  this._form=this._formAt(this._shell,'title',[text('title'),text('viewer_target')],c,save);
   const cameras=this._group(this._shell,'cameras',t('Camera’s','Cameras'),c.cameras.length+' '+t('ingesteld','configured'));
   this._formAt(cameras,'camera-picker',[entity('camera_entities','camera',true)],{camera_entities:c.cameras.map(row=>row.entity)},save);
   if(!this._cameraList){this._cameraList=document.createElement('div');this._cameraList.className='camera-settings';cameras.append(this._cameraList);}
@@ -1860,8 +1856,8 @@ class CameraEditor extends HTMLElement{
    node.querySelector('summary span').textContent=this._name(row)+(row.show===false?t(' · Verborgen',' · Hidden'):'');node.querySelector('summary small').textContent=row.entity;
    const body=node.querySelector('.group-body'),save=value=>this._save({...this._config,cameras:this._config.cameras.map(item=>item.entity===row.entity?{...item,...value}:item)});
    this._formAt(body,'main',[text('name'),entity('motion_entity','binary_sensor'),entity('person_entity','binary_sensor')],{...row,motion_entity:row.motion_entity??'',person_entity:row.person_entity??''},save);
-   const extra=this._group(body,'image',t('Beeld en privacy','Image and privacy'),'',true),snapshot=(row.camera_view??c.camera_view)==='auto';
-   this._formAt(extra,'image',[select('camera_view',[inherit,...views]),select('aspect_ratio',[inherit,...CAMERA_RATIOS.map(value=>({value,label:value}))]),select('fit_mode',[inherit,...fits]),...(snapshot?[number('snapshot_interval',0,3600)]:[]),entity('privacy_entity',['switch','input_boolean','binary_sensor']),...(row.privacy_entity?[select('privacy_state',[{value:'on',label:t('Aan','On')},{value:'off',label:t('Uit','Off')}])]:[]),{name:'icon',selector:{icon:{}}},bool('show'),{name:'last_detection_entity',selector:{entity:{domain:'sensor',device_class:'timestamp'}}}],{...row,show:row.show!==false,camera_view:row.camera_view??'',aspect_ratio:row.aspect_ratio??'',fit_mode:row.fit_mode??'',privacy_entity:row.privacy_entity??'',privacy_state:row.privacy_state??'on',last_detection_entity:row.last_detection_entity??''},save);
+   const extra=this._group(body,'image',t('Beeld','Image'),'',true),snapshot=(row.camera_view??c.camera_view)==='auto';
+   this._formAt(extra,'image',[select('camera_view',[inherit,...views]),select('aspect_ratio',[inherit,...CAMERA_RATIOS.map(value=>({value,label:value}))]),select('fit_mode',[inherit,...fits]),...(snapshot?[number('snapshot_interval',0,3600)]:[]),{name:'icon',selector:{icon:{}}},bool('show'),{name:'last_detection_entity',selector:{entity:{domain:'sensor',device_class:'timestamp'}}}],{...row,show:row.show!==false,camera_view:row.camera_view??'',aspect_ratio:row.aspect_ratio??'',fit_mode:row.fit_mode??'',last_detection_entity:row.last_detection_entity??''},save);
    let actions=body.querySelector('.row-actions');
    if(!actions){actions=document.createElement('div');actions.className='row-actions';actions.innerHTML=[-1,1,0].map(move=>uiButton({content:`<ha-icon icon="${move===-1?'mdi:arrow-up':move===1?'mdi:arrow-down':'mdi:delete'}"></ha-icon>`,attrs:{'data-move':String(move)}})).join('');body.append(actions);actions.addEventListener('click',event=>{const button=event.target.closest?.('[data-move]');if(!button)return;const move=Number(button.dataset.move),rows=[...this._config.cameras],from=rows.findIndex(item=>item.entity===row.entity),to=from+move;if(!move)rows.splice(from,1);else if(to>=0&&to<rows.length)[rows[from],rows[to]]=[rows[to],rows[from]];else return;this._save({...this._config,cameras:rows});if(move)button.focus();else this._form.focus();});}
    for(const [move,label,disabled] of [['-1',t('Camera omhoog','Move camera up'),index===0],['1',t('Camera omlaag','Move camera down'),index===c.cameras.length-1],['0',t('Camera verwijderen','Remove camera'),false]]){const button=actions.querySelector(`[data-move="${move}"]`);button.setAttribute('aria-label',label);button.title=label;button.disabled=disabled;}
@@ -1973,7 +1969,7 @@ function cameraActivityTimeline(events,{name,type,t,timeZone,now=Date.now()}={})
 
 function cameraReplaceMarkup(node,markup){
  if(node._cameraMarkup===markup)return;node._cameraMarkup=markup;
- const focused=node.getRootNode().activeElement,identity=focused&&node.contains(focused)?['cameraAction','cameraDetails','cameraRefresh','cameraPrivacy','cameraActivity','cameraActivityPage','securityContacts','securityView','entity'].find(key=>focused.dataset[key]):null,value=identity?focused.dataset[identity]:null;
+ const focused=node.getRootNode().activeElement,identity=focused&&node.contains(focused)?['cameraAction','cameraDetails','cameraRefresh','cameraActivity','cameraActivityPage','securityContacts','securityView','entity'].find(key=>focused.dataset[key]):null,value=identity?focused.dataset[identity]:null;
  node.innerHTML=markup;
  if(identity)[...node.querySelectorAll('button')].find(button=>button.dataset[identity]===value)?.focus({preventScroll:true});
 }
@@ -2015,7 +2011,6 @@ const cameraFeaturesView=Base=>class extends Base{
  }
  _layout(){return this._temporary?.kind==='doorbell'&&visibleCameras(this._config).some(row=>row.entity===this._config.doorbell_secondary_camera&&row.entity!==this._activeCamera)?'doorbell':this._temporary||this._expanded?'focus':super._layout();}
  _feedVisible(row){if(this._viewerEntity)return row.entity===this._viewerEntity;if(this._securityView!=='cameras')return false;if(this._layout()==='doorbell')return [this._activeCamera,this._config.doorbell_secondary_camera].includes(row.entity);return super._feedVisible(row);}
- _playbackBlocked(row){return cameraPrivacy(this._hass,row)??super._playbackBlocked(row);}
  _cancelTemporary(){clearTimeout(this._temporaryTimer);this._temporaryTimer=null;this._temporary=null;}
  _manualInteraction(){this._cancelTemporary();this._manualUntil=Date.now()+Math.max(this._config?.focus_duration??30,this._config?.doorbell_duration??45)*1000;}
  _selectCamera(entity,manual=true){if(manual)this._manualInteraction();super._selectCamera(entity,manual);}
@@ -2061,11 +2056,11 @@ const cameraFeaturesView=Base=>class extends Base{
   const tile=super._makeTile(row),header=tile.section.querySelector('.camera-tile-header');
   tile.frame.prepend(header);
   const feedStatus=document.createElement('span');feedStatus.className='camera-feed-status';header.append(feedStatus);
-  header.insertAdjacentHTML('beforeend',uiButton({className:'camera-expand',content:'<ha-icon icon="mdi:arrow-expand" aria-hidden="true"></ha-icon>',attrs:{'data-camera-expand':row.entity}})+uiButton({content:'<ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon>',attrs:{'data-camera-refresh':row.entity}})+uiButton({content:'<ha-icon icon="mdi:shield-lock" aria-hidden="true"></ha-icon>',attrs:{'data-camera-privacy':row.entity}}));
+  header.insertAdjacentHTML('beforeend',uiButton({className:'camera-expand',content:'<ha-icon icon="mdi:arrow-expand" aria-hidden="true"></ha-icon>',attrs:{'data-camera-expand':row.entity}})+uiButton({content:'<ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon>',attrs:{'data-camera-refresh':row.entity}}));
   const loaded=document.createElement('p');loaded.className='camera-snapshot-time';loaded.hidden=true;tile.section.append(loaded);tile.loaded=loaded;
   const footer=document.createElement('div');footer.className='camera-tile-footer';
   const actions=document.createElement('div');actions.className='camera-tile-actions';
-  actions.append(tile.section.querySelector('.camera-status'),header.querySelector('[data-camera-refresh]'),header.querySelector('[data-camera-privacy]'),header.querySelector('[data-camera-expand]'));
+  actions.append(tile.section.querySelector('.camera-status'),header.querySelector('[data-camera-refresh]'),header.querySelector('[data-camera-expand]'));
   footer.append(tile.name,actions);tile.frame.after(footer);header.hidden=true;
   tile.snapshot=new CameraSnapshot(tile.section.querySelector('.camera-native'),status=>{tile.status=status;this._updateMessage(tile,row.entity);queueMicrotask(()=>{const button=tile.section.querySelector('[data-camera-refresh]');button.disabled=!!this._playbackBlocked(this._config.cameras.find(item=>item.entity===row.entity)??row)||!!tile.snapshot?.pending;this._renderViewer();});},()=>this._updateSnapshotTime(tile));
   return tile;
@@ -2106,10 +2101,9 @@ const cameraFeaturesView=Base=>class extends Base{
   const alertText=alarm?t('Alarm geactiveerd','Alarm triggered'):this._temporary?(this._temporary.kind==='doorbell'?t('Er wordt aangebeld','Doorbell ringing'):t('Detectie','Detection'))+' · '+this._cameraName(this._activeCamera):detected?t('Detectie','Detection')+' · '+this._cameraName(detected.entity):'';if(alert.textContent!==alertText)alert.textContent=alertText;
   alert.hidden=true;toolbar.hidden=back.hidden;
   for(const row of visibleCameras(config)){
-   const tile=this._tiles.get(row.entity),privacy=cameraPrivacy(this._hass,row),view=cameraPictureConfig(row.entity,config).camera_view;
+   const tile=this._tiles.get(row.entity),view=cameraPictureConfig(row.entity,config).camera_view;
    const expand=tile.section.querySelector('[data-camera-expand]');expand.hidden=this._viewerEntity===row.entity;expand.setAttribute('aria-label',t('Groot beeld: ','Large view: ')+this._cameraName(row.entity));expand.title=t('Groot beeld','Large view');expand.innerHTML='<ha-icon icon="mdi:arrow-expand" aria-hidden="true"></ha-icon>';
    const refresh=tile.section.querySelector('[data-camera-refresh]');refresh.hidden=view!=='auto';refresh.disabled=!!this._playbackBlocked(row)||tile.snapshot.pending;refresh.setAttribute('aria-label',t('Beeld vernieuwen: ','Refresh image: ')+this._cameraName(row.entity));
-   const button=tile.section.querySelector('[data-camera-privacy]');button.hidden=!row.privacy_entity;button.disabled=!!this._actionBusy||row.privacy_entity?.startsWith('binary_sensor.')||privacy==='privacy_unknown';button.setAttribute('aria-label',(privacy==='privacy'?t('Privacy uitschakelen: ','Disable privacy: '):t('Privacy inschakelen: ','Enable privacy: '))+this._cameraName(row.entity));button.setAttribute('aria-pressed',String(privacy==='privacy'));
    const entries=cameraDetections(this._hass,row,this._detections).entries,active=entries.some(entry=>entry.active);
    for(const choice of this.shadowRoot.querySelectorAll('[data-ui-tab],[data-camera-select]'))if((choice.dataset.uiTab??choice.dataset.cameraSelect)===row.entity){choice.dataset.detection=String(active);choice.setAttribute('aria-label',this._cameraName(row.entity)+(active?t(' · Detectie',' · Detection'):''));}
    tile.section.dataset.detection=String(active);
@@ -2172,6 +2166,7 @@ const cameraFeaturesView=Base=>class extends Base{
  }
  _syncCycle(){if(this._viewerEntity||this._securityView!=='cameras'){this._cycle.stop();return;}super._syncCycle();}
  _openViewer(entity,opener){
+  if(this._openLinkedViewer(entity))return;
   if(!visibleCameras(this._config).some(row=>row.entity===entity))return;
   this._manualInteraction();this._viewerOpener=opener??this.shadowRoot.activeElement;this._viewerEntity=entity;
   if(!this._viewer){
@@ -2196,7 +2191,7 @@ const cameraFeaturesView=Base=>class extends Base{
   this._viewer.querySelector('.camera-viewer-header p').textContent=this._t('Actueel camerabeeld','Current camera feed');
   this._viewer.querySelector('[data-camera-view-close]').setAttribute('aria-label',this._t('Groot beeld sluiten','Close large view'));
   const tools=this._viewer.querySelector('.camera-viewer-tools'),entries=this._config.show_status?cameraDetections(this._hass,row,this._detections).entries:[];
-  const controls=['[data-camera-refresh]','[data-camera-privacy]'].map(selector=>tile.section.querySelector(selector)).filter(button=>button&&!button.hidden).map(button=>button.outerHTML).join('');
+  const controls=['[data-camera-refresh]'].map(selector=>tile.section.querySelector(selector)).filter(button=>button&&!button.hidden).map(button=>button.outerHTML).join('');
   cameraReplaceMarkup(tools,cameraDetectionIndicators(entries,(nl,en)=>this._t(nl,en))+controls);
   this._viewerPicker??=new CameraViewerPicker(this._viewer.querySelector('.camera-viewer-picker'));
   this._viewerPicker.update(this._hass,rows,{selected:row.entity,name:entity=>this._cameraName(entity),blocked:camera=>this._playbackBlocked(camera),active:!!this._attached&&!document.hidden,t:(nl,en)=>this._t(nl,en)});
@@ -2280,7 +2275,6 @@ const cameraFeaturesView=Base=>class extends Base{
   const step=find('[data-camera-view-step]');if(step&&this._viewerEntity){const rows=visibleCameras(this._config),index=rows.findIndex(row=>row.entity===this._viewerEntity);this._viewerEntity=rows[(index+Number(step.dataset.cameraViewStep)+rows.length)%rows.length].entity;this._render();step.focus({preventScroll:true});}
   if(find('[data-camera-back]')){const saved=this._temporary?.restore;this._manualInteraction();this._expanded=saved?.expanded??false;this._activeCamera=saved?.camera??this._overviewCamera??this._config.default_camera;this._securityView=saved?.view??this._securityView;this._render();this.shadowRoot.querySelector('ha-card').scrollTop=saved?.scroll??this._overviewScroll??0;}
   const refresh=find('[data-camera-refresh]');if(refresh){const tile=this._tiles.get(refresh.dataset.cameraRefresh);if(tile){tile.manualSnapshot=true;this._syncPlayers();tile.snapshot.refresh();}}
-  const privacy=find('[data-camera-privacy]');if(privacy){const row=this._config.cameras.find(row=>row.entity===privacy.dataset.cameraPrivacy);if(row?.privacy_entity&&!row.privacy_entity.startsWith('binary_sensor.')&&cameraPrivacy(this._hass,row)!=='privacy_unknown'){const active=cameraPrivacy(this._hass,row)==='privacy',target=active?(row.privacy_state==='off'?'on':'off'):(row.privacy_state??'on');this._requestAction({id:'privacy:'+row.entity,name:(active?this._t('Privacy uitschakelen: ','Disable privacy: '):this._t('Privacy inschakelen: ','Enable privacy: '))+this._cameraName(row.entity),entity:row.privacy_entity,action:'turn_'+target,confirmation:true,data:{}});}}
   const action=find('[data-camera-action]');if(action){const config=this._config.actions.find(row=>row.id===action.dataset.cameraAction);if(config)this._requestAction(config);}
   if(find('[data-camera-cancel]')){this._pendingAction=null;this.shadowRoot.querySelector('dialog').close();}
   if(find('[data-camera-confirm]')){const action=this._pendingAction;this._pendingAction=null;this.shadowRoot.querySelector('dialog').close();if(action)this._runAction(action);}
@@ -2324,6 +2318,7 @@ const cameraFeaturesView=Base=>class extends Base{
 
 
 
+
 let cameraCardSequence=0;
 class CameraCardBase extends HTMLElement{
  constructor(){super();this.attachShadow({mode:'open'});this._id='eleven-camera-'+(++cameraCardSequence);this._tiles=new Map();this._detections=new Map();this._cycle=new CameraCycle(()=>this._advanceCycle());this._fullscreenChange=()=>this._updateFullscreen();}
@@ -2344,18 +2339,18 @@ class CameraCardBase extends HTMLElement{
  _syncTile(tile,row,active){tile.player.update(this._hass,cameraPictureConfig(row.entity,this._config),active);}
  _retryTile(entity){this._tiles.get(entity)?.player.retry();this._syncPlayers();}
  connectedCallback(){this._attached=true;this._motionCleanup?.();this._motionCleanup=observeCardMotion(this,()=>this._syncPlayers());document.addEventListener('fullscreenchange',this._fullscreenChange);this._render();}
- disconnectedCallback(){this._attached=false;this._motionCleanup?.();this._motionCleanup=null;this._tabs?.disconnect();this._layoutKey=null;this._cycle.stop();this._hovered=false;this._focused=false;document.removeEventListener('fullscreenchange',this._fullscreenChange);for(const tile of this._tiles.values())tile.player.stop();this._helpers=null;}
+ disconnectedCallback(){this._attached=false;releaseCameraViewer(this._viewerTarget,this);this._motionCleanup?.();this._motionCleanup=null;this._tabs?.disconnect();this._layoutKey=null;this._cycle.stop();this._hovered=false;this._focused=false;document.removeEventListener('fullscreenchange',this._fullscreenChange);for(const tile of this._tiles.values())tile.player.stop();this._helpers=null;}
  async _createNative(config){
   if(!this._helpers)this._helpers=Promise.resolve().then(()=>{if(typeof window.loadCardHelpers!=='function')throw Error('HA helpers unavailable');return window.loadCardHelpers();}).catch(error=>{this._helpers=null;throw error;});
   const helpers=await this._helpers;return helpers.createCardElement(config);
  }
  _ensureShell(){
   if(this._shell)return;
-  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${cameraStyles}</style><ha-card><div class="content"><div class="header-region"><div class="scene-background" aria-hidden="true"></div><header class="camera-header"><span class="camera-icon" aria-hidden="true"><ha-icon icon="mdi:cctv"></ha-icon></span><div><h2 class="camera-title"></h2><p class="camera-count"></p></div></header></div><p class="camera-empty" role="status"></p><div class="camera-body"></div><div class="camera-navigation">${uiButton({variant:'action-icon',content:'<ha-icon icon="mdi:chevron-left"></ha-icon>',attrs:{'data-camera-prev':true}})}<span class="camera-position" aria-live="polite"></span>${uiButton({variant:'action-icon',content:'<ha-icon icon="mdi:chevron-right"></ha-icon>',attrs:{'data-camera-next':true}})}${uiButton({variant:'action',attrs:{'data-camera-cycle':true}})}</div><p class="camera-action-error" role="status" hidden></p></div></ha-card>`;
+  this.shadowRoot.innerHTML=`<style>${uiButtonStyles()}${uiTabsStyles()}${cameraStyles}</style><ha-card><div class="content"><div class="header-region"><div class="scene-background" aria-hidden="true"></div><header class="camera-header"><span class="camera-icon" aria-hidden="true"><ha-icon icon="mdi:cctv"></ha-icon></span><div><h2 class="camera-title"></h2><p class="camera-count"></p></div></header></div><p class="camera-empty" role="status"></p><div class="camera-body"></div><div class="camera-navigation">${uiButton({variant:'action-icon',content:'<ha-icon icon="mdi:chevron-left"></ha-icon>',attrs:{'data-camera-prev':true}})}<span class="camera-position" aria-live="polite"></span>${uiButton({variant:'action-icon',content:'<ha-icon icon="mdi:chevron-right"></ha-icon>',attrs:{'data-camera-next':true}})}${uiButton({variant:'action',attrs:{'data-camera-cycle':true}})}</div><p class="camera-viewer-feedback" role="status" hidden></p><p class="camera-action-error" role="status" hidden></p></div></ha-card>`;
   this._shell=true;
   this.shadowRoot.addEventListener('click',event=>{
    const details=event.target.closest?.('[data-camera-details]');
-   if(details)this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:details.dataset.cameraDetails},bubbles:true,composed:true}));
+   if(details&&!this._openLinkedViewer(details.dataset.cameraDetails))this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:details.dataset.cameraDetails},bubbles:true,composed:true}));
    const retry=event.target.closest?.('[data-camera-retry]');
    if(retry)this._retryTile(retry.dataset.cameraRetry);
    const fullscreen=event.target.closest?.('[data-camera-fullscreen]');if(fullscreen)this._toggleFullscreen(fullscreen.dataset.cameraFullscreen);
@@ -2369,10 +2364,16 @@ class CameraCardBase extends HTMLElement{
   this.shadowRoot.addEventListener('focus',()=>{this._focused=true;this._syncCycle();},true);
   this.shadowRoot.addEventListener('blur',()=>queueMicrotask(()=>{this._focused=!!this.shadowRoot.activeElement;this._syncCycle();}),true);
  }
+ _openLinkedViewer(entity){
+  if(!this._attached||!this._config.viewer_target||!visibleCameras(this._config).some(row=>row.entity===entity))return false;
+  this._manualInteraction?.();updateCameraViewer(this._config.viewer_target,this,entity);this._render();return true;
+ }
  _makeTile(row){
   const section=document.createElement('section');section.className='camera-tile';
   section.innerHTML=`<div class="camera-tile-header"><button type="button" class="camera-name" data-camera-details="${uiEscape(row.entity)}"><ha-icon aria-hidden="true"></ha-icon><span></span></button>${uiButton({className:'camera-fullscreen',content:'<ha-icon icon="mdi:fullscreen" aria-hidden="true"></ha-icon>',attrs:{'data-camera-fullscreen':row.entity}})}</div><div class="camera-frame"><div class="camera-native"></div><div class="camera-message" role="status"><span></span>${uiButton({variant:'action',text:'',attrs:{'data-camera-retry':row.entity,hidden:true}})}</div></div><div class="camera-status"></div><p class="camera-last-detection"></p>`;
   const tile={section,name:section.querySelector('.camera-name'),frame:section.querySelector('.camera-frame'),message:section.querySelector('.camera-message'),status:'idle'};
+  tile.frame.addEventListener('click',event=>{if(!this._config.viewer_target||event.composedPath().some(node=>node.matches?.('button,[data-ui-button],a')))return;if(this._openLinkedViewer(row.entity)){event.preventDefault();event.stopPropagation();}},true);
+  tile.frame.addEventListener('hass-more-info',event=>{if(this._openLinkedViewer(row.entity))event.stopPropagation();});
   tile.player=new CameraPlayer(section.querySelector('.camera-native'),config=>this._createNative(config),status=>{tile.status=status;this._updateMessage(tile,row.entity);});
   return tile;
  }
@@ -2381,13 +2382,15 @@ class CameraCardBase extends HTMLElement{
   const paused=!this._attached||document.hidden||(!this._viewerEntity&&!this.shadowRoot.fullscreenElement&&this.hasAttribute('data-motion-paused'));
   const status=unavailable??(paused?'paused':tile.status);
   const messages={offline:t('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'),missing:t('Camera niet gevonden.','Camera not found.'),off:t('Camera uit.','Camera is off.'),unknown:t('Camera niet beschikbaar.','Camera unavailable.'),unavailable:t('Camera niet beschikbaar.','Camera unavailable.'),paused:t('Camerabeeld gepauzeerd.','Camera view paused.'),idle:t('Camerabeeld laden…','Loading camera view…'),loading:t('Camerabeeld laden…','Loading camera view…'),error:t('Camerabeeld laden mislukt.','Could not load camera view.')};
-  messages.privacy=t('Privacymodus actief.','Privacy mode active.');messages.privacy_unknown=t('Privacystatus onbekend. Beeld verborgen.','Privacy status unknown. Feed hidden.');
   tile.message.hidden=status==='ready';const message=tile.message.querySelector('span'),text=messages[status]??'';if(message.textContent!==text)message.textContent=text;
   const retry=tile.message.querySelector('button');retry.hidden=status!=='error';retry.textContent=t('Opnieuw proberen','Retry');
   tile.frame.setAttribute('aria-busy',String(status==='loading'));
  }
  _render(){
   if(!this._config)return;this._ensureShell();
+  if(this._viewerTarget!==this._config.viewer_target){releaseCameraViewer(this._viewerTarget,this);this._viewerTarget=this._config.viewer_target;}
+  if(this._attached)updateCameraViewer(this._viewerTarget,this);
+  const feedback=this.shadowRoot.querySelector('.camera-viewer-feedback'),missingViewer=this._config.viewer_target&&!cameraViewerChannel(this._config.viewer_target).listeners.size;feedback.hidden=!missingViewer;feedback.textContent=missingViewer?this._t('Geen cameraviewer gevonden met ID: ','No camera viewer found with ID: ')+this._config.viewer_target:'';
   const config=this._config,layout=this._layout(),nl=cameraDutch(this._hass),content=this.shadowRoot.querySelector('.content'),title=config.title||(nl?'Camera’s':'Cameras');
   content.dataset.dark=String(!!this._hass?.themes?.darkMode);content.dataset.color=config.color;content.dataset.compact=String(config.compact);
   content.dataset.animated=String(config.animate_background&&this._hass?.connected!==false&&this._hass?.connection?.connected!==false);
@@ -2476,7 +2479,65 @@ class CameraCardBase extends HTMLElement{
 }
 class CameraCard extends withCardBackground(cameraFeaturesView(CameraCardBase)){}
 
+// Shared across standalone/collection loads. Only mounted sources are retained.
+const cameraViewerKey=Symbol.for('eleven-camera-viewer-card.links');
+const cameraViewerLinks=globalThis[cameraViewerKey]??=new Map();
+function cameraViewerChannel(id){
+ if(!cameraViewerLinks.has(id))cameraViewerLinks.set(id,{source:null,entity:'',listeners:new Set()});
+ return cameraViewerLinks.get(id);
+}
+function updateCameraViewer(id,source,entity){
+ if(!id)return;
+ const channel=cameraViewerChannel(id);
+ if(entity){channel.source=source;channel.entity=entity;}
+ if(channel.source!==source)return;
+ for(const listener of [...channel.listeners])listener();
+}
+function releaseCameraViewer(id,source){
+ if(!id)return;
+ const channel=cameraViewerChannel(id);
+ if(channel.source===source){channel.source=null;channel.entity='';for(const listener of [...channel.listeners])listener();}
+ if(!channel.source&&!channel.listeners.size)cameraViewerLinks.delete(id);
+}
+
+
+
+
+
+
+class CameraViewerEditor extends HTMLElement{
+ constructor(){super();this.attachShadow({mode:'open'});}
+ setConfig(input){this._config={show_names:true,show_status:true,show_last_detection:true,show_fullscreen:true,compact:false,...input};this._render();}
+ set hass(value){this._hass=value;this._render();}
+ _render(){if(!this._config)return;const nl=cameraDutch(this._hass),t=(a,b)=>nl?a:b;
+  if(!this._form){this.shadowRoot.innerHTML='<ha-form></ha-form>';this._form=this.shadowRoot.querySelector('ha-form');this._form.addEventListener('value-changed',event=>{event.stopPropagation();this._config={...this._config,...event.detail.value};this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:this._config},bubbles:true,composed:true}));});}
+  this._form.hass=this._hass;this._form.data=this._config;this._form.schema=[{name:'title',selector:{text:{}}},{name:'viewer_id',selector:{text:{}}},...['show_names','show_status','show_last_detection','show_fullscreen','compact'].map(name=>({name,selector:{boolean:{}}}))];
+  const labels={title:t('Titel','Title'),viewer_id:t('Viewer-ID','Viewer ID'),show_names:t('Cameranamen tonen','Show camera names'),show_status:t('Detecties tonen','Show detections'),show_last_detection:t('Laatste detectie tonen','Show last detection'),show_fullscreen:t('Knop voor groot beeld tonen','Show large view button'),compact:t('Compact','Compact')};this._form.computeLabel=field=>labels[field.name]??field.name;this._form.computeHelper=field=>field.name==='viewer_id'?t('Gebruik dezelfde ID als in de gekoppelde camerakaart.','Use the same ID as in the linked camera card.'):'';
+ }
+}
+class CameraViewerCard extends CameraCard{
+ static getStubConfig(){return {viewer_id:'camera-viewer'};}
+ static async getConfigElement(){await CameraCard.getConfigElement();if(!customElements.get('eleven-camera-viewer-editor'))customElements.define('eleven-camera-viewer-editor',CameraViewerEditor);if(!customElements.get('eleven-card-background-editor'))customElements.define('eleven-card-background-editor',ElevenCardBackgroundEditor);const editor=document.createElement('eleven-card-background-editor');editor.nativeEditor=document.createElement('eleven-camera-viewer-editor');return editor;}
+ setConfig(input){this._unsubscribeViewer();this._viewerInput={...input};this._viewerId=typeof input.viewer_id==='string'?input.viewer_id.trim():'';this._refreshViewer();if(this.isConnected)this._subscribeViewer();}
+ connectedCallback(){super.connectedCallback();this._subscribeViewer();}
+ disconnectedCallback(){this._unsubscribeViewer();super.disconnectedCallback();}
+ getCardSize(){const content=this.shadowRoot?.querySelector('.content');if(this.isConnected&&content?.getBoundingClientRect().width>0)return Math.max(2,Math.ceil(content.scrollHeight/50));return this._config?.cameras?.length?5:2;}
+ getGridOptions(){return {columns:12,min_columns:6,rows:'auto'};}
+ _subscribeViewer(){this._unsubscribeViewer();if(!this._viewerId)return;this._viewerChannel=cameraViewerChannel(this._viewerId);this._viewerListener=()=>this._refreshViewer();this._viewerChannel.listeners.add(this._viewerListener);this._refreshViewer();this._viewerChannel.source?._render();}
+ _unsubscribeViewer(){const channel=this._viewerChannel;channel?.listeners.delete(this._viewerListener);this._viewerChannel=null;channel?.source?._render();}
+ _refreshViewer(){
+  const channel=this._viewerId?cameraViewerChannel(this._viewerId):null,source=channel?.source;
+  const row=source?visibleCameras(source._config).find(row=>row.entity===channel.entity):null;
+  const camera=row?{...row,camera_view:row.camera_view??source._config.camera_view,aspect_ratio:row.aspect_ratio??source._config.aspect_ratio,fit_mode:row.fit_mode??source._config.fit_mode,snapshot_interval:row.snapshot_interval??source._config.snapshot_interval}:null;
+  super.setConfig({...this._viewerInput,viewer_target:'',cameras:camera?[camera]:[],entity:undefined,layout:'focus',profiles:[],actions:[],auto_cycle:false,auto_focus:false,doorbell_entity:'',alarm_entity:'',door_sensors:[],window_sensors:[],show_activity:false,show_security:false,show_alarm:false,show_contacts:false});
+ }
+ _renderSecurity(){super._renderSecurity();const title=this._viewerInput?.title||this._t('Cameraviewer','Camera viewer'),header=this.shadowRoot.querySelector('.camera-security-header'),heading=document.createElement('h2');heading.className='camera-viewer-title';heading.textContent=title;header.replaceChildren(heading);this.shadowRoot.querySelector('ha-card').setAttribute('aria-label',title);this.shadowRoot.querySelector('.camera-security-metrics').hidden=true;if(!this._viewerTitleStyle){const style=document.createElement('style');style.textContent=uiCardTitleStyles('.camera-viewer-title')+'.camera-viewer-title{margin:0}.camera-security-header{min-height:0}';this.shadowRoot.append(style);this._viewerTitleStyle=style;}}
+ _render(){super._render();if(!this._config)return;const empty=this.shadowRoot.querySelector('.camera-empty');empty.textContent=this._viewerId?this._t('Klik op een camera in de gekoppelde camerakaart.','Select a camera in the linked camera card.'):this._t('Stel een viewer-ID in om een camerakaart te koppelen.','Set a viewer ID to link a camera card.');this.shadowRoot.querySelector('.camera-focus-picker')?.setAttribute('hidden','');for(const tile of this._tiles.values())tile.section.querySelector('[data-camera-expand]').hidden=!this._config.show_fullscreen;}
+}
+
 if(!customElements.get('eleven-camera-card'))customElements.define('eleven-camera-card',CameraCard);
+if(!customElements.get('eleven-camera-viewer-card'))customElements.define('eleven-camera-viewer-card',CameraViewerCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(card=>card.type==='eleven-camera-card'))window.customCards.push({type:'eleven-camera-card',name:'Eleven Camera (beta)',description:'One or more Home Assistant camera feeds in a grid or tabs.',preview:true});
+if(!window.customCards.some(card=>card.type==='eleven-camera-viewer-card'))window.customCards.push({type:'eleven-camera-viewer-card',name:'Eleven Camera Viewer (beta)',description:'Show the camera selected in a linked Camera card.',preview:true});
 })();

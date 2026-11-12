@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#faf8f2"/>
+  <circle cx="360" cy="280" r="150" fill="#eee0bd"/>
+  <path d="M70 390Q210 285 350 390T540 390M70 416Q210 311 350 416T540 416M70 442Q210 337 350 442T540 442" fill="none" stroke="#97aaa4" stroke-width="3"/>
+  <g fill="#344946" font-family="sans-serif">
+    <text x="48" y="76" font-size="18" letter-spacing="6">NORTH OF HERE</text>
+    <text x="48" y="118" font-size="30">Quiet Horizons</text>
+    <text x="48" y="548" font-size="14" letter-spacing="4">MORNING SESSIONS</text>
+  </g>
+</svg>

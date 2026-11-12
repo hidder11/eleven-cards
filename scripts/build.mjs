@@ -13,6 +13,7 @@ const paths = [
   'cards/car-card/dist/eleven-car-card.js',
   'cards/energy-flow-card/dist/eleven-energy-flow-card.js',
   'cards/camera-card/dist/eleven-camera-card.js',
+  'cards/media-player-card/dist/eleven-media-player-card.js',
   'cards/shopping-card/dist/eleven-shopping-card.js',
   'cards/house-card/dist/eleven-house-card.js',
   'cards/home-controls/dist/eleven-home-controls-card.js',
@@ -49,5 +50,5 @@ if (!pilot.startsWith(pilotMarker)) {
 modules.push(pilot);
 await mkdir(new URL('dist/', root), {recursive: true});
 await writeFile(new URL('dist/eleven-cards.js', root),
-  '// Eleven Cards — HACS collection; nineteen card types, no external runtime imports.\n' + modules.join('\n;\n'));
+  '// Eleven Cards — HACS collection; twenty-two card types, no external runtime imports.\n' + modules.join('\n;\n'));
 console.log('Built dist/eleven-cards.js');

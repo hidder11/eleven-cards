@@ -38,12 +38,6 @@ export function effectiveCameraConfig(config,hass,selection='auto'){
 }
 export const cameraShowAlarm=config=>config.show_alarm??(config.show_security!==false);
 export const cameraShowContacts=config=>config.show_contacts??(config.show_security!==false);
-export function cameraPrivacy(hass,row){
- if(!row?.privacy_entity)return null;
- const value=hass?.states?.[row.privacy_entity]?.state;
- if(hass?.connected===false||hass?.connection?.connected===false||!['on','off'].includes(value))return 'privacy_unknown';
- return value===(row.privacy_state??'on')?'privacy':null;
-}
 export function cameraActivitySources(config){
  const sources=[];
  for(const row of config.cameras){

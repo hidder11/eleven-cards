@@ -7,11 +7,12 @@ export async function runCameraReviewChecks(card,hass,calls,check){
   const cameras=[{entity:'camera.front'},{entity:'camera.garden',privacy_entity:'switch.privacy'},{entity:'camera.inside'}];
   for(const layout of ['focus','tabs'])for(const [value,active,expected] of [['on','on','camera.inside'],['off','on','camera.garden'],['off','off','camera.inside'],['on','off','camera.garden'],['unknown','on','camera.inside'],['unavailable','on','camera.inside'],[null,'on','camera.inside']]){
    if(value===null)delete hass.states['switch.privacy'];else hass.states['switch.privacy']={state:value};
+   hass.states['camera.garden']={...hass.states['camera.garden'],state:expected==='camera.inside'?'unavailable':'idle'};
    card.shadowRoot.activeElement?.blur();card._hovered=false;card._focused=false;
    card.setConfig({...config,cameras:cameras.map(row=>({...row,...(row.privacy_entity?{privacy_state:active}:{})})),layout,auto_focus:false,auto_cycle:true,default_camera:'camera.front'});
    card.hass=hass;card.removeAttribute('data-motion-paused');card._selectCamera('camera.front',false);
    card._advanceCycle();
-   check('Auto rotation respects privacy '+layout+'/'+value+'/'+active,card._activeCamera===expected);
+   check('Auto rotation respects availability '+layout+'/'+value+'/'+active,card._activeCamera===expected);
    const blocked=card._config.cameras.find(row=>row.entity==='camera.garden');
    if(expected==='camera.inside')check('Blocked rotated feed has no live player '+layout+'/'+value+'/'+active,!!card._playbackBlocked(blocked)&&!card._tiles.get('camera.garden').player.card);
    card._cycle.stop();

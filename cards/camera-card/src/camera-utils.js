@@ -21,7 +21,6 @@ export function normalizeCameraConfig(input={}){
    if(CAMERA_RATIOS.includes(row.aspect_ratio))item.aspect_ratio=row.aspect_ratio;
    if(['cover','contain'].includes(row.fit_mode))item.fit_mode=row.fit_mode;
    if(['auto','live'].includes(row.camera_view))item.camera_view=row.camera_view;
-   if(cameraEntity(row.privacy_entity,['switch','input_boolean','binary_sensor'])){item.privacy_entity=row.privacy_entity;item.privacy_state=row.privacy_state==='off'?'off':'on';}
    if(row.snapshot_interval!=null&&row.snapshot_interval!=='')item.snapshot_interval=cameraSnapshotInterval(row.snapshot_interval);
    for(const field of ['motion_entity','person_entity','last_detection_entity']){
     const value=row[field],domain=field==='last_detection_entity'?'sensor':'binary_sensor';
@@ -31,7 +30,7 @@ export function normalizeCameraConfig(input={}){
   return item;
  });
  const {activity_limit:legacyLimit,background,...settings}=input;
- return {...settings,...normalizeCameraFeatures(input,cameras),cameras,title:typeof input.title==='string'?input.title:'',layout:CAMERA_LAYOUTS.includes(input.layout)?input.layout:'grid',
+ return {...settings,...normalizeCameraFeatures(input,cameras),cameras,viewer_target:typeof input.viewer_target==='string'?input.viewer_target.trim():'',viewer_id:typeof input.viewer_id==='string'?input.viewer_id.trim():'',title:typeof input.title==='string'?input.title:'',layout:CAMERA_LAYOUTS.includes(input.layout)?input.layout:'grid',
   columns:[1,2,3].includes(Number(input.columns))?Number(input.columns):'auto',camera_view:input.camera_view==='auto'?'auto':'live',
   aspect_ratio:CAMERA_RATIOS.includes(input.aspect_ratio)?input.aspect_ratio:'16:9',fit_mode:input.fit_mode==='contain'?'contain':'cover',
   show_status:input.show_status!==false,show_last_detection:input.show_last_detection!==false,show_navigation:input.show_navigation!==false,show_fullscreen:input.show_fullscreen!==false,

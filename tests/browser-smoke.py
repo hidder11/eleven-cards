@@ -11,7 +11,7 @@ CARDS = [
     'eleven-timeline-card', 'eleven-overview-card', 'eleven-bar-chart',
     'eleven-heatmap-card', 'eleven-calendar-card',
     'eleven-car-card', 'eleven-weather-card', 'eleven-energy-flow-card',
-    'eleven-camera-card', 'eleven-shopping-card', 'eleven-house-card',
+    'eleven-camera-card', 'eleven-camera-viewer-card', 'eleven-media-player-card', 'eleven-shopping-card', 'eleven-house-card',
     'eleven-actions-card', 'eleven-controls-card', 'eleven-waste-card',
     'eleven-room-card', 'eleven-appliance-planner',
     'eleven-scene-engine-card', 'eleven-material-house',
