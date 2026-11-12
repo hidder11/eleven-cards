@@ -51,6 +51,8 @@ jobs:
         run: |
           export CHROME_PATH="$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           node tests/browser-camera.mjs
+          node tests/browser-camera-viewer.mjs
+          node tests/browser-media-player.mjs
       - name: Energy, EVCC and Weather browser regressions (synthetic HA)
         run: |
           export CHROME_PATH="$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"

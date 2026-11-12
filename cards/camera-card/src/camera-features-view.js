@@ -1,10 +1,10 @@
 import {cameraSecurityStatusColor} from './security-status.js';
 import {requestWithTimeout} from '../../../shared/request.js';
-import {cameraShowAlarm} from './camera-features.js';
+import {cameraShowAlarm,cameraPrivacy} from './camera-features.js';
 import {uiEscape,uiButton} from '../../../shared/ui-button.js';
 import {cameraDutch,cameraPictureConfig,visibleCameras,cameraDetections} from './camera-utils.js';
 import {normalizeCameraConfig} from './camera-utils.js';
-import {effectiveCameraConfig,cameraPrivacy,CameraActivity,cameraActivitySources,cameraHistoryEvents,cameraActionRequest,cameraRetainActivity} from './camera-features.js';
+import {effectiveCameraConfig,CameraActivity,cameraActivitySources,cameraHistoryEvents,cameraActionRequest,cameraRetainActivity} from './camera-features.js';
 import {CameraSnapshot} from './camera-snapshot.js';
 import {CameraViewerPicker} from './camera-viewer-picker.js';
 import {uiTabs,bindUITabs} from '../../../shared/ui-tabs.js';
@@ -15,7 +15,7 @@ import {CameraActivityPages} from './camera-activity-pages.js';
 
 function cameraReplaceMarkup(node,markup){
  if(node._cameraMarkup===markup)return;node._cameraMarkup=markup;
- const focused=node.getRootNode().activeElement,identity=focused&&node.contains(focused)?['cameraAction','cameraDetails','cameraRefresh','cameraPrivacy','cameraActivity','cameraActivityPage','securityContacts','securityView','entity'].find(key=>focused.dataset[key]):null,value=identity?focused.dataset[identity]:null;
+ const focused=node.getRootNode().activeElement,identity=focused&&node.contains(focused)?['cameraAction','cameraDetails','cameraRefresh','cameraActivity','cameraActivityPage','securityContacts','securityView','entity'].find(key=>focused.dataset[key]):null,value=identity?focused.dataset[identity]:null;
  node.innerHTML=markup;
  if(identity)[...node.querySelectorAll('button')].find(button=>button.dataset[identity]===value)?.focus({preventScroll:true});
 }
@@ -103,11 +103,11 @@ export const cameraFeaturesView=Base=>class extends Base{
   const tile=super._makeTile(row),header=tile.section.querySelector('.camera-tile-header');
   tile.frame.prepend(header);
   const feedStatus=document.createElement('span');feedStatus.className='camera-feed-status';header.append(feedStatus);
-  header.insertAdjacentHTML('beforeend',uiButton({className:'camera-expand',content:'<ha-icon icon="mdi:arrow-expand" aria-hidden="true"></ha-icon>',attrs:{'data-camera-expand':row.entity}})+uiButton({content:'<ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon>',attrs:{'data-camera-refresh':row.entity}})+uiButton({content:'<ha-icon icon="mdi:shield-lock" aria-hidden="true"></ha-icon>',attrs:{'data-camera-privacy':row.entity}}));
+  header.insertAdjacentHTML('beforeend',uiButton({className:'camera-expand',content:'<ha-icon icon="mdi:arrow-expand" aria-hidden="true"></ha-icon>',attrs:{'data-camera-expand':row.entity}})+uiButton({content:'<ha-icon icon="mdi:refresh" aria-hidden="true"></ha-icon>',attrs:{'data-camera-refresh':row.entity}}));
   const loaded=document.createElement('p');loaded.className='camera-snapshot-time';loaded.hidden=true;tile.section.append(loaded);tile.loaded=loaded;
   const footer=document.createElement('div');footer.className='camera-tile-footer';
   const actions=document.createElement('div');actions.className='camera-tile-actions';
-  actions.append(tile.section.querySelector('.camera-status'),header.querySelector('[data-camera-refresh]'),header.querySelector('[data-camera-privacy]'),header.querySelector('[data-camera-expand]'));
+  actions.append(tile.section.querySelector('.camera-status'),header.querySelector('[data-camera-refresh]'),header.querySelector('[data-camera-expand]'));
   footer.append(tile.name,actions);tile.frame.after(footer);header.hidden=true;
   tile.snapshot=new CameraSnapshot(tile.section.querySelector('.camera-native'),status=>{tile.status=status;this._updateMessage(tile,row.entity);queueMicrotask(()=>{const button=tile.section.querySelector('[data-camera-refresh]');button.disabled=!!this._playbackBlocked(this._config.cameras.find(item=>item.entity===row.entity)??row)||!!tile.snapshot?.pending;this._renderViewer();});},()=>this._updateSnapshotTime(tile));
   return tile;
@@ -148,10 +148,9 @@ export const cameraFeaturesView=Base=>class extends Base{
   const alertText=alarm?t('Alarm geactiveerd','Alarm triggered'):this._temporary?(this._temporary.kind==='doorbell'?t('Er wordt aangebeld','Doorbell ringing'):t('Detectie','Detection'))+' · '+this._cameraName(this._activeCamera):detected?t('Detectie','Detection')+' · '+this._cameraName(detected.entity):'';if(alert.textContent!==alertText)alert.textContent=alertText;
   alert.hidden=true;toolbar.hidden=back.hidden;
   for(const row of visibleCameras(config)){
-   const tile=this._tiles.get(row.entity),privacy=cameraPrivacy(this._hass,row),view=cameraPictureConfig(row.entity,config).camera_view;
+   const tile=this._tiles.get(row.entity),view=cameraPictureConfig(row.entity,config).camera_view;
    const expand=tile.section.querySelector('[data-camera-expand]');expand.hidden=this._viewerEntity===row.entity;expand.setAttribute('aria-label',t('Groot beeld: ','Large view: ')+this._cameraName(row.entity));expand.title=t('Groot beeld','Large view');expand.innerHTML='<ha-icon icon="mdi:arrow-expand" aria-hidden="true"></ha-icon>';
    const refresh=tile.section.querySelector('[data-camera-refresh]');refresh.hidden=view!=='auto';refresh.disabled=!!this._playbackBlocked(row)||tile.snapshot.pending;refresh.setAttribute('aria-label',t('Beeld vernieuwen: ','Refresh image: ')+this._cameraName(row.entity));
-   const button=tile.section.querySelector('[data-camera-privacy]');button.hidden=!row.privacy_entity;button.disabled=!!this._actionBusy||row.privacy_entity?.startsWith('binary_sensor.')||privacy==='privacy_unknown';button.setAttribute('aria-label',(privacy==='privacy'?t('Privacy uitschakelen: ','Disable privacy: '):t('Privacy inschakelen: ','Enable privacy: '))+this._cameraName(row.entity));button.setAttribute('aria-pressed',String(privacy==='privacy'));
    const entries=cameraDetections(this._hass,row,this._detections).entries,active=entries.some(entry=>entry.active);
    for(const choice of this.shadowRoot.querySelectorAll('[data-ui-tab],[data-camera-select]'))if((choice.dataset.uiTab??choice.dataset.cameraSelect)===row.entity){choice.dataset.detection=String(active);choice.setAttribute('aria-label',this._cameraName(row.entity)+(active?t(' · Detectie',' · Detection'):''));}
    tile.section.dataset.detection=String(active);
@@ -214,6 +213,7 @@ export const cameraFeaturesView=Base=>class extends Base{
  }
  _syncCycle(){if(this._viewerEntity||this._securityView!=='cameras'){this._cycle.stop();return;}super._syncCycle();}
  _openViewer(entity,opener){
+  if(this._openLinkedViewer(entity))return;
   if(!visibleCameras(this._config).some(row=>row.entity===entity))return;
   this._manualInteraction();this._viewerOpener=opener??this.shadowRoot.activeElement;this._viewerEntity=entity;
   if(!this._viewer){
@@ -238,7 +238,7 @@ export const cameraFeaturesView=Base=>class extends Base{
   this._viewer.querySelector('.camera-viewer-header p').textContent=this._t('Actueel camerabeeld','Current camera feed');
   this._viewer.querySelector('[data-camera-view-close]').setAttribute('aria-label',this._t('Groot beeld sluiten','Close large view'));
   const tools=this._viewer.querySelector('.camera-viewer-tools'),entries=this._config.show_status?cameraDetections(this._hass,row,this._detections).entries:[];
-  const controls=['[data-camera-refresh]','[data-camera-privacy]'].map(selector=>tile.section.querySelector(selector)).filter(button=>button&&!button.hidden).map(button=>button.outerHTML).join('');
+  const controls=['[data-camera-refresh]'].map(selector=>tile.section.querySelector(selector)).filter(button=>button&&!button.hidden).map(button=>button.outerHTML).join('');
   cameraReplaceMarkup(tools,cameraDetectionIndicators(entries,(nl,en)=>this._t(nl,en))+controls);
   this._viewerPicker??=new CameraViewerPicker(this._viewer.querySelector('.camera-viewer-picker'));
   this._viewerPicker.update(this._hass,rows,{selected:row.entity,name:entity=>this._cameraName(entity),blocked:camera=>this._playbackBlocked(camera),active:!!this._attached&&!document.hidden,t:(nl,en)=>this._t(nl,en)});
@@ -322,7 +322,6 @@ export const cameraFeaturesView=Base=>class extends Base{
   const step=find('[data-camera-view-step]');if(step&&this._viewerEntity){const rows=visibleCameras(this._config),index=rows.findIndex(row=>row.entity===this._viewerEntity);this._viewerEntity=rows[(index+Number(step.dataset.cameraViewStep)+rows.length)%rows.length].entity;this._render();step.focus({preventScroll:true});}
   if(find('[data-camera-back]')){const saved=this._temporary?.restore;this._manualInteraction();this._expanded=saved?.expanded??false;this._activeCamera=saved?.camera??this._overviewCamera??this._config.default_camera;this._securityView=saved?.view??this._securityView;this._render();this.shadowRoot.querySelector('ha-card').scrollTop=saved?.scroll??this._overviewScroll??0;}
   const refresh=find('[data-camera-refresh]');if(refresh){const tile=this._tiles.get(refresh.dataset.cameraRefresh);if(tile){tile.manualSnapshot=true;this._syncPlayers();tile.snapshot.refresh();}}
-  const privacy=find('[data-camera-privacy]');if(privacy){const row=this._config.cameras.find(row=>row.entity===privacy.dataset.cameraPrivacy);if(row?.privacy_entity&&!row.privacy_entity.startsWith('binary_sensor.')&&cameraPrivacy(this._hass,row)!=='privacy_unknown'){const active=cameraPrivacy(this._hass,row)==='privacy',target=active?(row.privacy_state==='off'?'on':'off'):(row.privacy_state??'on');this._requestAction({id:'privacy:'+row.entity,name:(active?this._t('Privacy uitschakelen: ','Disable privacy: '):this._t('Privacy inschakelen: ','Enable privacy: '))+this._cameraName(row.entity),entity:row.privacy_entity,action:'turn_'+target,confirmation:true,data:{}});}}
   const action=find('[data-camera-action]');if(action){const config=this._config.actions.find(row=>row.id===action.dataset.cameraAction);if(config)this._requestAction(config);}
   if(find('[data-camera-cancel]')){this._pendingAction=null;this.shadowRoot.querySelector('dialog').close();}
   if(find('[data-camera-confirm]')){const action=this._pendingAction;this._pendingAction=null;this.shadowRoot.querySelector('dialog').close();if(action)this._runAction(action);}

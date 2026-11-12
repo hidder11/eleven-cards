@@ -44,7 +44,8 @@ class BackgroundDefault(unittest.TestCase):
                             ('appliance-planner', 'eleven-appliance-planner.js'),
                             ('room-card', 'eleven-room-card.js'),
                             ('scene-engine-card', 'eleven-scene-engine-card.js'),
-                            ('camera-card', 'eleven-camera-card.js')]]
+                            ('camera-card', 'eleven-camera-card.js'),
+                            ('media-player-card', 'eleven-media-player-card.js')]]
                     for path in paths:
                         harness.load(page, path)
                     # Remove preview overrides: verify the real production default.
