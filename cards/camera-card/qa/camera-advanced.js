@@ -107,15 +107,15 @@ try{
  state('binary_sensor.motion','on');await tick();
  check('Detector updates preserve the viewer and its running player',card._viewer.open&&card._tiles.get('camera.front').player.card===originalPlayer&&card._viewer.querySelector('[data-detection-kind="motion"]').dataset.detectionState==='active');
  card.hass={...hass,connected:false};await tick();
- check('Offline viewer releases streams and alarm controls become unavailable',[...card._tiles.values()].every(tile=>!tile.player.card)&&card._viewer.textContent.includes('Geen verbinding')&&alarmPanel.inert&&alarmPanel.textContent.includes('Alarm niet beschikbaar'));
+ check('Offline viewer releases streams and alarm controls become unavailable',[...card._tiles.values()].every(tile=>!tile.player.card)&&card._viewer.textContent.includes('Privacystatus onbekend')&&alarmPanel.inert&&alarmPanel.textContent.includes('Alarm niet beschikbaar'));
  check('Offline clears all thumbnail images',card._viewer.querySelectorAll('.camera-viewer-thumbnail img').length===0);
  card.hass=hass;await tick();
  const viewedSection=card._tiles.get('camera.front').section,requestFullscreen=viewedSection.requestFullscreen;
  viewedSection.requestFullscreen=async()=>{throw Error('Fullscreen unavailable');};await card._toggleFullscreen('camera.front');
  check('Viewer displays fullscreen failure inside its dialog',!card._viewer.querySelector('.camera-action-error').hidden&&card._viewer.querySelector('.camera-action-error').textContent.includes('niet beschikbaar'));
  viewedSection.requestFullscreen=requestFullscreen;
- state('switch.privacy','on');await tick();check('Removed privacy mapping keeps viewer playback',!!card._tiles.get('camera.front').player.card);
- check('Legacy privacy does not block thumbnail selection',!!card._viewerPicker.rows.get('camera.front'));
+ state('switch.privacy','on');await tick();check('Legacy privacy stops viewer playback',!card._tiles.get('camera.front').player.card);
+ check('Legacy privacy clears the selected thumbnail image',!!card._viewerPicker.rows.get('camera.front')&&!card._viewerPicker.rows.get('camera.front').snapshot.picture);
  state('switch.privacy','off');await tick();
  const gardenPicker=card._viewer.querySelector('[data-camera-view-pick="camera.garden"]');gardenPicker.focus();gardenPicker.click();await tick();
  check('Thumbnail selection and focus follow the selected camera',gardenPicker.getAttribute('aria-pressed')==='true'&&firstPicker.getAttribute('aria-pressed')==='false'&&card.shadowRoot.activeElement===gardenPicker);
@@ -129,8 +129,8 @@ try{
  check('Single camera viewer omits its redundant picker',card._viewer.querySelector('.camera-viewer-picker').hidden);
  check('Single camera viewer omits previous and next controls',[...card._viewer.querySelectorAll('[data-camera-view-step]')].every(button=>button.hidden));
  card._viewer.querySelector('[data-camera-view-close]').click();card.setConfig({...base,auto_focus:false});await tick();
- state('switch.privacy','on');await tick();check('Legacy privacy on does not hide the native feed',!!card._tiles.get('camera.front').player.card);
- state('switch.privacy','unknown');await tick();check('Legacy unknown privacy does not hide the native feed',!!card._tiles.get('camera.front').player.card);
+ state('switch.privacy','on');await tick();check('Legacy privacy on hides the native feed',!card._tiles.get('camera.front').player.card);
+ state('switch.privacy','unknown');await tick();check('Legacy unknown privacy hides the native feed',!card._tiles.get('camera.front').player.card);
  state('switch.privacy','off');await tick();check('Known privacy off restores playback',!!card._tiles.get('camera.front').player.card);
  check('Removed privacy has no control or commands',!card.shadowRoot.querySelector('[data-camera-privacy]')&&calls.length===0);
  check('Custom controls are omitted even with legacy YAML',!card.shadowRoot.querySelector('[data-camera-action="light"]')&&card.shadowRoot.querySelector('.camera-actions').hidden&&calls.length===0);
@@ -142,7 +142,7 @@ try{
  check('Managed snapshot uses HA authentication and reports successful image load time',snapshotCalls===1&&!!card._tiles.get('camera.garden').snapshot.lastLoaded&&!card._tiles.get('camera.garden').player.card&&card._tiles.get('camera.garden').section.querySelector('img')?.complete);
  check('Snapshot load time is tracked internally without a visible loaded label',card._tiles.get('camera.garden').loaded.hidden&&card._tiles.get('camera.garden').loaded.textContent==='');
  card.shadowRoot.querySelector('[data-camera-refresh="camera.garden"]').click();await tick();check('Manual refresh loads a new image',snapshotCalls===2&&!!card._tiles.get('camera.garden').snapshot.lastLoaded);
- state('binary_sensor.snapshot_privacy','off');card.setConfig({...card._baseConfig,cameras:card._baseConfig.cameras.map(row=>row.entity==='camera.garden'?{...row,privacy_entity:'binary_sensor.snapshot_privacy'}:row)});state('binary_sensor.snapshot_privacy','on');await tick();check('Legacy privacy does not remove managed snapshots',!!card._tiles.get('camera.garden').section.querySelector('img')&&!!card._tiles.get('camera.garden').snapshot.lastLoaded);state('binary_sensor.snapshot_privacy','off');await tick();check('Managed still-image playback survives legacy privacy changes',!!card._tiles.get('camera.garden').snapshot.lastLoaded);
+ state('binary_sensor.snapshot_privacy','off');card.setConfig({...card._baseConfig,cameras:card._baseConfig.cameras.map(row=>row.entity==='camera.garden'?{...row,privacy_entity:'binary_sensor.snapshot_privacy'}:row)});state('binary_sensor.snapshot_privacy','on');await tick();check('Legacy privacy removes managed snapshots',!card._tiles.get('camera.garden').section.querySelector('img'));state('binary_sensor.snapshot_privacy','off');await tick();check('Managed still-image playback survives legacy privacy changes',!!card._tiles.get('camera.garden').snapshot.lastLoaded);
  card.setConfig({...base,auto_focus:false,activity_source:'history'});await tick();check('History is requested only when selected and merges recorded events',historyCalls===1&&card._activity.events.some(row=>row.kind==='motion'));
  card.hass={...hass};await tick();check('Frequent hass updates do not refetch history',historyCalls===1);
  card.shadowRoot.activeElement?.blur();await tick();card.setConfig({...base,auto_focus:false,layout:'tabs',auto_cycle:true,cycle_interval:5});check('Session activity excludes imported Recorder events',[...card.shadowRoot.querySelectorAll('[data-camera-activity]')].every(button=>card._activity.observed.some(row=>row.id===button.dataset.cameraActivity)));await tick();const beforeCycle=card._activeCamera;await tick(5200);check('Real browser interval advances the selected feed',card._activeCamera!==beforeCycle);card.setConfig({...base,auto_focus:false});
@@ -152,6 +152,8 @@ try{
  check('Visual editor offers only Grid and Focus for new cards',JSON.stringify(fields.find(row=>row.name==='layout').selector.select.options.map(row=>row.value))===JSON.stringify(['grid','focus']));
  const contactForm=editor._contactRows.get('door_sensors:binary_sensor.door').querySelector('ha-form');
  contactForm.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{name:'Eigen voordeur'}}}));
+ check('Editing other settings preserves legacy privacy mappings',saved.cameras[0].privacy_entity==='switch.privacy'&&saved.cameras[0].privacy_state==='on');
+ check('Visual editor omits legacy privacy settings',!fields.some(row=>['privacy_entity','privacy_state'].includes(row.name)));
  check('Contact name editor saves custom names without changing entity mappings',saved.door_sensors[0].entity==='binary_sensor.door'&&saved.door_sensors[0].name==='Eigen voordeur'&&editor._contactRows.get('door_sensors:binary_sensor.door').textContent.includes('Eigen voordeur'));
  editor._form.dispatchEvent(new CustomEvent('value-changed',{detail:{value:{door_entities:['binary_sensor.door','binary_sensor.extra'],window_entities:['binary_sensor.window']}}}));
  check('Contact picker preserves names while adding sensors and saves supported YAML fields',saved.door_sensors[0].name==='Eigen voordeur'&&saved.door_sensors[1].entity==='binary_sensor.extra'&&!('door_entities' in saved));

@@ -17,6 +17,11 @@ export function normalizeCameraConfig(input={}){
   const item={entity,name:typeof row?.name==='string'?row.name:''};
   if(row&&typeof row==='object'){
    if(row.show===false)item.show=false;
+   // Retain legacy feed protection when editing existing YAML; no privacy controls are exposed.
+   if(cameraEntity(row.privacy_entity,['switch','input_boolean','binary_sensor'])){
+    item.privacy_entity=row.privacy_entity;
+    item.privacy_state=row.privacy_state==='off'?'off':'on';
+   }
    if(typeof row.icon==='string'&&/^[a-z0-9_-]+:[a-z0-9_-]+$/i.test(row.icon))item.icon=row.icon;
    if(CAMERA_RATIOS.includes(row.aspect_ratio))item.aspect_ratio=row.aspect_ratio;
    if(['cover','contain'].includes(row.fit_mode))item.fit_mode=row.fit_mode;

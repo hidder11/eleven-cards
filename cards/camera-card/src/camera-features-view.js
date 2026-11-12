@@ -1,6 +1,6 @@
 import {cameraSecurityStatusColor} from './security-status.js';
 import {requestWithTimeout} from '../../../shared/request.js';
-import {cameraShowAlarm} from './camera-features.js';
+import {cameraShowAlarm,cameraPrivacy} from './camera-features.js';
 import {uiEscape,uiButton} from '../../../shared/ui-button.js';
 import {cameraDutch,cameraPictureConfig,visibleCameras,cameraDetections} from './camera-utils.js';
 import {normalizeCameraConfig} from './camera-utils.js';
@@ -57,6 +57,7 @@ export const cameraFeaturesView=Base=>class extends Base{
  }
  _layout(){return this._temporary?.kind==='doorbell'&&visibleCameras(this._config).some(row=>row.entity===this._config.doorbell_secondary_camera&&row.entity!==this._activeCamera)?'doorbell':this._temporary||this._expanded?'focus':super._layout();}
  _feedVisible(row){if(this._viewerEntity)return row.entity===this._viewerEntity;if(this._securityView!=='cameras')return false;if(this._layout()==='doorbell')return [this._activeCamera,this._config.doorbell_secondary_camera].includes(row.entity);return super._feedVisible(row);}
+ _playbackBlocked(row){return cameraPrivacy(this._hass,row)??super._playbackBlocked(row);}
  _cancelTemporary(){clearTimeout(this._temporaryTimer);this._temporaryTimer=null;this._temporary=null;}
  _manualInteraction(){this._cancelTemporary();this._manualUntil=Date.now()+Math.max(this._config?.focus_duration??30,this._config?.doorbell_duration??45)*1000;}
  _selectCamera(entity,manual=true){if(manual)this._manualInteraction();super._selectCamera(entity,manual);}

@@ -123,3 +123,11 @@ export function cameraActionRequest(action,hass){
  if(action.entity&&(!hass?.states?.[action.entity]||['unavailable','unknown'].includes(hass.states[action.entity].state)))throw Error('Entity unavailable / Entiteit niet beschikbaar');
  return {domain,service:name,data:structuredClone(action.data??{}),target:action.entity?{entity_id:action.entity}:undefined};
 }
+
+// Existing YAML remains fail-closed until its owner explicitly removes the mapping.
+export function cameraPrivacy(hass,row){
+ if(!row?.privacy_entity)return null;
+ const value=hass?.states?.[row.privacy_entity]?.state;
+ if(hass?.connected===false||hass?.connection?.connected===false||!['on','off'].includes(value))return 'privacy_unknown';
+ return value===(row.privacy_state??'on')?'privacy':null;
+}

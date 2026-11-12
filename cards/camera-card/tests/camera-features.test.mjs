@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeCameraConfig} from '../src/camera-utils.js';
-import {CAMERA_LAYOUTS,effectiveCameraConfig,CameraActivity,cameraHistoryEvents,cameraActionRequest} from '../src/camera-features.js';
+import {CAMERA_LAYOUTS,cameraPrivacy,effectiveCameraConfig,CameraActivity,cameraHistoryEvents,cameraActionRequest} from '../src/camera-features.js';
 import {CameraSnapshot} from '../src/camera-snapshot.js';
 
 const config=extra=>normalizeCameraConfig({cameras:[{entity:'camera.front',motion_entity:'binary_sensor.motion',person_entity:'binary_sensor.person'},'camera.garden'],...extra});
@@ -33,9 +33,16 @@ test('profiles preserve base configuration, filter visible cameras and support a
  assert.equal(result.profile.id,'night');assert.equal(result.config.layout,'sidebar');assert.equal(result.config.cameras[0].show,false);assert.equal(result.config.default_camera,'camera.garden');assert.equal(c.cameras[0].show,undefined);assert.equal(c.layout,'grid');
  assert.equal(effectiveCameraConfig(c,hass,'base').config,c);assert.equal(effectiveCameraConfig(c,hass,'away').config.layout,'wall');assert.equal(effectiveCameraConfig(c,{states:{}}).profile,null);
 });
-test('removed privacy mappings are ignored in legacy YAML',()=>{
+test('legacy privacy mappings survive normalization and remain fail-closed',()=>{
  const c=normalizeCameraConfig({cameras:[{entity:'camera.front',privacy_entity:'switch.privacy',privacy_state:'on'}]});
- assert.equal(c.cameras[0].privacy_entity,undefined);assert.equal(c.cameras[0].privacy_state,undefined);
+ assert.equal(c.cameras[0].privacy_entity,'switch.privacy');assert.equal(c.cameras[0].privacy_state,'on');
+ for(const active of ['on','off'])for(const state of ['on','off','unknown','unavailable',null]){
+  const row=normalizeCameraConfig({cameras:[{...c.cameras[0],privacy_state:active}]}).cameras[0];
+  const hass={states:state===null?{}:{'switch.privacy':{state}}};
+  assert.equal(cameraPrivacy(hass,row),!['on','off'].includes(state)?'privacy_unknown':state===active?'privacy':null);
+  assert.equal(cameraPrivacy({...hass,connected:false},row),'privacy_unknown');
+ }
+ assert.equal(cameraPrivacy({}, {entity:'camera.front'}),null);
 });
 test('activity establishes a baseline, deduplicates updates and never alerts on reconnect',()=>{
  const c=config(),tracker=new CameraActivity(),now=Date.now(),states={'binary_sensor.motion':{state:'off',last_changed:new Date(now-1000).toISOString()}};

@@ -240,4 +240,4 @@ The viewer supports title, show_names, show_status, show_last_detection, show_fu
 
 ## Migration: removed privacy settings
 
-The Camera card and Viewer no longer offer privacy status, controls or feed gating. Legacy per-camera `privacy_entity` and `privacy_state` fields are ignored. **Previously hidden feeds may now be displayed.** Remove these fields from YAML and use Home Assistant/integration controls to restrict camera access when needed. This change does not toggle privacy switches or change camera settings.
+The Camera card and Viewer no longer expose privacy settings or buttons. Existing per-camera `privacy_entity` and `privacy_state` mappings remain supported for backwards compatibility: active, unknown, missing or disconnected privacy states continue to hide live feeds, snapshots and thumbnails, including in a linked viewer. Editing other settings preserves these mappings. To opt out explicitly, remove both fields from that camera in YAML after checking whether the feed may be shown. This change never toggles privacy switches or changes camera settings.

@@ -13,11 +13,11 @@ function fixture(privacy='on',active='on'){
   shadowRoot:{activeElement:null},hasAttribute:()=>false,_hass:{states:Object.fromEntries(cameras.map(row=>[row.entity,{state:'idle'}]))},
   _cycle:{sync(enabled){card.timerEnabled=enabled;}},_selectCamera(entity){card._activeCamera=entity;}});
  if(privacy!==null)card._hass.states['switch.privacy']={state:privacy};
- card._hass.states['camera.b'].state=privacy===active||!['on','off'].includes(privacy)?'unavailable':'idle';
+
  return card;
 }
 
-test('automatic selection and timer eligibility both exclude unavailable feeds',()=>{
+test('automatic selection and timer eligibility both exclude legacy private feeds',()=>{
  for(const [privacy,active,expected] of [['on','on','camera.c'],['off','on','camera.b'],['off','off','camera.c'],['on','off','camera.b'],['unknown','on','camera.c'],['unavailable','on','camera.c'],[null,'on','camera.c']]){
   const card=fixture(privacy,active);card._syncCycle();assert.equal(card.timerEnabled,true);
   card._advanceCycle();assert.equal(card._activeCamera,expected,privacy+'/'+active);

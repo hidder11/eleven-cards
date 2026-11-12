@@ -74,6 +74,7 @@ class CameraCardBase extends HTMLElement{
   const paused=!this._attached||document.hidden||(!this._viewerEntity&&!this.shadowRoot.fullscreenElement&&this.hasAttribute('data-motion-paused'));
   const status=unavailable??(paused?'paused':tile.status);
   const messages={offline:t('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'),missing:t('Camera niet gevonden.','Camera not found.'),off:t('Camera uit.','Camera is off.'),unknown:t('Camera niet beschikbaar.','Camera unavailable.'),unavailable:t('Camera niet beschikbaar.','Camera unavailable.'),paused:t('Camerabeeld gepauzeerd.','Camera view paused.'),idle:t('Camerabeeld laden…','Loading camera view…'),loading:t('Camerabeeld laden…','Loading camera view…'),error:t('Camerabeeld laden mislukt.','Could not load camera view.')};
+  messages.privacy=t('Privacymodus actief.','Privacy mode active.');messages.privacy_unknown=t('Privacystatus onbekend. Beeld verborgen.','Privacy status unknown. Feed hidden.');
   tile.message.hidden=status==='ready';const message=tile.message.querySelector('span'),text=messages[status]??'';if(message.textContent!==text)message.textContent=text;
   const retry=tile.message.querySelector('button');retry.hidden=status!=='error';retry.textContent=t('Opnieuw proberen','Retry');
   tile.frame.setAttribute('aria-busy',String(status==='loading'));

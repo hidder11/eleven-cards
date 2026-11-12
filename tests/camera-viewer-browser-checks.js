@@ -5,6 +5,15 @@ export async function runCameraViewerChecks(){
  const select=entity=>source.shadowRoot.querySelector(`[data-camera-details="${entity}"]`).click();
  const hasPlayer=()=>[...viewer._tiles.values()].some(tile=>tile.player.card);
  await tick();check('Viewer starts empty',viewer._config.cameras.length===0);
+ const lateSource=document.createElement('eleven-camera-card'),lateViewer=document.createElement('eleven-camera-viewer-card'),lateOther=document.createElement('eleven-camera-card');
+ lateSource.setConfig({...config,viewer_target:'late-viewer'});lateOther.setConfig({...config,viewer_target:'late-viewer'});lateSource.hass=source.hass;lateOther.hass=source.hass;document.body.append(lateSource,lateOther);
+ const missing=card=>!card.shadowRoot.querySelector('.camera-viewer-feedback').hidden;
+ check('Sources mounted first report missing viewer before any selection',missing(lateSource)&&missing(lateOther));
+ lateViewer.setConfig({viewer_id:'late-viewer'});lateViewer.hass=source.hass;document.body.append(lateViewer);
+ check('Viewer attachment clears every source warning synchronously without hass update',!missing(lateSource)&&!missing(lateOther)&&lateViewer._config.cameras.length===0);
+ lateViewer.remove();check('Viewer removal restores every source warning without hass update',missing(lateSource)&&missing(lateOther));
+ document.body.append(lateViewer);lateSource.setConfig({...config,viewer_target:'different-viewer'});check('Retargeting unregisters source from old viewer',missing(lateSource)&&!missing(lateOther));
+ lateSource.remove();lateOther.remove();lateViewer.remove();
  const heading=()=>viewer.shadowRoot.querySelector('.camera-security-header').textContent;
  check('Default viewer title is generic Dutch',heading()==='Cameraviewer');
  viewer.hass={...viewer.hass,language:'en',locale:{language:'en'}};check('Default viewer title follows frontend language',heading()==='Camera viewer');update();
@@ -29,6 +38,13 @@ export async function runCameraViewerChecks(){
  document.querySelector('.cards').classList.remove('narrow');update();
  const offline={...viewer.hass,connected:false};source.hass=offline;viewer.hass=offline;await tick();check('Offline stops playback',!hasPlayer());update();await tick();
  const unavailable={...viewer.hass,states:{...viewer.hass.states,'camera.front':{state:'unavailable'}}};source.hass=unavailable;viewer.hass=unavailable;await tick();check('Unavailable selection stops playback',!hasPlayer());update();await tick();
+ const privacyConfig={...config,cameras:config.cameras.map(row=>row.entity==='camera.front'?{...row,privacy_entity:'switch.legacy_privacy'}:row)};
+ source.setConfig(privacyConfig);
+ for(const state of ['on','unknown','unavailable',null,'off']){
+  const h={...source.hass,states:{...source.hass.states}};if(state===null)delete h.states['switch.legacy_privacy'];else h.states['switch.legacy_privacy']={state};source.hass=h;viewer.hass=h;await tick();
+  check('Linked viewer respects legacy privacy '+state,hasPlayer()===(state==='off'));
+ }
+ check('Legacy mapping remains in source and viewer configurations',source._config.cameras[0].privacy_entity==='switch.legacy_privacy'&&viewer._config.cameras[0].privacy_entity==='switch.legacy_privacy');source.setConfig(config);update();await tick();
  source.setConfig({...config,profiles:[{id:'garden',cameras:['camera.garden']}]});source._profileSelection='garden';source._applyProfile();source._render();await tick();check('Viewer follows the effective source configuration',viewer._config.cameras[0]?.entity===source._config.cameras.find(row=>row.show!==false&&row.entity==='camera.front')?.entity);source._profileSelection='auto';source.setConfig(config);select('camera.front');await tick();
  await import('/cards/camera-card/dist/eleven-camera-card-test.js');
  const testSource=document.createElement('eleven-camera-card-test'),testViewer=document.createElement('eleven-camera-viewer-card-test');testSource.setConfig(config);testViewer.setConfig({viewer_id:'woonkamer'});testSource.hass=source.hass;testViewer.hass=source.hass;document.body.append(testSource,testViewer);await tick();check('Test viewer does not follow production source',testViewer._config.cameras.length===0);testSource._openLinkedViewer('camera.garden');await tick();check('Test links stay isolated from production',testViewer._activeCamera==='camera.garden'&&viewer._activeCamera==='camera.front');testSource.remove();testViewer.remove();

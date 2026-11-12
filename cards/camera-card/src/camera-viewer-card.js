@@ -1,7 +1,7 @@
 import {ElevenCardBackgroundEditor} from '../../../shared/card-background.js';
 import {CameraCard} from './camera-card.js';
 import {uiCardTitleStyles} from '../../../shared/ui-card-title.js';
-import {cameraViewerChannel} from './camera-viewer-link.js';
+import {cameraViewerChannel,subscribeCameraViewer} from './camera-viewer-link.js';
 import {cameraDutch,visibleCameras} from './camera-utils.js';
 
 export class CameraViewerEditor extends HTMLElement{
@@ -22,8 +22,8 @@ export class CameraViewerCard extends CameraCard{
  disconnectedCallback(){this._unsubscribeViewer();super.disconnectedCallback();}
  getCardSize(){const content=this.shadowRoot?.querySelector('.content');if(this.isConnected&&content?.getBoundingClientRect().width>0)return Math.max(2,Math.ceil(content.scrollHeight/50));return this._config?.cameras?.length?5:2;}
  getGridOptions(){return {columns:12,min_columns:6,rows:'auto'};}
- _subscribeViewer(){this._unsubscribeViewer();if(!this._viewerId)return;this._viewerChannel=cameraViewerChannel(this._viewerId);this._viewerListener=()=>this._refreshViewer();this._viewerChannel.listeners.add(this._viewerListener);this._refreshViewer();this._viewerChannel.source?._render();}
- _unsubscribeViewer(){const channel=this._viewerChannel;channel?.listeners.delete(this._viewerListener);this._viewerChannel=null;channel?.source?._render();}
+ _subscribeViewer(){this._unsubscribeViewer();if(!this._viewerId)return;this._viewerCleanup=subscribeCameraViewer(this._viewerId,()=>this._refreshViewer());this._refreshViewer();}
+ _unsubscribeViewer(){this._viewerCleanup?.();this._viewerCleanup=null;}
  _refreshViewer(){
   const channel=this._viewerId?cameraViewerChannel(this._viewerId):null,source=channel?.source;
   const row=source?visibleCameras(source._config).find(row=>row.entity===channel.entity):null;

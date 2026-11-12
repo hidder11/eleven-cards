@@ -22,7 +22,7 @@ CARDS = ['dynamic-energy-price-card', 'history-graph-card', 'timeline-card',
          'overview-card', 'bar-chart', 'heatmap-card', 'calendar-card', 'car-card',
          'weather-card', 'energy-flow-card', 'shopping-card', 'house-card',
          'actions-card', 'controls-card', 'waste-card', 'appliance-planner',
-         'room-card', 'scene-engine-card', 'camera-card', 'material-house']
+         'room-card', 'scene-engine-card', 'camera-card', 'camera-viewer-card', 'media-player-card', 'material-house']
 ADDITIONS = CARDS[12:]
 SCREENSHOTS = os.environ.get('QA_SCREENSHOTS', '1') != '0'
 STANDALONES = ['cards/home-controls/dist/eleven-home-controls-card.js',
@@ -31,6 +31,7 @@ STANDALONES = ['cards/home-controls/dist/eleven-home-controls-card.js',
                'cards/scene-engine-card/dist/eleven-scene-engine-card.js',
                'cards/house-card/dist/eleven-house-card.js',
                'cards/camera-card/dist/eleven-camera-card.js',
+               'cards/media-player-card/dist/eleven-media-player-card.js',
                'experiments/material-house/dist/material-house.js']
 COLLECTION = 'dist/eleven-cards.js'
 ORIGIN = 'https://offline.invalid'
@@ -123,9 +124,12 @@ class AllCardsRender(unittest.TestCase):
         page.evaluate('() => {'+source+'''
           window.qaConfigs=Object.fromEntries(configs.map(([name,title,c])=>[name,{...c,type:'custom:eleven-'+name}]));
           window.qaConfigs['camera-card']={type:'custom:eleven-camera-card',title:'Security',cameras:[]};
+          window.qaConfigs['camera-viewer-card']={type:'custom:eleven-camera-viewer-card',viewer_id:'audit-viewer'};
+          window.qaConfigs['media-player-card']={type:'custom:eleven-media-player-card',entity:'media_player.audit_radio',layout:'studio',title:'Audit radio'};
           window.qaCalls=[];
           window.qaHass=(name)=>{
             const h=createFixture(name);
+            h.states['media_player.audit_radio']={state:'playing',attributes:{friendly_name:'Audit radio',media_title:'Synthetic Radio',media_content_type:'music',volume_level:0.4,is_volume_muted:false,supported_features:65535}};
             h.states['image.review_car'].attributes.entity_picture='/fixture/car.svg';
             h.localize=()=>'';h.formatEntityState=s=>String(s.state);h.formatEntityAttributeValue=(s,k)=>String(s.attributes[k]);
             for(const method of ['callService','callApi','callWS']){
@@ -153,7 +157,7 @@ class AllCardsRender(unittest.TestCase):
     def picker(self, page, label):
         result = page.evaluate('''()=>({identity:window.customCards===window.capturedPicker,types:customCards.map(c=>c.type).sort(),houseDistinct:customElements.get('eleven-house-card')!==customElements.get('eleven-material-house')})''')
         self.check(label+' picker identity', result['identity'])
-        self.check(label+' exact 20 unique picker types', result['types'] == sorted('eleven-'+name for name in CARDS))
+        self.check(label+f' exact {len(CARDS)} unique picker types', result['types'] == sorted('eleven-'+name for name in CARDS))
         self.check(label+' production House distinct from Material', result['houseDistinct'])
 
     def render(self, page, name, dark=False, screenshot=False):
@@ -168,7 +172,7 @@ class AllCardsRender(unittest.TestCase):
         result = page.evaluate('''()=>{const panel=qaCard.shadowRoot.querySelector('ha-card'),r=panel.getBoundingClientRect();return {text:panel.innerText,width:r.width,height:r.height,editor:qaEditor instanceof HTMLElement,editorConfigured:typeof qaEditor.setConfig==='function',loaded:!!qaCard.loaded,canvasPainted:[...qaCard.shadowRoot.querySelectorAll('canvas')].some(c=>c.width&&c.height&&c.getContext('2d')?.getImageData(0,0,c.width,c.height).data.some(v=>v>0))};}''')
         self.check(name+(' dark' if dark else ' light')+' visible nonempty card', result['width'] > 100 and result['height'] > 40 and len(result['text'].strip()) > 2)
         self.check(name+(' dark' if dark else ' light')+' editor instantiated/configured', result['editor'] and result['editorConfigured'])
-        expected = {'actions-card': 'Avond', 'controls-card': 'Thermostaat', 'waste-card': 'Papier', 'room-card': 'Woonkamer', 'scene-engine-card': 'Avond', 'appliance-planner': 'Wasmachine'}
+        expected = {'actions-card': 'Avond', 'controls-card': 'Thermostaat', 'waste-card': 'Papier', 'room-card': 'Woonkamer', 'scene-engine-card': 'Avond', 'appliance-planner': 'Wasmachine', 'camera-viewer-card': 'camera', 'media-player-card': 'Synthetic Radio'}
         if name in expected:
             self.check(name+' representative populated content', expected[name] in result['text'])
         if name in ['house-card', 'material-house']:
@@ -223,6 +227,8 @@ class AllCardsRender(unittest.TestCase):
                     self.check(mode+' repeat overlap preserves constructors',page.evaluate('Object.entries(qaConstructors).every(([n,c])=>customElements.get(n)===c)'))
                     if mode=='legacy-picker-repair':
                         self.check('legacy pilot card/editor constructors retained',page.evaluate("oldPilot===customElements.get('eleven-material-house')&&oldPilotEditor===customElements.get('eleven-material-house-editor')"))
+                    self.render(page,'camera-viewer-card')
+                    self.render(page,'media-player-card')
                     self.render(page,'house-card')
                     page.evaluate('window.qaProductionHouse=qaCard')
                     self.render(page,'material-house')
@@ -252,8 +258,9 @@ class AllCardsRender(unittest.TestCase):
                 for index,html in enumerate([rows[:4],rows[4:]],1):
                     page.set_content(style+''.join(html))
                     page.screenshot(path=str(OUT/f'additions-light-dark-part-{index}.png'),full_page=True)
-            self.check('exact 46 render cases completed',len(self.report['renders'])==46)
-            self.check('exact 46 editor instances configured',len(self.report['editors'])==46)
+            expected=2*len(CARDS)+4*len(self.report['migrations'])
+            self.check(f'exact {expected} render cases completed',len(self.report['renders'])==expected)
+            self.check(f'exact {expected} editor instances configured',len(self.report['editors'])==expected)
             self.check('all three migration cases completed',len(self.report['migrations'])==3)
             self.check('no JavaScript page errors',self.report['page_errors']==[])
             self.check('no browser console errors',self.report['console_errors']==[])

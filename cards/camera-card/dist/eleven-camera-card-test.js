@@ -1189,6 +1189,14 @@ function cameraActionRequest(action,hass){
  return {domain,service:name,data:structuredClone(action.data??{}),target:action.entity?{entity_id:action.entity}:undefined};
 }
 
+// Existing YAML remains fail-closed until its owner explicitly removes the mapping.
+function cameraPrivacy(hass,row){
+ if(!row?.privacy_entity)return null;
+ const value=hass?.states?.[row.privacy_entity]?.state;
+ if(hass?.connected===false||hass?.connection?.connected===false||!['on','off'].includes(value))return 'privacy_unknown';
+ return value===(row.privacy_state??'on')?'privacy':null;
+}
+
 
 // Browsing older pages freezes the rows, not collection of incoming events.
 class CameraActivityPages{
@@ -1234,6 +1242,11 @@ function normalizeCameraConfig(input={}){
   const item={entity,name:typeof row?.name==='string'?row.name:''};
   if(row&&typeof row==='object'){
    if(row.show===false)item.show=false;
+   // Retain legacy feed protection when editing existing YAML; no privacy controls are exposed.
+   if(cameraEntity(row.privacy_entity,['switch','input_boolean','binary_sensor'])){
+    item.privacy_entity=row.privacy_entity;
+    item.privacy_state=row.privacy_state==='off'?'off':'on';
+   }
    if(typeof row.icon==='string'&&/^[a-z0-9_-]+:[a-z0-9_-]+$/i.test(row.icon))item.icon=row.icon;
    if(CAMERA_RATIOS.includes(row.aspect_ratio))item.aspect_ratio=row.aspect_ratio;
    if(['cover','contain'].includes(row.fit_mode))item.fit_mode=row.fit_mode;
@@ -2011,6 +2024,7 @@ const cameraFeaturesView=Base=>class extends Base{
  }
  _layout(){return this._temporary?.kind==='doorbell'&&visibleCameras(this._config).some(row=>row.entity===this._config.doorbell_secondary_camera&&row.entity!==this._activeCamera)?'doorbell':this._temporary||this._expanded?'focus':super._layout();}
  _feedVisible(row){if(this._viewerEntity)return row.entity===this._viewerEntity;if(this._securityView!=='cameras')return false;if(this._layout()==='doorbell')return [this._activeCamera,this._config.doorbell_secondary_camera].includes(row.entity);return super._feedVisible(row);}
+ _playbackBlocked(row){return cameraPrivacy(this._hass,row)??super._playbackBlocked(row);}
  _cancelTemporary(){clearTimeout(this._temporaryTimer);this._temporaryTimer=null;this._temporary=null;}
  _manualInteraction(){this._cancelTemporary();this._manualUntil=Date.now()+Math.max(this._config?.focus_duration??30,this._config?.doorbell_duration??45)*1000;}
  _selectCamera(entity,manual=true){if(manual)this._manualInteraction();super._selectCamera(entity,manual);}
@@ -2382,6 +2396,7 @@ class CameraCardBase extends HTMLElement{
   const paused=!this._attached||document.hidden||(!this._viewerEntity&&!this.shadowRoot.fullscreenElement&&this.hasAttribute('data-motion-paused'));
   const status=unavailable??(paused?'paused':tile.status);
   const messages={offline:t('Geen verbinding met Home Assistant.','Disconnected from Home Assistant.'),missing:t('Camera niet gevonden.','Camera not found.'),off:t('Camera uit.','Camera is off.'),unknown:t('Camera niet beschikbaar.','Camera unavailable.'),unavailable:t('Camera niet beschikbaar.','Camera unavailable.'),paused:t('Camerabeeld gepauzeerd.','Camera view paused.'),idle:t('Camerabeeld laden…','Loading camera view…'),loading:t('Camerabeeld laden…','Loading camera view…'),error:t('Camerabeeld laden mislukt.','Could not load camera view.')};
+  messages.privacy=t('Privacymodus actief.','Privacy mode active.');messages.privacy_unknown=t('Privacystatus onbekend. Beeld verborgen.','Privacy status unknown. Feed hidden.');
   tile.message.hidden=status==='ready';const message=tile.message.querySelector('span'),text=messages[status]??'';if(message.textContent!==text)message.textContent=text;
   const retry=tile.message.querySelector('button');retry.hidden=status!=='error';retry.textContent=t('Opnieuw proberen','Retry');
   tile.frame.setAttribute('aria-busy',String(status==='loading'));
@@ -2483,12 +2498,13 @@ class CameraCard extends withCardBackground(cameraFeaturesView(CameraCardBase)){
 const cameraViewerKey=Symbol.for('eleven-camera-viewer-card-test.links');
 const cameraViewerLinks=globalThis[cameraViewerKey]??=new Map();
 function cameraViewerChannel(id){
- if(!cameraViewerLinks.has(id))cameraViewerLinks.set(id,{source:null,entity:'',listeners:new Set()});
+ if(!cameraViewerLinks.has(id))cameraViewerLinks.set(id,{source:null,entity:'',sources:new Set(),listeners:new Set()});
  return cameraViewerLinks.get(id);
 }
 function updateCameraViewer(id,source,entity){
  if(!id)return;
  const channel=cameraViewerChannel(id);
+ channel.sources.add(source);
  if(entity){channel.source=source;channel.entity=entity;}
  if(channel.source!==source)return;
  for(const listener of [...channel.listeners])listener();
@@ -2496,8 +2512,18 @@ function updateCameraViewer(id,source,entity){
 function releaseCameraViewer(id,source){
  if(!id)return;
  const channel=cameraViewerChannel(id);
+ channel.sources.delete(source);
  if(channel.source===source){channel.source=null;channel.entity='';for(const listener of [...channel.listeners])listener();}
- if(!channel.source&&!channel.listeners.size)cameraViewerLinks.delete(id);
+ if(!channel.sources.size&&!channel.listeners.size)cameraViewerLinks.delete(id);
+}
+function subscribeCameraViewer(id,listener){
+ const channel=cameraViewerChannel(id);channel.listeners.add(listener);
+ for(const source of [...channel.sources])source._render();
+ return ()=>{
+  channel.listeners.delete(listener);
+  for(const source of [...channel.sources])source._render();
+  if(!channel.sources.size&&!channel.listeners.size)cameraViewerLinks.delete(id);
+ };
 }
 
 
@@ -2523,8 +2549,8 @@ class CameraViewerCard extends CameraCard{
  disconnectedCallback(){this._unsubscribeViewer();super.disconnectedCallback();}
  getCardSize(){const content=this.shadowRoot?.querySelector('.content');if(this.isConnected&&content?.getBoundingClientRect().width>0)return Math.max(2,Math.ceil(content.scrollHeight/50));return this._config?.cameras?.length?5:2;}
  getGridOptions(){return {columns:12,min_columns:6,rows:'auto'};}
- _subscribeViewer(){this._unsubscribeViewer();if(!this._viewerId)return;this._viewerChannel=cameraViewerChannel(this._viewerId);this._viewerListener=()=>this._refreshViewer();this._viewerChannel.listeners.add(this._viewerListener);this._refreshViewer();this._viewerChannel.source?._render();}
- _unsubscribeViewer(){const channel=this._viewerChannel;channel?.listeners.delete(this._viewerListener);this._viewerChannel=null;channel?.source?._render();}
+ _subscribeViewer(){this._unsubscribeViewer();if(!this._viewerId)return;this._viewerCleanup=subscribeCameraViewer(this._viewerId,()=>this._refreshViewer());this._refreshViewer();}
+ _unsubscribeViewer(){this._viewerCleanup?.();this._viewerCleanup=null;}
  _refreshViewer(){
   const channel=this._viewerId?cameraViewerChannel(this._viewerId):null,source=channel?.source;
   const row=source?visibleCameras(source._config).find(row=>row.entity===channel.entity):null;
