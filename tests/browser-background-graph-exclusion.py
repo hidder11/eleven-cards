@@ -36,7 +36,7 @@ class BackgroundGraphExclusion(unittest.TestCase):
                 harness.load(page, helpers.COLLECTION)
             else:
                 bundles=sorted(path for path in (helpers.ROOT/'cards').glob('*/dist/eleven-*.js') if not path.name.endswith('-test.js'))
-                self.assertEqual(len(bundles),17)
+                self.assertEqual(len(bundles),18)
                 for path in bundles:
                     harness.load(page,str(path.relative_to(helpers.ROOT)))
             cards = [('dynamic-energy-price-card','.chart'),('history-graph-card','.chart'),

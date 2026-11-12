@@ -89,4 +89,5 @@ ${uiSurfaceStyles('.camera-tile-header>button[data-ui-button],.camera-confirm')}
 @media(forced-colors:active){.camera-alarm[data-triggered=true],.camera-contact[data-open=true]{box-shadow:none}}
 ${cameraThemeStyles}
 ${cameraActivityStyles}
+.camera-viewer-feedback{margin:12px 0 0;font-size:12px;color:var(--secondary-text-color);overflow-wrap:anywhere}
 `;

@@ -22,7 +22,7 @@ export class CameraViewerPicker{
   this.sync(hass,options.active);
  }
  fallback(item){
-  const existing=item.image.querySelector('ha-icon'),icon=existing??document.createElement('ha-icon');icon.setAttribute('icon',this.options?.blocked(item.row)?.startsWith('privacy')?'mdi:shield-lock-outline':'mdi:cctv');if(!existing)item.image.replaceChildren(icon);
+  const existing=item.image.querySelector('ha-icon'),icon=existing??document.createElement('ha-icon');icon.setAttribute('icon','mdi:cctv');if(!existing)item.image.replaceChildren(icon);
  }
  sync(hass,active){
   for(const item of this.rows.values()){

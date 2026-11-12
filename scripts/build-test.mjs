@@ -1,7 +1,7 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 const root=new URL('../',import.meta.url),directory=new URL('.cache/home-assistant-test/',root);
 let source=await readFile(new URL('dist/eleven-cards.js',root),'utf8');
-const names=['eleven-card-background-editor','eleven-camera-card','eleven-camera-editor','eleven-energy-flow-card','eleven-energy-flow-editor','eleven-car-card','eleven-car-editor','eleven-dynamic-energy-price-card','eleven-history-graph-card','eleven-timeline-card','eleven-overview-card','eleven-bar-chart','eleven-heatmap-card','eleven-calendar-card','eleven-weather-card','eleven-weather-editor','eleven-energy-editor','eleven-history-graph-editor','eleven-timeline-editor','eleven-overview-editor','eleven-heatmap-editor','eleven-calendar-editor'];
+const names=['eleven-camera-viewer-card','eleven-camera-viewer-editor','eleven-media-player-card','eleven-media-player-editor','eleven-card-background-editor','eleven-camera-card','eleven-camera-editor','eleven-energy-flow-card','eleven-energy-flow-editor','eleven-car-card','eleven-car-editor','eleven-dynamic-energy-price-card','eleven-history-graph-card','eleven-timeline-card','eleven-overview-card','eleven-bar-chart','eleven-heatmap-card','eleven-calendar-card','eleven-weather-card','eleven-weather-editor','eleven-energy-editor','eleven-history-graph-editor','eleven-timeline-editor','eleven-overview-editor','eleven-heatmap-editor','eleven-calendar-editor'];
 for(const name of names)source=source.replaceAll(name,name+'-test');
 // Bar Chart's editor contains its card name and was renamed with it above.
 source=source.replaceAll("name:'Eleven ","name:'Eleven Test ").replaceAll("name: 'Eleven ","name: 'Eleven Test ");
@@ -21,6 +21,8 @@ await writeFile(new URL('LEESMIJ-TIJDVAK.md',directory),`# Tijdvaksynchronisatie
     custom:eleven-car-card-test
     custom:eleven-energy-flow-card-test
     custom:eleven-camera-card-test
+    custom:eleven-camera-viewer-card-test
+    custom:eleven-media-player-card-test
     custom:eleven-weather-card-test
     custom:eleven-calendar-card-test
     custom:eleven-overview-card-test

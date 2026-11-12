@@ -26,8 +26,8 @@ test('chart/status standalone modules coexist in either load order and tolerate 
   const registry=new Map(),window={};
   const context=vm.createContext({HTMLElement:class{},window,customElements:{get:n=>registry.get(n),define:(n,c)=>{assert.ok(!registry.has(n));registry.set(n,c);}}});
   for(const slug of [...order,...order]) vm.runInContext(readFileSync(new URL(`../cards/${slug}/dist/eleven-${slug}.js`,import.meta.url),'utf8'),context);
-  assert.equal(registry.size,slugs.length+1); // Shopping has a separately registered editor.
-  assert.deepEqual(Array.from(window.customCards,c=>c.type).sort(),slugs.map(s=>`eleven-${s}`).sort());
+  assert.equal(registry.size,slugs.length+2); // Shopping has a separately registered editor.
+  assert.deepEqual(Array.from(window.customCards,c=>c.type).sort(),[...slugs.map(s=>`eleven-${s}`),'eleven-camera-viewer-card'].sort());
  }
 });
 test('README relative links and images resolve and examples use Eleven types',()=>{
