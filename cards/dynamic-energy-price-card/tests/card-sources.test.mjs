@@ -26,6 +26,21 @@ test('new cards have no preselected entity and render a localized source prompt'
 });
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const base=()=>{const c=new Card();c._render=()=>{};return c;};
+test('future interval countdown uses elapsed hours and localized units, and omits started intervals',()=>{
+ const c=base(),now=Date.parse('2026-10-25T00:30:00Z');
+ c._hass={language:'nl'};
+ assert.equal(c._timeUntil(now+2.5*3600000,now),'Over 2 uur en 30 minuten');
+ assert.equal(c._timeUntil(now+15*60000,now),'Over 0 uur en 15 minuten');
+ assert.equal(c._timeUntil(now+1000,now),'Over 0 uur en 1 minuut');
+ assert.equal(c._timeUntil(now,now),'');
+ assert.equal(c._timeUntil(now-3600000,now),'');
+ assert.equal(c._timeUntil(NaN,now),'');
+ c._hass={language:'en'};
+ assert.equal(c._timeUntil(now+3600000,now),'In 1 hour and 0 minutes');
+ assert.equal(c._timeUntil(now+2.5*3600000,now),'In 2 hours and 30 minutes');
+ // The repeated local hour at the end of daylight saving time is still one elapsed hour.
+ assert.equal(c._timeUntil(Date.parse('2026-10-25T02:30:00+01:00'),now),'In 1 hour and 0 minutes');
+});
 const reply={response:{success:true,price_info:[{startsAt:'2026-10-15T00:00:00+02:00',total:-.0123}]}};
 test('a stalled Tibber request times out and can be retried',async()=>{
  const c=base();c.setConfig({import_source:'tibber_prices'});let calls=0;

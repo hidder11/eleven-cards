@@ -19,11 +19,24 @@ test('viewer IDs normalize and opt-in is empty by default',()=>{
  assert.equal(normalizeCameraConfig({viewer_target:42}).viewer_target,'');
 });
 
+test('viewer defaults to the first visible camera and preserves manual selection until hidden',()=>{
+ const id='default-camera-unit',source={_config:normalizeCameraConfig({cameras:[{entity:'camera.hidden',show:false},{entity:'camera.front'},{entity:'camera.garden'}]})};
+ updateCameraViewer(id,source);
+ const channel=cameraViewerChannel(id);
+ assert.equal(channel.source,source);assert.equal(channel.entity,'camera.front');
+ updateCameraViewer(id,source,'camera.garden');updateCameraViewer(id,source);
+ assert.equal(channel.entity,'camera.garden');
+ source._config.cameras[2].show=false;updateCameraViewer(id,source);
+ assert.equal(channel.entity,'camera.front');
+ source._config.cameras[1].show=false;updateCameraViewer(id,source);
+ assert.equal(channel.entity,'');releaseCameraViewer(id,source);
+});
+
 test('all mounted sources observe viewer attachment before selection and unregister on cleanup',()=>{
  const id='late-unit-viewer',channel=cameraViewerChannel(id);let renders=0;
  const first={_render(){renders++;}},second={_render(){renders++;}};
  updateCameraViewer(id,first);updateCameraViewer(id,second);
- assert.equal(channel.source,null);assert.equal(channel.sources.size,2);
+ assert.equal(channel.source,first);assert.equal(channel.sources.size,2);
  const detach=subscribeCameraViewer(id,()=>{});assert.equal(renders,2);
  releaseCameraViewer(id,first);detach();assert.equal(renders,3);
  releaseCameraViewer(id,second);assert.notEqual(cameraViewerChannel(id),channel);

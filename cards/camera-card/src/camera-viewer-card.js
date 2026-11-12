@@ -28,8 +28,19 @@ export class CameraViewerCard extends CameraCard{
   const channel=this._viewerId?cameraViewerChannel(this._viewerId):null,source=channel?.source;
   const row=source?visibleCameras(source._config).find(row=>row.entity===channel.entity):null;
   const camera=row?{...row,camera_view:row.camera_view??source._config.camera_view,aspect_ratio:row.aspect_ratio??source._config.aspect_ratio,fit_mode:row.fit_mode??source._config.fit_mode,snapshot_interval:row.snapshot_interval??source._config.snapshot_interval}:null;
+  // Include detections observed or loaded from history before this camera was selected.
+  this._detections=new Map(source?._detections);
   super.setConfig({...this._viewerInput,viewer_target:'',cameras:camera?[camera]:[],entity:undefined,layout:'focus',profiles:[],actions:[],auto_cycle:false,auto_focus:false,doorbell_entity:'',alarm_entity:'',door_sensors:[],window_sensors:[],show_activity:false,show_security:false,show_alarm:false,show_contacts:false});
  }
- _renderSecurity(){super._renderSecurity();const title=this._viewerInput?.title||this._t('Cameraviewer','Camera viewer'),header=this.shadowRoot.querySelector('.camera-security-header'),heading=document.createElement('h2');heading.className='camera-viewer-title';heading.textContent=title;header.replaceChildren(heading);this.shadowRoot.querySelector('ha-card').setAttribute('aria-label',title);this.shadowRoot.querySelector('.camera-security-metrics').hidden=true;if(!this._viewerTitleStyle){const style=document.createElement('style');style.textContent=uiCardTitleStyles('.camera-viewer-title')+'.camera-viewer-title{margin:0}.camera-security-header{min-height:0}';this.shadowRoot.append(style);this._viewerTitleStyle=style;}}
+ _renderSecurity(){
+  super._renderSecurity();
+  const fallback=this._t('Cameraviewer','Camera viewer'),title=this._viewerInput?.title||fallback;
+  const hasTitle=!!String(title).trim(),header=this.shadowRoot.querySelector('.camera-security-header'),heading=document.createElement('h2');
+  heading.className='camera-viewer-title';heading.textContent=title;header.replaceChildren(heading);header.hidden=!hasTitle;
+  this.shadowRoot.querySelector('.content').dataset.viewerNoTitle=String(!hasTitle);
+  this.shadowRoot.querySelector('ha-card').setAttribute('aria-label',hasTitle?title:fallback);
+  this.shadowRoot.querySelector('.camera-security-metrics').hidden=true;
+  if(!this._viewerTitleStyle){const style=document.createElement('style');style.textContent=uiCardTitleStyles('.camera-viewer-title')+':host{max-width:100%}ha-card{overflow-x:hidden}.camera-viewer-title{margin:0}.camera-security-header{min-height:0}.content[data-viewer-no-title=true] .camera-security-tabs>[data-ui-tab-panel]{padding-top:0}';this.shadowRoot.append(style);this._viewerTitleStyle=style;}
+ }
  _render(){super._render();if(!this._config)return;const empty=this.shadowRoot.querySelector('.camera-empty');empty.textContent=this._viewerId?this._t('Klik op een camera in de gekoppelde camerakaart.','Select a camera in the linked camera card.'):this._t('Stel een viewer-ID in om een camerakaart te koppelen.','Set a viewer ID to link a camera card.');this.shadowRoot.querySelector('.camera-focus-picker')?.setAttribute('hidden','');for(const tile of this._tiles.values())tile.section.querySelector('[data-camera-expand]').hidden=!this._config.show_fullscreen;}
 }

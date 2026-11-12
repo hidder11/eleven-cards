@@ -222,7 +222,9 @@ The Aurora study also includes five further distinct designs (options 7-11): Pap
 
 ## Separate Camera Viewer
 
-The new **Eleven Camera Viewer (beta)** card displays the camera selected in a source Camera card on the same dashboard page. Set the same ID in the source's `viewer_target` and viewer's `viewer_id`. Click a feed, camera name or expand button to select it. Without a target, the existing native details and built-in large-view popup remain available. A missing viewer displays a status message. Removing/hiding the source camera clears the viewer; the viewer follows the effective source camera list, image settings and availability. It sends no device commands.
+The linked viewer starts with the first visible camera. Manual selection is retained across updates; hiding or removing the selected camera switches to the first remaining visible camera. It inherits detection times already observed or loaded by the source card. A title containing only spaces hides the title row and keeps equal top and side padding. The viewer stays within its dashboard slot without horizontal scrolling.
+
+The new **Eleven Camera Viewer (beta)** card displays the camera selected in a source Camera card on the same dashboard page. Set the same ID in the source's `viewer_target` and viewer's `viewer_id`. Click a feed, camera name or expand button to select it. Without a target, the existing native details and built-in large-view popup remain available. A missing viewer displays a status message. Removing all visible source cameras clears the viewer; the viewer follows the effective source camera list, image settings and availability. It sends no device commands.
 
 ```yaml
 type: custom:eleven-camera-card

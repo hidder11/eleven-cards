@@ -15,7 +15,7 @@ A compact Home Assistant dashboard card for dynamic electricity tariffs. View th
 - **Plan energy use:** highlight the cheapest import periods and highest-paying export periods.
 - **Choose useful time blocks:** select individual intervals, one continuous block, or multiple blocks with a minimum duration.
 - **See today and tomorrow:** show available upcoming prices, the current price, and a clear Now marker.
-- **Inspect any interval:** use hover, touch, or keyboard controls to read prices.
+- **Inspect any interval:** use hover, touch, or keyboard controls to read prices. Future intervals also show the time until their start in hours and minutes, rounded up to the next minute.
 - **Compare actual grid import:** optionally overlay measured kWh per completed interval with its own scale and subtle line.
 - **Make it your own:** customize price colors, period highlights, line styles, and optional fills—or keep the original appearance.
 - **Keep your dashboard compact:** use a responsive chart, optional period table, and Home Assistant's native visual editor and Sections sizing.
