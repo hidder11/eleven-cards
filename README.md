@@ -317,4 +317,4 @@ Reusable buttons, tabs and popups live in `shared/ui-*.js`. See [Shared UI compo
 
 [Camera Viewer](cards/camera-card/README.md#separate-camera-viewer) shows the camera selected in a linked Camera card on the same page. [Media Player](cards/media-player-card/README.md) adds radio favourites, supported playback controls and five layouts, with Studio and Horizontal examples. Both are included in the collection and card picker.
 
-Migration: Camera privacy mappings and controls have been removed; legacy privacy fields no longer hide feeds. See the [migration notes](cards/camera-card/README.md#migration-removed-privacy-settings).
+Migration: Camera privacy settings and buttons have been removed from the UI. Existing YAML `privacy_entity` and `privacy_state` mappings continue to hide feeds when privacy is active or its status is unknown, missing or disconnected, including in a linked viewer. Editing other settings preserves these mappings; explicitly removing them from YAML opts out of this protection. See the [migration notes](cards/camera-card/README.md#migration-removed-privacy-settings).
