@@ -1,3 +1,4 @@
+import {visibleCameras} from './camera-utils.js';
 // Shared across standalone/collection loads. Only mounted sources are retained.
 const cameraViewerKey=Symbol.for('eleven-camera-viewer-card.links');
 const cameraViewerLinks=globalThis[cameraViewerKey]??=new Map();
@@ -9,8 +10,10 @@ export function updateCameraViewer(id,source,entity){
  if(!id)return;
  const channel=cameraViewerChannel(id);
  channel.sources.add(source);
+ if(!channel.source)channel.source=source;
  if(entity){channel.source=source;channel.entity=entity;}
  if(channel.source!==source)return;
+ if(source._config){const rows=visibleCameras(source._config);if(!rows.some(row=>row.entity===channel.entity))channel.entity=rows[0]?.entity??'';}
  for(const listener of [...channel.listeners])listener();
 }
 export function releaseCameraViewer(id,source){

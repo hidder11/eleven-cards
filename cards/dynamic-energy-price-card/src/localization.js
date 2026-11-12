@@ -1,5 +1,6 @@
 // Dutch source strings are translation keys; no user-provided text is translated.
 export const ENGLISH = Object.freeze({
+ "Over {hours} en {minutes}": "In {hours} and {minutes}",
  "Tijdvak synchroniseren":"Synchronize timeframe","Tijdvakgroep":"Timeframe group",
  "Volgt het gekozen tijdvak van ingeschakelde kaarten in dezelfde groep. Alleen beschikbare bronprijzen worden getoond.":"Follows the selected timeframe of enabled cards in the same group. Only available source prices are shown.",
  "Dezelfde sleutel koppelt kaarten op deze pagina. Leeg gebruikt de standaardgroep.":"The same key links cards on this page. Empty uses the default group.",

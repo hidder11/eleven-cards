@@ -20,7 +20,7 @@ test('service requests use exact entity targets and validate volume, source, mut
  for(const [service,value] of [['volume_set',NaN],['volume_set',1.1],['volume_set',-.1],['volume_set','0.2'],['select_source','Other'],['volume_mute','true'],['media_seek',121],['media_seek',-1],['media_seek',null],['not_a_service',0]])assert.throws(()=>mediaRequest(hass,entity,service,value));
 });
 test('availability distinguishes empty configuration, missing, unknown, unavailable and offline',()=>{assert.equal(mediaAvailability(hass,''),'setup');assert.equal(mediaAvailability(hass,'media_player.missing'),'missing');assert.equal(mediaAvailability({...hass,connected:false},entity),'offline');assert.equal(mediaAvailability({...hass,connection:{connected:false}},entity),'offline');assert.equal(mediaAvailability(hass,entity),null);});
-test('radio mode is explicit and keeps existing layouts compatible',()=>{assert.equal(normalizeMediaConfig().layout,'studio');assert.equal(normalizeMediaConfig().radio_mode,false);assert.equal(normalizeMediaConfig({radio_mode:true,layout:'classic'}).radio_mode,true);assert.equal(normalizeMediaConfig({radio_mode:'true'}).radio_mode,false);});
+test('removed radio options are ignored in existing configurations',()=>{const config=normalizeMediaConfig({radio_mode:true,stations:[{name:'Old station'}]});assert.equal(config.radio_mode,undefined);assert.equal(config.stations,undefined);});
 test('shared background settings reject unknown designs and clamp only finite strengths',()=>{
  assert.equal(normalizeMediaConfig({background:'aurora'}).background,'aurora');assert.equal(normalizeMediaConfig({background:'bad'}).background,'lanes');
  assert.equal(normalizeMediaConfig({background_strength:-10}).background_strength,0);assert.equal(normalizeMediaConfig({background_strength:110}).background_strength,100);assert.equal(normalizeMediaConfig({background_strength:35}).background_strength,35);
@@ -39,13 +39,6 @@ test('artwork rejects executable and malformed URLs and prefers HA-local images'
  const image=value=>mediaArtwork({}, {attributes:{entity_picture:value}});
  for(const value of ['javascript:alert(1)','data:image/svg+xml;base64,AA','//outside/image','/bad\\path','https://bad/ x',{},null])assert.equal(image(value),'');
  assert.equal(image('/api/image'),'/api/image');assert.equal(image('https://example.com/cover.png'),'https://example.com/cover.png');assert.equal(mediaArtwork({hassUrl:path=>'https://ha.example'+path},{attributes:{entity_picture_local:'/api/local',entity_picture:'https://example.com/cover'}}),'https://ha.example/api/local');
-});
-test('station drafts retain typed spaces and play_media only sends validated media fields',()=>{
- const station={name:'Studio Jazz ',media_content_id:' media-source://radio_browser/test ',media_content_type:'music',unexpected:'drop'};
- const config=normalizeMediaConfig({stations:[station,{name:'Draft'}]});assert.equal(config.stations[0].name,'Studio Jazz ');assert.equal(config.stations[1].media_content_id,'');assert.equal(config.stations[1].media_content_type,'music');
- assert.deepEqual(mediaRequest(hass,entity,'play_media',config.stations[0]),{domain:'media_player',service:'play_media',data:{media_content_id:'media-source://radio_browser/test',media_content_type:'music'},target:{entity_id:entity}});
- for(const value of [null,{},config.stations[1],{media_content_id:'x',media_content_type:' '}])assert.throws(()=>mediaRequest(hass,entity,'play_media',value));
- const noFeature={...hass,states:{[entity]:{state:'playing',attributes:{supported_features:1}}}};assert.throws(()=>mediaRequest(noFeature,entity,'play_media',station));
 });
 
 test('absent or disabled legacy decoration stays off through normalized editor updates',()=>{const initial=normalizeMediaConfig({entity});assert.equal(initial.background,'none');assert.equal(normalizeMediaConfig({...initial,title:'Radio'}).background,'none');assert.equal(normalizeMediaConfig({entity,background:'none'}).background,'none');assert.equal(normalizeMediaConfig({entity,background:'aurora'}).background,'aurora');});

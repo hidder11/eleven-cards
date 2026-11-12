@@ -846,6 +846,7 @@ function selectDurationByPrice(points, totalMinutes, direction, options = {}) {
 
 // Dutch source strings are translation keys; no user-provided text is translated.
 const ENGLISH = Object.freeze({
+ "Over {hours} en {minutes}": "In {hours} and {minutes}",
  "Tijdvak synchroniseren":"Synchronize timeframe","Tijdvakgroep":"Timeframe group",
  "Volgt het gekozen tijdvak van ingeschakelde kaarten in dezelfde groep. Alleen beschikbare bronprijzen worden getoond.":"Follows the selected timeframe of enabled cards in the same group. Only available source prices are shown.",
  "Dezelfde sleutel koppelt kaarten op deze pagina. Leeg gebruikt de standaardgroep.":"The same key links cards on this page. Empty uses the default group.",
@@ -2265,6 +2266,18 @@ class DynamicEnergyPriceCard extends HTMLElement {
   _formatPrice(value, digits = 2) { return formatPrice(value, digits, this._language); }
   _formatTime(timestamp, timeZone) { return formatTime(timestamp, timeZone, this._language); }
   _formatDay(timestamp, timeZone) { return formatDay(timestamp, timeZone, this._language); }
+  _timeUntil(timestamp, now = Date.now()) {
+    const remaining = timestamp - now;
+    if (!Number.isFinite(remaining) || remaining <= 0) return '';
+    const totalMinutes = Math.max(1, Math.ceil(remaining / 60000));
+    const unit = (value, name) => new Intl.NumberFormat(this._language, {
+      style: 'unit', unit: name, unitDisplay: 'long',
+    }).format(value);
+    return this._t('Over {hours} en {minutes}', {
+      hours: unit(Math.floor(totalMinutes / 60), 'hour'),
+      minutes: unit(totalMinutes % 60, 'minute'),
+    });
+  }
 
   _hasExportSource() {
     return ['tibber','tibber_prices'].includes(this._config?.export_source) || Boolean(this._config?.export_entity);
@@ -3279,8 +3292,9 @@ class DynamicEnergyPriceCard extends HTMLElement {
     }
 
     const tooltip = this.shadowRoot.querySelector('.tooltip');
+    const timeUntil = this._timeUntil(point.timestamp);
     tooltip.hidden = false;
-    tooltip.innerHTML = `<strong>${this._formatTime(point.timestamp, this._chart.timeZone)}–${this._formatTime(nextTime, this._chart.timeZone)}</strong>${entries.join('')}`;
+    tooltip.innerHTML = `<strong>${this._formatTime(point.timestamp, this._chart.timeZone)}–${this._formatTime(nextTime, this._chart.timeZone)}${timeUntil ? `<small>${escapeHtml(timeUntil)}</small>` : ''}</strong>${entries.join('')}`;
     const anchorY = anchorYs.length
       ? anchorYs.reduce((total, value) => total + value, 0) / anchorYs.length
       : this._chart.svgHeight / 2;
@@ -3289,7 +3303,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const markers=[...this.shadowRoot.querySelectorAll('.hover-dot:not([hidden])')].map(dot=>{const r=dot.getBoundingClientRect();return {left:r.left-bounds.left,right:r.right-bounds.left,top:r.top-bounds.top,bottom:r.bottom-bounds.top};});
     SharedGraph.positionTooltip(this,{chart,tooltip,x:guideX/this._chart.svgWidth*bounds.width,y:anchorY/this._chart.svgHeight*bounds.height,markers,local:publish});
     const live = this.shadowRoot.querySelector('.sr-only');
-    live.textContent = `${this._formatTime(point.timestamp, this._chart.timeZone)} ${this._t("tot")} ${this._formatTime(nextTime, this._chart.timeZone)}, ${liveEntries.join(', ')}.`;
+    live.textContent = `${this._formatTime(point.timestamp, this._chart.timeZone)} ${this._t("tot")} ${this._formatTime(nextTime, this._chart.timeZone)}, ${timeUntil ? `${timeUntil}, ` : ''}${liveEntries.join(', ')}.`;
     if (publish) SharedGraph.publishHover(this, timestamp);
   }
 
