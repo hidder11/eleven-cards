@@ -6,7 +6,6 @@ A native Home Assistant media player card focused on Studio and Horizontal, with
 type: custom:eleven-media-player-card
 entity: media_player.woonkamer
 layout: studio
-radio_mode: true
 ```
 
 | Setting | Default | Meaning |
@@ -14,8 +13,6 @@ radio_mode: true
 | `entity` | Empty | One `media_player` entity; empty shows setup guidance |
 | `title` | Entity friendly name | Optional device/card title |
 | `layout` | `studio` | `classic`, `poster`, `horizontal`, `studio`, `minimal` |
-| `stations` | `[]` | Radio favourites: `name`, `media_content_id`, optional `media_content_type` (default `music`) |
-| `radio_mode` | `false` | Radio channel metadata; hides seeking and track navigation, with stop when pause is unsupported |
 | `show_artwork` | `true` | Album/episode image; minimal always omits artwork |
 | `show_progress` | `true` | Position/duration and seek slider if supported |
 | `show_volume` | `true` | Supported volume and mute controls |
@@ -27,7 +24,7 @@ radio_mode: true
 | `animate_background` | `true` | Shared animation; respects reduced motion, visibility and connection |
 | `compact` | `false` | Reduce spacing and classic artwork size; preserve shared outer padding |
 
-Studio is the default for new cards; explicitly configured layouts remain supported. Titles share the Calendar and Camera Viewer typography, with the common card padding and themed control surfaces. Backgrounds use the shared component from main; transport uses individual surface buttons like the EVCC mode controls, with mute and power immediately beside playback. Volume and seeking place their label above a row with the value first and the slider alongside it, like Solar preference. Both use the same `uiSlider`, `syncUISlider` and `uiBarStyles` component as EVCC on main, including its 12px track, round thumb, theme accent and material well. The volume percentage unit uses smaller secondary text. Secondary metadata uses the shared 11px text size. The layouts share the same functionality. Classic pairs square artwork with metadata. Poster gives the cover a wide stage with a readable title overlay. Horizontal puts small artwork and transport in one row. Studio centres square artwork with rounded corners (8px by default) and the same material well theme setting as graph plots; its inset shadow overlays the image. The header has no status badge. Station, programme, transport, labeled volume, favourites and source selector follow. Empty/unavailable states use a small fallback and suppress stale programme text. Sections height follows content; masonry sizing follows rendered height. Compact reduces artwork and spacing while retaining shared outer padding. Minimal prioritises text and transport, without artwork. Compare Studio (option 4) and Horizontal (option 3) in the [interactive examples](qa/index.html), with fictional metadata and a locally drawn cover. Commands in the fixture update simulated state only.
+Studio is the default for new cards; explicitly configured layouts remain supported. Titles share the Calendar and Camera Viewer typography, with the common card padding and themed control surfaces. Backgrounds use the shared component from main; transport uses individual surface buttons like the EVCC mode controls, with mute and power immediately beside playback. Volume and seeking place their label above a row with the value first and the slider alongside it, like Solar preference. Both use the same `uiSlider`, `syncUISlider` and `uiBarStyles` component as EVCC on main, including its 12px track, round thumb, theme accent and material well. The volume percentage unit uses smaller secondary text. Secondary metadata uses the shared 11px text size. The layouts share the same functionality. Classic pairs square artwork with metadata. Poster gives the cover a wide stage with a readable title overlay. Horizontal puts small artwork and transport in one row. Studio centres square artwork with rounded corners (8px by default) and the same material well theme setting as graph plots; its inset shadow overlays the image. The header has no status badge. Track metadata, individual transport buttons, labeled volume and source selector follow. Empty/unavailable states use a small fallback and suppress stale programme text. Sections height follows content; masonry sizing follows rendered height. Compact reduces artwork and spacing while retaining shared outer padding. Minimal prioritises text and transport, without artwork. Compare Studio (option 4) and Horizontal (option 3) in the [interactive examples](qa/index.html), with fictional metadata and a locally drawn cover. Commands in the fixture update simulated state only.
 
 ```yaml
 # 1. Classic
@@ -53,7 +50,6 @@ compact: true
 type: custom:eleven-media-player-card
 entity: media_player.werkkamer
 layout: studio
-radio_mode: true
 ```
 ```yaml
 # 5. Minimal
@@ -65,22 +61,9 @@ show_source: false
 
 Replace example entities with your own. Playback, seek, mute, volume, source and power use the entity's advertised `supported_features` and registered Home Assistant services. Unsupported controls are hidden. Unknown, missing, unavailable and disconnected states remain explicit and block commands. The off state offers only supported power-on. Service errors show a recoverable message; no command is retried automatically. Opening the card or changing its configuration sends no commands. Title/device details open Home Assistant's native entity dialog.
 
-Radio favourites call `media_player.play_media` only after a click and when the entity advertises support. The selected favourite follows the reported `media_content_id`; selecting an input source does not select a station. After stopping a known favourite, Play restarts that media ID. A switched-off or unavailable player blocks station commands; power-on remains explicit. Blank editor drafts are retained but cannot start playback.
+Radio mode and station favourites have been removed. Existing `radio_mode` and `stations` YAML keys are ignored and can be removed; the card uses ordinary media metadata and playback controls.
 
-Example favourite (replace the example URL with your actual stream URL or a media ID from Home Assistant):
-
-```yaml
-type: custom:eleven-media-player-card
-entity: media_player.woonkamer
-layout: studio
-radio_mode: true
-stations:
-  - name: Mijn radio
-    media_content_id: https://example.invalid/radio.mp3
-    media_content_type: music
-```
-
-The visual editor supports adding, editing, reordering and removing favourites. A shared Card background section supplies the same settings as main; changing other fields retains those settings. New cards have decoration off until enabled. Existing explicit legacy background settings are retained. The examples use fictional stations and media IDs and never send commands to real devices.
+A shared Card background section supplies the same settings as main; changing other fields retains those settings. New cards have decoration off until enabled. Existing explicit legacy background settings are retained. The examples use fictional media metadata and never send commands to real devices.
 
 The card controls your existing integration: it does not stream audio/video in the browser, browse media, build playlists or group speakers. Integration support and permissions determine available actions. Idle/stopped media hides stale progress. Unknown positions remain unavailable in both visible text and screen-reader labels. Position advances locally only from a valid Home Assistant timestamp while playing; timers stop while hidden/off-screen or disconnected. The card preserves focused sliders/selectors on updates and only sends slider commands on change, not on every input event. Images use supplied HTTP(S) or relative URLs, with a fallback for missing/failed artwork. Sensor/user text is escaped.
 

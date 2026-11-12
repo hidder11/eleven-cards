@@ -4,13 +4,29 @@ export async function runCameraViewerChecks(){
  const check=(name,condition)=>{if(!condition)throw Error(name);checks.push(name);};
  const select=entity=>source.shadowRoot.querySelector(`[data-camera-details="${entity}"]`).click();
  const hasPlayer=()=>[...viewer._tiles.values()].some(tile=>tile.player.card);
- await tick();check('Viewer starts empty',viewer._config.cameras.length===0);
+ await tick();check('Viewer starts with the first camera',viewer._activeCamera==='camera.front'&&hasPlayer());
+ const detected=Date.now()-90000,cleared=Date.now()-30000;
+ const detectionConfig={...config,cameras:config.cameras.map(row=>row.entity==='camera.front'?{...row,motion_entity:'binary_sensor.viewer_motion'}:row)};
+ source.setConfig(detectionConfig);select('camera.garden');
+ const detectionHass=active=>({...source.hass,states:{...source.hass.states,'binary_sensor.viewer_motion':{state:active?'on':'off',last_changed:new Date(active?detected:cleared).toISOString()}}});
+ source.hass=detectionHass(true);viewer.hass=source.hass;
+ source.hass=detectionHass(false);viewer.hass=source.hass;select('camera.front');await tick();
+ const detectionLabel=()=>viewer._tiles.get('camera.front').section.querySelector('.camera-last-detection');
+ const formatted=time=>new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(time));
+ check('Viewer inherits the last ON detection when selecting an inactive camera',!detectionLabel().hidden&&detectionLabel().textContent==='Laatste detectie: '+formatted(detected));
+ const historical=detected-60000;
+ source._detections.set('binary_sensor.viewer_motion',historical);source._render();await tick();
+ check('Viewer inherits source history without using the OFF transition',detectionLabel().textContent==='Laatste detectie: '+formatted(historical));
+ source.setConfig({...detectionConfig,cameras:detectionConfig.cameras.map(row=>row.entity==='camera.front'?{...row,last_detection_entity:'sensor.viewer_last'}:row)});
+ const timestampHass={...source.hass,states:{...source.hass.states,'sensor.viewer_last':{state:new Date(detected).toISOString()}}};source.hass=timestampHass;viewer.hass=timestampHass;await tick();
+ check('Viewer uses the configured timestamp sensor',detectionLabel().textContent==='Laatste detectie: '+formatted(detected));
+ source.setConfig(config);update();await tick();
  const lateSource=document.createElement('eleven-camera-card'),lateViewer=document.createElement('eleven-camera-viewer-card'),lateOther=document.createElement('eleven-camera-card');
  lateSource.setConfig({...config,viewer_target:'late-viewer'});lateOther.setConfig({...config,viewer_target:'late-viewer'});lateSource.hass=source.hass;lateOther.hass=source.hass;document.body.append(lateSource,lateOther);
  const missing=card=>!card.shadowRoot.querySelector('.camera-viewer-feedback').hidden;
  check('Sources mounted first report missing viewer before any selection',missing(lateSource)&&missing(lateOther));
  lateViewer.setConfig({viewer_id:'late-viewer'});lateViewer.hass=source.hass;document.body.append(lateViewer);
- check('Viewer attachment clears every source warning synchronously without hass update',!missing(lateSource)&&!missing(lateOther)&&lateViewer._config.cameras.length===0);
+ check('Viewer attachment clears every source warning synchronously without hass update',!missing(lateSource)&&!missing(lateOther)&&lateViewer._activeCamera==='camera.front');
  lateViewer.remove();check('Viewer removal restores every source warning without hass update',missing(lateSource)&&missing(lateOther));
  document.body.append(lateViewer);lateSource.setConfig({...config,viewer_target:'different-viewer'});check('Retargeting unregisters source from old viewer',missing(lateSource)&&!missing(lateOther));
  lateSource.remove();lateOther.remove();lateViewer.remove();
@@ -18,12 +34,28 @@ export async function runCameraViewerChecks(){
  check('Default viewer title is generic Dutch',heading()==='Cameraviewer');
  viewer.hass={...viewer.hass,language:'en',locale:{language:'en'}};check('Default viewer title follows frontend language',heading()==='Camera viewer');update();
  viewer.setConfig({viewer_id:'woonkamer',title:'Eigen titel'});check('Viewer title can be customized',heading()==='Eigen titel');viewer.setConfig({viewer_id:'woonkamer'});
+ const savedStyle=viewer.style.cssText;
+ viewer.setConfig({viewer_id:'woonkamer',title:' '});
+ for(const width of [324,489]){
+  viewer.style.width=width+'px';await tick();
+  const root=viewer.shadowRoot,node=root.querySelector('.content'),content=node.getBoundingClientRect(),tile=viewer._tiles.get('camera.front').section.getBoundingClientRect(),padding=parseFloat(getComputedStyle(node).paddingLeft);
+  check('Whitespace title has equal top and side spacing at '+width,root.querySelector('.camera-security-header').hidden&&Math.abs(tile.top-content.top-padding)<1&&Math.abs(tile.left-content.left-padding)<1&&Math.abs(content.right-tile.right-padding)<1);
+ }
+ check('Hidden title retains an accessible viewer name',viewer.shadowRoot.querySelector('ha-card').getAttribute('aria-label')==='Cameraviewer');
+ const cardsContainer=document.querySelector('.cards');cardsContainer.classList.add('narrow');
+ viewer.style.cssText='width:489px;height:180px';await tick();
+ const viewerCard=viewer.shadowRoot.querySelector('ha-card'),viewerBox=viewer.getBoundingClientRect(),available=viewer.parentElement.getBoundingClientRect();
+ check('Viewer stays within a narrow slot even with an explicit wider size',viewerBox.width<=available.width&&viewerBox.right<=available.right);
+ check('Constrained viewer has vertical scrolling without horizontal overflow',viewerCard.scrollHeight>viewerCard.clientHeight&&viewerCard.scrollWidth===viewerCard.clientWidth&&getComputedStyle(viewerCard).overflowX==='hidden');
+ cardsContainer.classList.remove('narrow');
+ viewer.style.cssText=savedStyle;viewer.setConfig({viewer_id:'woonkamer',title:'Terug'});await tick();
+ check('Visible title restores the header',!viewer.shadowRoot.querySelector('.camera-security-header').hidden&&heading()==='Terug');viewer.setConfig({viewer_id:'woonkamer'});
  let details=0;source.addEventListener('hass-more-info',()=>details++);
  select('camera.front');await tick();check('Name selects camera',viewer._activeCamera==='camera.front'&&hasPlayer());check('Linked name suppresses native details',details===0);
  const player=viewer._tiles.get('camera.front').player.card;update();await tick();check('State updates preserve running player',viewer._tiles.get('camera.front').player.card===player);
  source._tiles.get('camera.garden').frame.click();await tick();check('Feed click switches viewer',viewer._activeCamera==='camera.garden'&&hasPlayer()&&player.isConnected===false);
  const other=document.createElement('eleven-camera-viewer-card');other.setConfig({viewer_id:'other'});other.hass=viewer.hass;document.body.append(other);await tick();select('camera.front');await tick();check('Other IDs remain empty',other._config.cameras.length===0);other.remove();
- source.setConfig({...config,cameras:[{...config.cameras[0],show:false},config.cameras[1]]});await tick();check('Hidden source camera clears viewer',viewer._config.cameras.length===0&&!hasPlayer());source.setConfig(config);await tick();
+ source.setConfig({...config,cameras:[{...config.cameras[0],show:false},config.cameras[1]]});await tick();check('Hidden selection falls back to first visible camera',viewer._activeCamera==='camera.garden'&&hasPlayer());source.setConfig(config);await tick();
  const parent=source.parentNode;source.remove();await tick();check('Removing source clears viewer',!hasPlayer()&&viewer._config.cameras.length===0);parent.append(source);await tick();select('camera.garden');await tick();check('Reattached source selects again',hasPlayer());
  viewer.remove();await tick();check('Removing viewer stops streams',!hasPlayer());document.querySelector('.cards article:last-child').append(viewer);await tick();check('Remounted viewer follows selection',hasPlayer());
  source.setConfig({...config,viewer_target:''});await tick();check('Unlink clears viewer',!hasPlayer());select('camera.front');check('Unlinked name opens native details',details===1);source.setConfig(config);select('camera.front');await tick();
@@ -45,9 +77,9 @@ export async function runCameraViewerChecks(){
   check('Linked viewer respects legacy privacy '+state,hasPlayer()===(state==='off'));
  }
  check('Legacy mapping remains in source and viewer configurations',source._config.cameras[0].privacy_entity==='switch.legacy_privacy'&&viewer._config.cameras[0].privacy_entity==='switch.legacy_privacy');source.setConfig(config);update();await tick();
- source.setConfig({...config,profiles:[{id:'garden',cameras:['camera.garden']}]});source._profileSelection='garden';source._applyProfile();source._render();await tick();check('Viewer follows the effective source configuration',viewer._config.cameras[0]?.entity===source._config.cameras.find(row=>row.show!==false&&row.entity==='camera.front')?.entity);source._profileSelection='auto';source.setConfig(config);select('camera.front');await tick();
+ source.setConfig({...config,profiles:[{id:'garden',cameras:['camera.garden']}]});source._profileSelection='garden';source._applyProfile();source._render();await tick();check('Viewer follows the effective source configuration',viewer._config.cameras[0]?.entity===source._config.cameras.find(row=>row.show!==false)?.entity);source._profileSelection='auto';source.setConfig(config);select('camera.front');await tick();
  await import('/cards/camera-card/dist/eleven-camera-card-test.js');
- const testSource=document.createElement('eleven-camera-card-test'),testViewer=document.createElement('eleven-camera-viewer-card-test');testSource.setConfig(config);testViewer.setConfig({viewer_id:'woonkamer'});testSource.hass=source.hass;testViewer.hass=source.hass;document.body.append(testSource,testViewer);await tick();check('Test viewer does not follow production source',testViewer._config.cameras.length===0);testSource._openLinkedViewer('camera.garden');await tick();check('Test links stay isolated from production',testViewer._activeCamera==='camera.garden'&&viewer._activeCamera==='camera.front');testSource.remove();testViewer.remove();
+ const testSource=document.createElement('eleven-camera-card-test'),testViewer=document.createElement('eleven-camera-viewer-card-test');testSource.setConfig(config);testViewer.setConfig({viewer_id:'woonkamer'});testSource.hass=source.hass;testViewer.hass=source.hass;document.body.append(testSource,testViewer);await tick();check('Test viewer defaults to its own first camera',testViewer._activeCamera==='camera.front');testSource._openLinkedViewer('camera.garden');await tick();check('Test links stay isolated from production',testViewer._activeCamera==='camera.garden'&&viewer._activeCamera==='camera.front');testSource.remove();testViewer.remove();
  document.querySelector('#checks').textContent=JSON.stringify({pass:true,checks},null,2);
  return checks;
 }

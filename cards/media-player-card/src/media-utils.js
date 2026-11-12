@@ -1,13 +1,13 @@
 import {HEADER_BACKGROUNDS} from '../../../shared/header-backgrounds.js';
 export const MEDIA_LAYOUTS=['classic','poster','horizontal','studio','minimal'];
-export const MEDIA_FEATURES={media_pause:1,media_seek:2,volume_set:4,volume_mute:8,media_previous_track:16,media_next_track:32,turn_on:128,turn_off:256,play_media:512,select_source:2048,media_stop:4096,media_play:16384};
+export const MEDIA_FEATURES={media_pause:1,media_seek:2,volume_set:4,volume_mute:8,media_previous_track:16,media_next_track:32,turn_on:128,turn_off:256,select_source:2048,media_stop:4096,media_play:16384};
 export const mediaDutch=hass=>String(hass?.locale?.language??hass?.language??'en').startsWith('nl');
 export function normalizeMediaConfig(input={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Invalid media player configuration');
  const entity=input.entity??'';
  if(typeof entity!=='string'||(entity&&!/^media_player\.[a-z0-9_]+$/.test(entity)))throw Error('Choose a media_player entity / Kies een media_player-entiteit');
- const stations=Array.isArray(input.stations)?input.stations.map(row=>({name:typeof row?.name==='string'?row.name:'',media_content_id:typeof row?.media_content_id==='string'?row.media_content_id:'',media_content_type:typeof row?.media_content_type==='string'?row.media_content_type:'music'})):[];
- return {...input,entity,stations,title:typeof input.title==='string'?input.title:'',layout:MEDIA_LAYOUTS.includes(input.layout)?input.layout:'studio',compact:input.compact===true,radio_mode:input.radio_mode===true,background:input.background==null||input.background==='none'?'none':HEADER_BACKGROUNDS.some(item=>item.value===input.background)?input.background:'lanes',background_strength:typeof input.background_strength==='number'&&Number.isFinite(input.background_strength)?Math.max(0,Math.min(100,input.background_strength)):100,animate_background:input.animate_background!==false,...Object.fromEntries(['show_artwork','show_progress','show_volume','show_source','show_power'].map(key=>[key,input[key]!==false]))};
+ const {radio_mode,stations,...settings}=input;
+ return {...settings,entity,title:typeof input.title==='string'?input.title:'',layout:MEDIA_LAYOUTS.includes(input.layout)?input.layout:'studio',compact:input.compact===true,background:input.background==null||input.background==='none'?'none':HEADER_BACKGROUNDS.some(item=>item.value===input.background)?input.background:'lanes',background_strength:typeof input.background_strength==='number'&&Number.isFinite(input.background_strength)?Math.max(0,Math.min(100,input.background_strength)):100,animate_background:input.animate_background!==false,...Object.fromEntries(['show_artwork','show_progress','show_volume','show_source','show_power'].map(key=>[key,input[key]!==false]))};
 }
 export const mediaNumber=value=>typeof value==='number'&&Number.isFinite(value)?value:null;
 export function mediaAvailability(hass,entity){
@@ -44,6 +44,5 @@ export function mediaRequest(hass,entity,service,value){
  if(service==='volume_mute'){if(typeof value!=='boolean')throw Error('Invalid mute state');data={is_volume_muted:value};}
  if(service==='media_seek'){const {duration}=mediaPosition(hass.states[entity]);if(duration===null||mediaNumber(value)===null||value<0||value>duration)throw Error('Invalid seek');data={seek_position:value};}
  if(service==='select_source'){if(typeof value!=='string'||!Array.isArray(attrs.source_list)||!attrs.source_list.includes(value))throw Error('Invalid source');data={source:value};}
- if(service==='play_media'){if(!value||typeof value.media_content_id!=='string'||!value.media_content_id.trim()||typeof value.media_content_type!=='string'||!value.media_content_type.trim())throw Error('Invalid station');data={media_content_id:value.media_content_id.trim(),media_content_type:value.media_content_type.trim()};}
  return {domain:'media_player',service,data,target:{entity_id:entity}};
 }
