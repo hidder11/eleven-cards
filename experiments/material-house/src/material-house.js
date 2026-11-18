@@ -1,3 +1,4 @@
+import {mountUICassette,uiCassetteStyles} from '../../../shared/ui-cassette.js';
 /* Isolated Material adapter over the exact installed styled source closure.
  * Keep inherited loader/actions/config authoritative; accessibility and detached
  * completion guards below are pilot-only seams, never vendor snapshot changes. */
@@ -46,29 +47,14 @@ class MaterialHouseCard extends HouseStylePreview {
 :host [data-eleven-material][data-house-material] .ui-metric-icon ha-icon{color:inherit;fill:currentColor;stroke:none;stroke-width:0}
 :host [data-eleven-material][data-house-material] .summary-tile:disabled{opacity:1;cursor:default}
 :host [data-eleven-material][data-house-material] .summary-tile:hover:not(:disabled){filter:brightness(1.025)}
-:host [data-eleven-material][data-house-material] .summary-tile:focus-visible,:host [data-eleven-material][data-house-material] summary:focus-visible{outline:2px solid var(--house-focus,var(--_em-accent));outline-offset:3px}
+:host [data-eleven-material][data-house-material] .summary-tile:focus-visible{outline:2px solid var(--house-focus,var(--_em-accent));outline-offset:3px}
 :host [data-eleven-material][data-house-material] [data-material=button]:focus-visible{outline-color:var(--house-focus,var(--_em-accent))}
-:host [data-eleven-material][data-house-material] .light-panel{margin:10px 18px 14px;border:0}
-:host [data-eleven-material][data-house-material] .light-heading{min-height:44px;padding:10px 12px;color:var(--_em-fg);font-size:13px;border-radius:var(--_em-radius-button);border:1px solid var(--_em-edge);background:var(--_house-recipe-button-background,var(--_em-face1));box-shadow:var(--_house-recipe-button-shadow,none);transition:filter var(--_em-duration-color),transform var(--_em-duration-press),box-shadow var(--_em-duration-press)}
-:host [data-eleven-material][data-house-material] .light-heading::after{content:'';box-sizing:border-box;flex:none;width:8px;height:8px;margin:0 3px 4px 12px;border:0;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform var(--_em-duration-color)}
-:host [data-eleven-material][data-house-material] details[open]>.light-heading::after{content:'';transform:rotate(225deg);margin-bottom:0}
-@media(hover:hover){:host [data-eleven-material][data-house-material] .light-heading:hover{filter:brightness(1.025)}}
-:host [data-eleven-material][data-house-material] .light-heading:active{transform:translateY(var(--_em-press-distance));box-shadow:var(--_em-well);background:var(--_em-inset)}
-/* A single housing: a raised grip above an inset tray, never two floating cards.
- * The grip stays in place when opened; only the interior is revealed. */
-:host [data-eleven-material][data-house-material] .light-panel{border-radius:var(--_em-radius-button);background:var(--_em-inset);box-shadow:var(--_em-well)}
-:host [data-eleven-material][data-house-material] .light-heading{position:relative;z-index:1}
-:host [data-eleven-material][data-house-material] .light-panel[open]>.light-heading{border-radius:var(--_em-radius-button) var(--_em-radius-button) 0 0;box-shadow:var(--_house-recipe-button-shadow,none)}
-:host [data-eleven-material][data-house-material] .light-heading:active{transform:none;background:var(--_house-recipe-button-background,var(--_em-face1));box-shadow:var(--_house-recipe-disclosure-pressed-shadow,none)}
-:host [data-eleven-material][data-house-material] .light-panel[open] .controls{box-sizing:border-box;margin:0;padding:12px 10px 10px}
-:host [data-eleven-material][data-house-material] .light-panel .lighting-notice:not(:empty){margin:0;padding:10px 10px 0;color:var(--_em-muted)}
-@media(forced-colors:active){:host [data-eleven-material][data-house-material] .light-panel{background:Canvas;border:1px solid ButtonText;box-shadow:none}:host [data-eleven-material][data-house-material] .light-panel[open]>.light-heading{box-shadow:none}:host [data-eleven-material][data-house-material] .light-heading:active{background:ButtonFace}}
+:host [data-eleven-material][data-house-material] .light-panel{margin:10px 18px 14px;border:0;--ui-cassette-focus-color:var(--house-focus,var(--accent-color,var(--primary-color)))}
+:host [data-eleven-material][data-house-material] .light-panel .lighting-notice:not(:empty){margin:0 0 8px;padding:0;color:var(--_em-muted)}
 :host [data-eleven-material][data-house-material] [data-summary=presence] .ui-metric-icon{width:30px;height:30px;align-self:center;justify-self:end;transform:none}
 :host [data-eleven-material][data-house-material] [data-summary=presence] .hero-avatar{box-sizing:border-box;display:flex;width:30px;height:30px;max-width:100%;border:0;line-height:1;transform:none}
 :host [data-eleven-material][data-house-material] .hero-avatar-photo{display:block;object-position:center}
-@media(prefers-reduced-motion:reduce){:host [data-eleven-material][data-house-material] .light-heading,:host [data-eleven-material][data-house-material] .light-heading::after{transition:none}}
-@media(forced-colors:active){:host [data-eleven-material][data-house-material] .light-heading{background:ButtonFace;color:ButtonText;border:1px solid ButtonText;box-shadow:none}:host [data-eleven-material][data-house-material] .light-heading:focus-visible{outline-color:Highlight}}
-:host [data-eleven-material][data-house-material] .controls{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:8px;margin:4px 0 0}
+:host [data-eleven-material][data-house-material] .controls{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:8px;margin:0;padding:0}
 :host [data-eleven-material][data-house-material] .controls button{box-sizing:border-box;display:grid;grid-template-columns:22px minmax(0,1fr);align-items:center;column-gap:10px;min-height:56px;justify-content:start;text-align:left;padding:9px 12px}
 :host [data-eleven-material][data-house-material] .controls button .label{font-size:13px;line-height:1.3;overflow-wrap:anywhere;word-break:normal}
 :host [data-eleven-material][data-house-material] .controls button small{font-size:12px;color:inherit;opacity:1}
@@ -91,7 +77,7 @@ class MaterialHouseCard extends HouseStylePreview {
 /* Pending remains keyboard-focusable, but is not visually actionable. */
 :host [data-eleven-material][data-house-material] .controls button[data-material=button][aria-disabled=true][aria-busy=true]{background:var(--_em-inset);color:var(--_em-muted);box-shadow:none;transform:none;cursor:wait}
 @media(forced-colors:active){:host [data-eleven-material][data-house-material] .controls button[data-material=button][aria-disabled=true][aria-busy=true]{background:ButtonFace;color:GrayText;border-color:GrayText}}
-`;
+`+uiCassetteStyles({scope:':host [data-eleven-material][data-house-material]'});
   this.shadowRoot.append(style);
   this.markMaterial();
  }
@@ -191,6 +177,7 @@ class MaterialHouseCard extends HouseStylePreview {
 
 
   const scope=this.shadowRoot;
+  const cassette=scope.querySelector('.light-panel');if(cassette)mountUICassette(cassette);
   scope.querySelector('ha-card').dataset.material='card';
   scope.querySelectorAll('.summary-tile').forEach(n=>n.dataset.material='well');
   scope.querySelectorAll('.view-toggle button,.controls button').forEach(n=>n.dataset.material='button');

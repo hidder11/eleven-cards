@@ -1104,6 +1104,55 @@ function uiButtonStyles(){return `
 `;}
 
 
+// Native disclosure anatomy. Labels/attributes are escaped; content is trusted,
+// caller-owned HTML, like uiButton. Native details owns keyboard/open state.
+function uiCassette({label='',content='',open=false,attrs={},summaryAttrs={},bodyAttrs={}}={}){
+ return `<details${uiAttributes({...attrs,'data-ui-cassette':'',open:open?'':null})}><summary${uiAttributes({...summaryAttrs,'data-ui-cassette-trigger':''})}>${uiEscape(label)}</summary><div${uiAttributes({...bodyAttrs,'data-ui-cassette-body':''})}>${content}</div></details>`;
+}
+
+// Adopt existing native markup without replacing its nodes or their listeners.
+// House's immutable source stays authoritative; Scene keeps its native content.
+function mountUICassette(details){
+ if(details?.tagName!=='DETAILS')throw new TypeError('Cassette requires a native details element');
+ const summary=Array.from(details.children).find(node=>node.tagName==='SUMMARY');
+ if(!summary)throw new TypeError('Cassette details requires a direct summary');
+ const children=Array.from(details.children).filter(node=>node!==summary);
+ let body=children.find(node=>node.hasAttribute('data-ui-cassette-body'));
+ if(!body){
+  if(children.length===1&&children[0].tagName==='DIV')body=children[0];
+  else{
+   body=details.ownerDocument.createElement('div');
+   const content=Array.from(details.childNodes).filter(node=>node!==summary);
+   details.insertBefore(body,content[0]??null);body.append(...content);
+  }
+ }
+ details.setAttribute('data-ui-cassette','');summary.setAttribute('data-ui-cassette-trigger','');body.setAttribute('data-ui-cassette-body','');
+ return details;
+}
+
+// Extracted House grip/chevron and attached tray. The wrapper deliberately has
+// no paint: a neighboring Scene Reset remains outside the inset content plane.
+// Theme roles own paint; scope only outranks immutable legacy House selectors.
+function uiCassetteStyles({scope=''}={}){
+ const cassette=`${scope?scope+' ':''}[data-ui-cassette]`;
+ return `
+${cassette}{box-sizing:border-box;min-width:0;padding:0;border:0;background:transparent;box-shadow:none;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+${cassette}>[data-ui-cassette-trigger]{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;box-sizing:border-box;min-width:44px;min-height:44px;width:var(--ui-cassette-grip-width,100%);margin:0;padding:10px 12px;list-style:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;line-height:1.4;text-align:start;overflow-wrap:anywhere;color:var(--primary-text-color);border:1px solid var(--divider-color,transparent);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);transform:none;transition:filter 120ms ease-out,box-shadow 120ms ease-out}
+${cassette}>[data-ui-cassette-trigger]::-webkit-details-marker{display:none}
+${cassette}>[data-ui-cassette-trigger]::after{content:'';box-sizing:border-box;flex:none;width:8px;height:8px;margin:0 3px 4px 12px;border:0;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform 120ms ease-out}
+${cassette}[open]>[data-ui-cassette-trigger]{border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) 0 0}
+${cassette}[open]>[data-ui-cassette-trigger]::after{transform:rotate(225deg);margin-bottom:0}
+${cassette}>[data-ui-cassette-trigger]:active{transform:none;filter:none;background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none)}
+${cassette}>[data-ui-cassette-trigger]:focus-visible{outline:2px solid var(--ui-cassette-focus-color,var(--accent-color,var(--primary-color,Highlight)));outline-offset:3px}
+${cassette}>[data-ui-cassette-body]{box-sizing:border-box;min-width:0;margin:0;padding:12px 10px 10px;border:0;border-radius:0 0 var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none);color:var(--primary-text-color)}
+${cassette}:not([open])>[data-ui-cassette-body]{display:none}
+@media(hover:hover){${cassette}>[data-ui-cassette-trigger]:hover{filter:brightness(1.025)}}
+@media(prefers-reduced-motion:reduce){${cassette}>[data-ui-cassette-trigger],${cassette}>[data-ui-cassette-trigger]::after{transition:none}}
+@media(forced-colors:active){${cassette}>[data-ui-cassette-trigger]{background:ButtonFace;color:ButtonText;border-color:ButtonText;box-shadow:none;forced-color-adjust:none}${cassette}>[data-ui-cassette-trigger]:active{background:ButtonFace;box-shadow:none}${cassette}>[data-ui-cassette-trigger]:focus-visible{outline-color:Highlight}${cassette}>[data-ui-cassette-body]{background:Canvas;color:CanvasText;border:1px solid CanvasText;box-shadow:none}}
+`;
+}
+
+
 const CARD_BACKGROUNDS=Object.freeze([
  {value:'aurora',label:'Aurora sky',description:'Langzaam golvende lichtgordijnen met kleine sterren.'},
  {value:'lanes',label:'Energy Lanes',description:'Diagonale banen met een rustige lichtstroom.'},
@@ -2967,7 +3016,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const periodTable = importPeriods.length || exportPeriods.length
       ? this._periodTable(importPeriods, exportPeriods, timeZone, todayKey, tomorrowKey) : '';
     const favorableTable = periodTable
-      ? `<details class="price-periods"${periodDetailsOpen?' open':''}><summary>${this._t("Gunstige momenten")}${this._config.show_period_average?'<span class="table-unit">ct/kWh</span>':''}</summary>${periodTable}</details>`
+      ? uiCassette({label:this._t("Gunstige momenten"),content:periodTable,open:periodDetailsOpen,attrs:{class:'price-periods'}})
+        .replace('</summary>',`${this._config.show_period_average?'<span class="table-unit">ct/kWh</span>':''}</summary>`)
       : '';
 
     this._chart = {
@@ -3034,7 +3084,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
           <div class="sr-only" aria-live="polite"></div>
         </div>
       </ha-card>
-      <style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart,.price-periods .price-table-wrap',controls:'.price-periods>summary',surfaces:'.tooltip'})}</style>`;
+      <style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
     this._layoutChartLabels();
     this._labelResize?.disconnect();
     const labelChart=this.shadowRoot.querySelector('.chart');
@@ -3154,7 +3204,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _stateCard(title, message) {
-    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart,.price-periods .price-table-wrap',controls:'.price-periods>summary',surfaces:'.tooltip'})}</style>`;
+    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
   }
 
   _bindInteractions() {
@@ -3333,6 +3383,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       return color ? `${token}: ${color};` : '';
     }).join('\n');
     return `
+      ${uiCassetteStyles()}
       :host {
         min-height:var(--energy-required-height,0px);
         --cheap: var(--success-color, #19a974);
@@ -3458,14 +3509,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .tooltip[data-horizontal="positioned"] { transform: none; }
 
       .price-periods{flex:none;margin-top:8px}
-      .price-periods>summary{min-height:44px;min-width:44px;padding:10px 12px;box-sizing:border-box;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:var(--font-size-label);font-weight:500;color:var(--secondary-text-color);list-style:none}
-      .price-periods>summary::-webkit-details-marker{display:none}
-      .price-periods>summary::after{content:'⌄';margin-inline-start:auto}
-      .price-periods[open]>summary::after{content:'⌃'}
-      .price-periods>summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
-      .price-periods .price-table-wrap{margin-top:8px;padding:8px;box-sizing:border-box;border-top:0}
       .price-periods .price-table-wrap h3{display:none}
-      .price-table-wrap { flex: 0 1 auto; min-height: 0; max-height: 190px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider-color); overflow: auto; }
+      .price-table-wrap { flex: 0 1 auto; min-height: 0; max-height: 190px; overflow: auto; }
       .price-table-wrap h3 { margin: 0 0 4px; font-size: var(--font-size-label); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
       .table-unit { float: right; color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); }
       .cheapest-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-label); line-height: var(--line-height-normal); font-variant-numeric: tabular-nums; }
@@ -30802,6 +30847,55 @@ function uiButtonStyles(){return `
 `;}
 
 
+// Native disclosure anatomy. Labels/attributes are escaped; content is trusted,
+// caller-owned HTML, like uiButton. Native details owns keyboard/open state.
+function uiCassette({label='',content='',open=false,attrs={},summaryAttrs={},bodyAttrs={}}={}){
+ return `<details${uiAttributes({...attrs,'data-ui-cassette':'',open:open?'':null})}><summary${uiAttributes({...summaryAttrs,'data-ui-cassette-trigger':''})}>${uiEscape(label)}</summary><div${uiAttributes({...bodyAttrs,'data-ui-cassette-body':''})}>${content}</div></details>`;
+}
+
+// Adopt existing native markup without replacing its nodes or their listeners.
+// House's immutable source stays authoritative; Scene keeps its native content.
+function mountUICassette(details){
+ if(details?.tagName!=='DETAILS')throw new TypeError('Cassette requires a native details element');
+ const summary=Array.from(details.children).find(node=>node.tagName==='SUMMARY');
+ if(!summary)throw new TypeError('Cassette details requires a direct summary');
+ const children=Array.from(details.children).filter(node=>node!==summary);
+ let body=children.find(node=>node.hasAttribute('data-ui-cassette-body'));
+ if(!body){
+  if(children.length===1&&children[0].tagName==='DIV')body=children[0];
+  else{
+   body=details.ownerDocument.createElement('div');
+   const content=Array.from(details.childNodes).filter(node=>node!==summary);
+   details.insertBefore(body,content[0]??null);body.append(...content);
+  }
+ }
+ details.setAttribute('data-ui-cassette','');summary.setAttribute('data-ui-cassette-trigger','');body.setAttribute('data-ui-cassette-body','');
+ return details;
+}
+
+// Extracted House grip/chevron and attached tray. The wrapper deliberately has
+// no paint: a neighboring Scene Reset remains outside the inset content plane.
+// Theme roles own paint; scope only outranks immutable legacy House selectors.
+function uiCassetteStyles({scope=''}={}){
+ const cassette=`${scope?scope+' ':''}[data-ui-cassette]`;
+ return `
+${cassette}{box-sizing:border-box;min-width:0;padding:0;border:0;background:transparent;box-shadow:none;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+${cassette}>[data-ui-cassette-trigger]{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;box-sizing:border-box;min-width:44px;min-height:44px;width:var(--ui-cassette-grip-width,100%);margin:0;padding:10px 12px;list-style:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;line-height:1.4;text-align:start;overflow-wrap:anywhere;color:var(--primary-text-color);border:1px solid var(--divider-color,transparent);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);transform:none;transition:filter 120ms ease-out,box-shadow 120ms ease-out}
+${cassette}>[data-ui-cassette-trigger]::-webkit-details-marker{display:none}
+${cassette}>[data-ui-cassette-trigger]::after{content:'';box-sizing:border-box;flex:none;width:8px;height:8px;margin:0 3px 4px 12px;border:0;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform 120ms ease-out}
+${cassette}[open]>[data-ui-cassette-trigger]{border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) 0 0}
+${cassette}[open]>[data-ui-cassette-trigger]::after{transform:rotate(225deg);margin-bottom:0}
+${cassette}>[data-ui-cassette-trigger]:active{transform:none;filter:none;background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none)}
+${cassette}>[data-ui-cassette-trigger]:focus-visible{outline:2px solid var(--ui-cassette-focus-color,var(--accent-color,var(--primary-color,Highlight)));outline-offset:3px}
+${cassette}>[data-ui-cassette-body]{box-sizing:border-box;min-width:0;margin:0;padding:12px 10px 10px;border:0;border-radius:0 0 var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none);color:var(--primary-text-color)}
+${cassette}:not([open])>[data-ui-cassette-body]{display:none}
+@media(hover:hover){${cassette}>[data-ui-cassette-trigger]:hover{filter:brightness(1.025)}}
+@media(prefers-reduced-motion:reduce){${cassette}>[data-ui-cassette-trigger],${cassette}>[data-ui-cassette-trigger]::after{transition:none}}
+@media(forced-colors:active){${cassette}>[data-ui-cassette-trigger]{background:ButtonFace;color:ButtonText;border-color:ButtonText;box-shadow:none;forced-color-adjust:none}${cassette}>[data-ui-cassette-trigger]:active{background:ButtonFace;box-shadow:none}${cassette}>[data-ui-cassette-trigger]:focus-visible{outline-color:Highlight}${cassette}>[data-ui-cassette-body]{background:Canvas;color:CanvasText;border:1px solid CanvasText;box-shadow:none}}
+`;
+}
+
+
 // Opt-in ordinary actions. Legacy uiButtonStyles() and its callers stay unchanged.
 // The active HA theme supplies paint; variants distinguish commands from choices.
 function uiActionButtonStyles(){return uiButtonStyles()+`
@@ -31948,8 +32042,9 @@ async function fetchTariffs(hass,config,now=new Date()){
 
 
 
-const plannerCSS=`${uiActionButtonStyles()}
-:host{display:block;color:var(--primary-text-color,#20252b);font-family:var(--ha-font-family-body,system-ui)}*{box-sizing:border-box}ha-card{display:block;padding:var(--eleven-card-padding,16px);background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);overflow:hidden}header{display:flex;gap:8px;align-items:center;margin-bottom:16px}h2{margin:0;flex:1;font-size:16px;font-weight:600;line-height:1.3}h3{font-size:14px;margin:16px 0 8px}.muted,small{color:var(--secondary-text-color,#626873);font-size:12px;line-height:1.5}fieldset{border:0;padding:0;margin:0 0 16px;min-width:0}legend,label{font-size:13px;line-height:1.5}legend{color:var(--secondary-text-color,#626873);padding:0;margin-bottom:8px}.choices,.actions{display:flex;flex-wrap:wrap;gap:8px}.choices button{flex:1 1 110px;display:flex;align-items:center;justify-content:center;gap:8px;white-space:normal;overflow-wrap:normal;word-break:normal}.choices ha-icon{--mdc-icon-size:20px;flex:0 0 20px}input,select{font:inherit;color:inherit;font-size:14px;min-height:44px;border-radius:8px;max-width:100%}input,select{width:100%;min-width:0;border:1px solid var(--divider-color,#ddd);padding:8px;background:var(--secondary-background-color,#f4f5f7);color-scheme:var(--planner-color-scheme,inherit)}input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--primary-color,#3973ca);outline-offset:2px}.date-time{display:grid;grid-template-columns:minmax(0,1fr) 145px;gap:8px}.quick{display:flex;gap:8px}.advice{border-top:1px solid var(--divider-color,#ddd);padding-top:16px}.time{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:4px 0}.date{font-size:13px;line-height:1.5}.metrics{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:16px 0 8px}.metrics span{display:block;font-size:12px;color:var(--secondary-text-color,#626873)}.metrics strong{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}.status{font-size:13px;line-height:1.5;margin:8px 0}.warning{color:var(--primary-text-color,#20252b);border-left:3px solid var(--warning-color,#b26a00);padding-left:8px}.error{color:var(--error-color,#bb2424)}details{margin-top:12px;border-top:1px solid var(--divider-color,#ddd)}summary{min-height:44px;align-content:center;cursor:pointer;font-size:13px}.graph{width:100%;height:132px;display:block}.graph line{stroke:var(--divider-color,#ddd)}.graph .tariff{stroke:var(--primary-color,#3973ca);stroke-width:2;fill:none;vector-effect:non-scaling-stroke}.graph .highlight{fill:var(--primary-color,#3973ca);opacity:.12}.graph text{fill:var(--secondary-text-color,#626873);font-size:11px}.graph-labels{display:flex;justify-content:space-between}.plan{border-top:1px solid var(--divider-color,#ddd);padding:12px 0}.plan strong{font-size:14px}.plan .actions{margin-top:8px}.fields{display:grid;gap:12px}.program-fields{display:grid;grid-template-columns:minmax(0,1fr) 80px 80px;gap:8px}.program-fields label{font-size:12px}.editor-group{padding:12px 0;border-top:1px solid var(--divider-color,#ddd)}.check{display:flex;align-items:center;gap:8px}.check input{width:20px;min-height:44px}.feedback:empty{display:none}.empty{font-size:14px;line-height:1.5}.owned{font-size:12px;color:var(--secondary-text-color,#626873)}@media(max-width:350px){ha-card{padding:var(--eleven-card-padding,16px)}.program-fields{grid-template-columns:1fr 1fr}.program-fields label:first-child{grid-column:1/-1}.choices button{flex-basis:100px}}
+
+const plannerCSS=`${uiActionButtonStyles()}${uiCassetteStyles()}
+:host{display:block;color:var(--primary-text-color,#20252b);font-family:var(--ha-font-family-body,system-ui)}*{box-sizing:border-box}ha-card{display:block;padding:var(--eleven-card-padding,16px);background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);overflow:hidden}header{display:flex;gap:8px;align-items:center;margin-bottom:16px}h2{margin:0;flex:1;font-size:16px;font-weight:600;line-height:1.3}h3{font-size:14px;margin:16px 0 8px}.muted,small{color:var(--secondary-text-color,#626873);font-size:12px;line-height:1.5}fieldset{border:0;padding:0;margin:0 0 16px;min-width:0}legend,label{font-size:13px;line-height:1.5}legend{color:var(--secondary-text-color,#626873);padding:0;margin-bottom:8px}.choices,.actions{display:flex;flex-wrap:wrap;gap:8px}.choices button{flex:1 1 110px;display:flex;align-items:center;justify-content:center;gap:8px;white-space:normal;overflow-wrap:normal;word-break:normal}.choices ha-icon{--mdc-icon-size:20px;flex:0 0 20px}input,select{font:inherit;color:inherit;font-size:14px;min-height:44px;border-radius:8px;max-width:100%}input,select{width:100%;min-width:0;border:1px solid var(--divider-color,#ddd);padding:8px;background:var(--secondary-background-color,#f4f5f7);color-scheme:var(--planner-color-scheme,inherit)}input:focus-visible,select:focus-visible{outline:2px solid var(--primary-color,#3973ca);outline-offset:2px}.date-time{display:grid;grid-template-columns:minmax(0,1fr) 145px;gap:8px}.quick{display:flex;gap:8px}.advice{border-top:1px solid var(--divider-color,#ddd);padding-top:16px}.time{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:4px 0}.date{font-size:13px;line-height:1.5}.metrics{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:16px 0 8px}.metrics span{display:block;font-size:12px;color:var(--secondary-text-color,#626873)}.metrics strong{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}.status{font-size:13px;line-height:1.5;margin:8px 0}.warning{color:var(--primary-text-color,#20252b);border-left:3px solid var(--warning-color,#b26a00);padding-left:8px}.error{color:var(--error-color,#bb2424)}.graph{width:100%;height:132px;display:block}.graph line{stroke:var(--divider-color,#ddd)}.graph .tariff{stroke:var(--primary-color,#3973ca);stroke-width:2;fill:none;vector-effect:non-scaling-stroke}.graph .highlight{fill:var(--primary-color,#3973ca);opacity:.12}.graph text{fill:var(--secondary-text-color,#626873);font-size:11px}.graph-labels{display:flex;justify-content:space-between}.plan{border-top:1px solid var(--divider-color,#ddd);padding:12px 0}.plan strong{font-size:14px}.plan .actions{margin-top:8px}.fields{display:grid;gap:12px}.program-fields{display:grid;grid-template-columns:minmax(0,1fr) 80px 80px;gap:8px}.program-fields label{font-size:12px}.editor-group{padding:12px 0;border-top:1px solid var(--divider-color,#ddd)}.check{display:flex;align-items:center;gap:8px}.check input{width:20px;min-height:44px}.feedback:empty{display:none}.empty{font-size:14px;line-height:1.5}.owned{font-size:12px;color:var(--secondary-text-color,#626873)}@media(max-width:350px){ha-card{padding:var(--eleven-card-padding,16px)}.program-fields{grid-template-columns:1fr 1fr}.program-fields label:first-child{grid-column:1/-1}.choices button{flex-basis:100px}}
 @media(max-width:350px){.date-time{grid-template-columns:1fr}.program-fields.thresholds{grid-template-columns:1fr 1fr}.program-fields.thresholds label:first-child{grid-column:auto}}
 .program-fields.thresholds{grid-template-columns:1fr 1fr}
 /* Daily layout: compact controls and one supplementary disclosure. */
@@ -31958,18 +32053,19 @@ const plannerCSS=`${uiActionButtonStyles()}
 @container(max-width:305px){.date-time{grid-template-columns:1fr}}
 
 /* Planner's daily form: spacing belongs here; depth belongs to the theme. */
-.selection{gap:8px}h2{min-width:0;overflow-wrap:anywhere}.date-time{grid-template-columns:minmax(0,1fr) minmax(96px,.65fr)}.quick{gap:8px;margin:8px 0 4px}.quick button{flex:1}.advice{border:0;padding-top:0}.reading-well{padding:8px 12px;background:var(--eleven-material-plot-background,transparent)}.run-times{grid-template-columns:repeat(auto-fit,minmax(min(100%,7em),1fr))}.run-times>div{min-width:0}.cost-line>span:first-child{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.cost-line{margin-top:8px}.detail-row{flex-wrap:wrap}.detail-body{padding:12px}.plan strong{overflow-wrap:anywhere}.status{overflow-wrap:anywhere}
-#advice-details{margin-top:12px;border:0;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}#advice-details[open]{background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none)}summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;min-width:44px;padding:10px 12px;list-style:none;border:1px solid var(--divider-color,#ddd);font-weight:500}summary::-webkit-details-marker{display:none}summary::after{content:'';width:8px;height:8px;flex:none;margin:0 2px 4px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg)}details[open]>summary::after{transform:rotate(225deg);margin-bottom:0}
-input:focus-visible,select:focus-visible,summary:focus-visible{outline-color:var(--accent-color,var(--primary-color,#3973ca))}.field-error{margin:4px 0 0;color:var(--error-color,#bb2424);font-size:12px;line-height:1.5}.field-error:empty{display:none}.deadline label{display:grid;gap:4px;min-width:0}.deadline label>span{font-size:12px;color:var(--secondary-text-color,#626873)}
-${cardThemeStyles({wells:'input:not([type=range]):not([type=checkbox]),select,.reading-well',plots:'.graph',controls:'summary'})}
-#advice-details[open]{background:transparent;box-shadow:none}#advice-details>.detail-body{margin-top:8px;border-radius:var(--eleven-material-radius-well,var(--ha-card-border-radius,12px));background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none)}#advice-details>summary{border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}summary:not(:disabled):active{box-shadow:var(--eleven-material-disclosure-pressed-shadow,none)}
+.selection{gap:8px}h2{min-width:0;overflow-wrap:anywhere}.date-time{grid-template-columns:minmax(0,1fr) minmax(96px,.65fr)}.quick{gap:8px;margin:8px 0 4px}.quick button{flex:1}.advice{border:0;padding-top:0}.reading-well{padding:8px 12px;background:var(--eleven-material-plot-background,transparent)}.run-times{grid-template-columns:repeat(auto-fit,minmax(min(100%,7em),1fr))}.run-times>div{min-width:0}.cost-line>span:first-child{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.cost-line{margin-top:8px}.detail-row{flex-wrap:wrap}.plan strong{overflow-wrap:anywhere}.status{overflow-wrap:anywhere}
+#advice-details{margin-top:12px}
+input:focus-visible,select:focus-visible{outline-color:var(--accent-color,var(--primary-color,#3973ca))}.field-error{margin:4px 0 0;color:var(--error-color,#bb2424);font-size:12px;line-height:1.5}.field-error:empty{display:none}.deadline label{display:grid;gap:4px;min-width:0}.deadline label>span{font-size:12px;color:var(--secondary-text-color,#626873)}
+${cardThemeStyles({wells:'input:not([type=range]):not([type=checkbox]),select,.reading-well',plots:'.graph'})}
+
 ha-card>p.muted{margin:12px 0 0;font-size:12px;line-height:1.5}
 .price-level,.price-level:is(.cheap,.negative,.expensive){display:inline-flex;align-items:center;gap:6px;padding:0;border:0;border-radius:0;background:none;box-shadow:none;color:var(--secondary-text-color,#626873);font-weight:500}
 .price-level::before{content:'';flex:none;width:6px;height:6px;border-radius:50%;background:var(--secondary-text-color,#626873)}.price-level:is(.cheap,.negative)::before{background:var(--success-color,#18733c)}.price-level.expensive::before{background:var(--error-color,#bb2424)}
 /* Flex bases scale with text: ordinary fields stay together; enlarged text wraps. */
 .date-time{display:flex;flex-wrap:wrap;gap:8px}.date-time label{flex:1 1 10em}.date-time label:last-child{flex:1 1 6em}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}@media(forced-colors:active){.reading-well,#advice-details>.detail-body{box-shadow:none;background:Canvas;border:1px solid CanvasText}.price-level::before{background:CanvasText}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}@media(forced-colors:active){.reading-well{box-shadow:none;background:Canvas;border:1px solid CanvasText}.price-level::before{background:CanvasText}}
 `;
+
 
 
 
@@ -32065,7 +32161,7 @@ class ElevenAppliancePlanner extends HTMLElement{
   finally{
    this.pending=false;this.render();
    const action=[...this.shadowRoot.querySelectorAll('[data-op]')].find(el=>el.dataset.id===(changed?.id||id)&&el.dataset.op!=='cancel');
-   (action||this.shadowRoot.getElementById(previousFocus)||this.shadowRoot.getElementById('program'))?.focus();
+   (action||this.shadowRoot.getElementById(previousFocus)||this.shadowRoot.getElementById('program'))?.focus({preventScroll:true});
   }
  }
  graph(){
@@ -32084,7 +32180,7 @@ class ElevenAppliancePlanner extends HTMLElement{
   const main=`<div class="selection"><label><span>Apparaat</span><select id="appliance" title="${esc(a?.name)}" aria-label="${this.en?'Appliance':'Apparaat'}: ${esc(a?.name)}">${this.appliances.map(item=>`<option data-user value="${esc(item.id)}" ${item.id===this.form.aid?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label><label><span>Programma</span><select id="program" title="${esc(p?.name)}" aria-label="${this.en?'Program':'Programma'}: ${esc(p?.name)}">${(a?.programs||[]).map(item=>`<option data-user value="${esc(item.id)}" ${item.id===this.form.pid?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label></div><fieldset class="deadline"><legend>Klaar vóór einde van</legend><div class="quick">${['Vandaag','Morgen'].map((l,i)=>uiButton({variant:'action-choice',text:l,className:'text',attrs:{id:`day-${i}`,'data-day':this.today(i),'aria-pressed':this.form.day===this.today(i)}})).join('')}</div></fieldset>`;
   const r=this.result;let advice='';
   if(r){const level=classifyPriceLevel(r.average,this.config.cheap_price,.25,this.config.expensive_price),label={cheap:'Goedkoop',normal:'Normaal',expensive:'Duur',negative:'Negatief'}[level];
-   advice=`<section class="advice" aria-label="Startadvies"><div class="reading-well"><div class="run-times">${[['Start om',r.start],['Klaar om',r.end]].map(([title,stamp])=>`<div><span class="muted">${title}</span><strong>${this.time(stamp)}</strong><span class="muted" title="${esc(this.day(stamp))}">${this.shortDay(stamp)}</span></div>`).join('')}</div><div class="cost-line"><span><span class="muted">Geschatte kosten</span> <strong>${this.price(r.cost)}</strong></span><span class="price-level ${level}">${label}</span></div></div>${this.linked&&!this.online?'<p class="status warning">Lineaire schatting — integratie niet beschikbaar. Planning en meting zijn uitgeschakeld.</p>':''}${r.provisional?'<p class="status warning">Voorlopig — niet alle prijzen tot de eindtijd zijn bekend. Alleen volledig geprijsde draaibeurt; geen gegarandeerd goedkoopste moment over de hele periode.</p>':''}<details id="advice-details" ${this.detailsOpen?'open':''}><summary id="advice-summary">Details</summary><div class="detail-body"><div class="detail-row"><span>Gemiddeld</span><strong>${this.format(r.average*100,1)} ct/kWh</strong></div><p class="status">${r.savings===null?'Vergelijking niet beschikbaar':`<span>Besparing t.o.v. direct starten</span>: <strong>${this.price(r.savings)}</strong>`}</p><p class="status muted">${r.profile_mode==='measured'&&this.online?'Gemeten profiel':r.profile_mode==='simulated'&&this.online?'Gesimuleerd profiel':'Gelijkmatig verbruik'}</p>${this.graph()}</div></details>${this.online?uiButton({variant:'action',text:'Inplannen',className:'primary',disabled:this.pending||(this.integrationData.plans||[]).some(plan=>active(plan)&&plan.appliance_id===this.form.aid),attrs:{id:'save-plan'}}):''}</section>`;
+   advice=`<section class="advice" aria-label="Startadvies"><div class="reading-well"><div class="run-times">${[['Start om',r.start],['Klaar om',r.end]].map(([title,stamp])=>`<div><span class="muted">${title}</span><strong>${this.time(stamp)}</strong><span class="muted" title="${esc(this.day(stamp))}">${this.shortDay(stamp)}</span></div>`).join('')}</div><div class="cost-line"><span><span class="muted">Geschatte kosten</span> <strong>${this.price(r.cost)}</strong></span><span class="price-level ${level}">${label}</span></div></div>${this.linked&&!this.online?'<p class="status warning">Lineaire schatting — integratie niet beschikbaar. Planning en meting zijn uitgeschakeld.</p>':''}${r.provisional?'<p class="status warning">Voorlopig — niet alle prijzen tot de eindtijd zijn bekend. Alleen volledig geprijsde draaibeurt; geen gegarandeerd goedkoopste moment over de hele periode.</p>':''}${uiCassette({label:'Details',open:this.detailsOpen,attrs:{id:'advice-details'},summaryAttrs:{id:'advice-summary'},bodyAttrs:{class:'detail-body'},content:`<div class="detail-row"><span>Gemiddeld</span><strong>${this.format(r.average*100,1)} ct/kWh</strong></div><p class="status">${r.savings===null?'Vergelijking niet beschikbaar':`<span>Besparing t.o.v. direct starten</span>: <strong>${this.price(r.savings)}</strong>`}</p><p class="status muted">${r.profile_mode==='measured'&&this.online?'Gemeten profiel':r.profile_mode==='simulated'&&this.online?'Gesimuleerd profiel':'Gelijkmatig verbruik'}</p>${this.graph()}`})}${this.online?uiButton({variant:'action',text:'Inplannen',className:'primary',disabled:this.pending||(this.integrationData.plans||[]).some(plan=>active(plan)&&plan.appliance_id===this.form.aid),attrs:{id:'save-plan'}}):''}</section>`;
   }
   const plans=this.online?(this.integrationData.plans||[]).filter(active):[];
   const content=`<style>${plannerCSS}</style><ha-card><header><h2 data-user>${esc(this.config.title||(this.en?'Appliance planner':'Apparatenplanner'))}</h2></header>${p?main:'<p class="empty">Geen programma’s. Open Instellingen in de dashboard-editor.</p>'}<div id="advice-slot" aria-live="polite">${advice}<p class="status ${this.error?'error':''}">${esc(this.loading?'Berekenen…':this.message)}</p></div>${plans.length?`<section><h3>Ingepland</h3>${plans.map(plan=>`<article class="plan"><strong data-user>${esc(this.appliances.find(a=>a.id===plan.appliance_id)?.name)} · ${esc(this.appliances.find(a=>a.id===plan.appliance_id)?.programs.find(p=>p.id===plan.program_id)?.name)}</strong><div class="date">${this.time(plan.start)} · ${this.day(plan.start)}</div><div class="muted"><span>${({planned:'Ingepland',reminded:'Starttijd bereikt',running:'Bezig'})[plan.status]}</span> · ${this.price(plan.cost)}</div><div class="actions">${uiButton({variant:'action',text:plan.status==='running'?'Klaar':'Gestart',disabled:this.pending,attrs:{id:`plan-${plan.id}-${plan.status==='running'?'done':'start'}`,'data-op':plan.status==='running'?'done':'start','data-id':plan.id}})}${uiButton({variant:'action',text:'Annuleren',disabled:this.pending,attrs:{id:`plan-${plan.id}-cancel`,'data-op':'cancel','data-id':plan.id}})}</div></article>`).join('')}</section>`:''}<p class="muted">Alleen advies. Je zet het apparaat zelf aan.</p></ha-card>`;
@@ -32097,7 +32193,7 @@ class ElevenAppliancePlanner extends HTMLElement{
   this.shadowRoot.querySelectorAll('[data-day]').forEach(el=>el.onclick=()=>{this.form.day=el.dataset.day;this.recompute();});
 
   this.bindResult();this.shadowRoot.querySelectorAll('[data-op]').forEach(el=>el.onclick=()=>this.act(el.dataset.op,el.dataset.id));
-  localize(this.shadowRoot,this.en);if(focus)this.shadowRoot.getElementById(focus)?.focus();
+  localize(this.shadowRoot,this.en);if(focus)this.shadowRoot.getElementById(focus)?.focus({preventScroll:true});
  }
 
  bindResult(){const save=this.shadowRoot.querySelector('#save-plan');if(save)save.onclick=()=>this.act('save');const details=this.shadowRoot.querySelector('#advice-details');if(details)details.addEventListener('toggle',()=>{if(details.isConnected)this.detailsOpen=details.open;});}
@@ -33068,6 +33164,55 @@ function uiButtonStyles(){return `
 `;}
 
 
+// Native disclosure anatomy. Labels/attributes are escaped; content is trusted,
+// caller-owned HTML, like uiButton. Native details owns keyboard/open state.
+function uiCassette({label='',content='',open=false,attrs={},summaryAttrs={},bodyAttrs={}}={}){
+ return `<details${uiAttributes({...attrs,'data-ui-cassette':'',open:open?'':null})}><summary${uiAttributes({...summaryAttrs,'data-ui-cassette-trigger':''})}>${uiEscape(label)}</summary><div${uiAttributes({...bodyAttrs,'data-ui-cassette-body':''})}>${content}</div></details>`;
+}
+
+// Adopt existing native markup without replacing its nodes or their listeners.
+// House's immutable source stays authoritative; Scene keeps its native content.
+function mountUICassette(details){
+ if(details?.tagName!=='DETAILS')throw new TypeError('Cassette requires a native details element');
+ const summary=Array.from(details.children).find(node=>node.tagName==='SUMMARY');
+ if(!summary)throw new TypeError('Cassette details requires a direct summary');
+ const children=Array.from(details.children).filter(node=>node!==summary);
+ let body=children.find(node=>node.hasAttribute('data-ui-cassette-body'));
+ if(!body){
+  if(children.length===1&&children[0].tagName==='DIV')body=children[0];
+  else{
+   body=details.ownerDocument.createElement('div');
+   const content=Array.from(details.childNodes).filter(node=>node!==summary);
+   details.insertBefore(body,content[0]??null);body.append(...content);
+  }
+ }
+ details.setAttribute('data-ui-cassette','');summary.setAttribute('data-ui-cassette-trigger','');body.setAttribute('data-ui-cassette-body','');
+ return details;
+}
+
+// Extracted House grip/chevron and attached tray. The wrapper deliberately has
+// no paint: a neighboring Scene Reset remains outside the inset content plane.
+// Theme roles own paint; scope only outranks immutable legacy House selectors.
+function uiCassetteStyles({scope=''}={}){
+ const cassette=`${scope?scope+' ':''}[data-ui-cassette]`;
+ return `
+${cassette}{box-sizing:border-box;min-width:0;padding:0;border:0;background:transparent;box-shadow:none;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+${cassette}>[data-ui-cassette-trigger]{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;box-sizing:border-box;min-width:44px;min-height:44px;width:var(--ui-cassette-grip-width,100%);margin:0;padding:10px 12px;list-style:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;line-height:1.4;text-align:start;overflow-wrap:anywhere;color:var(--primary-text-color);border:1px solid var(--divider-color,transparent);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);transform:none;transition:filter 120ms ease-out,box-shadow 120ms ease-out}
+${cassette}>[data-ui-cassette-trigger]::-webkit-details-marker{display:none}
+${cassette}>[data-ui-cassette-trigger]::after{content:'';box-sizing:border-box;flex:none;width:8px;height:8px;margin:0 3px 4px 12px;border:0;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform 120ms ease-out}
+${cassette}[open]>[data-ui-cassette-trigger]{border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) 0 0}
+${cassette}[open]>[data-ui-cassette-trigger]::after{transform:rotate(225deg);margin-bottom:0}
+${cassette}>[data-ui-cassette-trigger]:active{transform:none;filter:none;background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none)}
+${cassette}>[data-ui-cassette-trigger]:focus-visible{outline:2px solid var(--ui-cassette-focus-color,var(--accent-color,var(--primary-color,Highlight)));outline-offset:3px}
+${cassette}>[data-ui-cassette-body]{box-sizing:border-box;min-width:0;margin:0;padding:12px 10px 10px;border:0;border-radius:0 0 var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none);color:var(--primary-text-color)}
+${cassette}:not([open])>[data-ui-cassette-body]{display:none}
+@media(hover:hover){${cassette}>[data-ui-cassette-trigger]:hover{filter:brightness(1.025)}}
+@media(prefers-reduced-motion:reduce){${cassette}>[data-ui-cassette-trigger],${cassette}>[data-ui-cassette-trigger]::after{transition:none}}
+@media(forced-colors:active){${cassette}>[data-ui-cassette-trigger]{background:ButtonFace;color:ButtonText;border-color:ButtonText;box-shadow:none;forced-color-adjust:none}${cassette}>[data-ui-cassette-trigger]:active{background:ButtonFace;box-shadow:none}${cassette}>[data-ui-cassette-trigger]:focus-visible{outline-color:Highlight}${cassette}>[data-ui-cassette-body]{background:Canvas;color:CanvasText;border:1px solid CanvasText;box-shadow:none}}
+`;
+}
+
+
 // Opt-in ordinary actions. Legacy uiButtonStyles() and its callers stay unchanged.
 // The active HA theme supplies paint; variants distinguish commands from choices.
 function uiActionButtonStyles(){return uiButtonStyles()+`
@@ -33673,25 +33818,22 @@ class ElevenSceneEngineCard extends HTMLElement {
       .muted,.raw,dt{color:var(--ese-muted)}.raw,.muted,.diagnostics{font-size:12px;overflow-wrap:anywhere}.raw{margin-top:4px}.status{font-size:12px;color:var(--ese-muted);margin-bottom:6px}.status:empty{display:none}
       .winner{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:12px;row-gap:8px;padding:12px;background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent))}
       .winner ha-icon{display:block;width:32px;height:32px;--mdc-icon-size:32px;align-self:center;color:var(--ese-accent);background:none;box-shadow:none}.winner[data-kind=idle] ha-icon,.winner[data-kind=default] ha-icon{color:var(--ese-muted)}
-      .winner.scene-wide{grid-template-columns:minmax(0,1fr);margin-inline:calc(-1 * max(0px,calc(var(--eleven-card-padding,16px) - 4px)));padding-inline:2px}.footer.stacked #details-slot>details>summary{width:100%}.footer.stacked #reset{top:calc(var(--ese-summary-height,44px) + 8px)}.footer.stacked{min-height:calc(var(--ese-summary-height,44px) + var(--ese-reset-height,44px) + 8px)}.footer.stacked #details-slot>details>.detail-body{margin-top:calc(var(--ese-reset-height,44px) + 16px)}
+      .winner.scene-wide{grid-template-columns:minmax(0,1fr);margin-inline:calc(-1 * max(0px,calc(var(--eleven-card-padding,16px) - 4px)));padding-inline:2px}.footer.stacked{display:grid;gap:8px;min-height:0}.footer.stacked #details-slot>details{--ui-cassette-grip-width:100%}.footer.stacked #reset{position:static;justify-self:end}
       .scene{font-size:24px;line-height:1.25;font-weight:600;overflow-wrap:anywhere;min-width:0}
       .meta{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;font-size:12px}.meta>div{display:flex;align-items:baseline;gap:6px;min-width:0}.meta>div:first-child{flex:1 1 max-content}.meta dt{font-size:inherit;flex:none}.meta dd{margin:0;overflow-wrap:anywhere;min-width:0}.meta>div:last-child dd{font-variant-numeric:tabular-nums}
       .counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0;font-size:12px}.counts>div{display:flex;align-items:baseline;gap:8px;min-width:0}.counts strong{font-size:22px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.counts span{color:var(--ese-muted);overflow-wrap:anywhere}
       .request-overview{padding:0;background:transparent}
       table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px;line-height:1.45}th,td{padding:8px 6px;text-align:start;vertical-align:top;overflow-wrap:anywhere}thead th{font-size:12px;font-weight:500;color:var(--ese-muted);padding-top:0}thead th:nth-child(1){width:32%}thead th:nth-child(2){width:14%}thead th:nth-child(3){width:36%}thead th:nth-child(4){width:18%}tbody tr+tr{border-top:1px solid var(--ese-border)}td:nth-child(2){text-align:end;font-variant-numeric:tabular-nums}thead th:nth-child(2){text-align:end}td:first-child{font-weight:500}td:last-child{color:var(--ese-muted)}td::before{display:none}
       .request-overview.reflow table,.request-overview.reflow tbody{display:block}.request-overview.reflow thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.request-overview.reflow tr{display:grid;grid-template-columns:minmax(0,1fr);padding:8px 0}.request-overview.reflow td{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:12px;text-align:start;padding:3px 0}.request-overview.reflow td::before{content:attr(data-label);display:block;font-size:12px;font-weight:400;color:var(--ese-muted)}.cell-value{min-width:0}.request-overview.reflow.value-wide td{grid-template-columns:minmax(0,1fr);gap:2px}.request-overview.reflow.value-wide td+td{padding-top:8px}
-      /* Independent raised controls above a separate inset reading surface.
-         The native details wrapper never paints behind the Reset action. */
-      .footer{position:relative;font-size:13px;min-height:44px}#details-slot>details{background:transparent;box-shadow:none;border-radius:0}
-      summary{display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;width:calc(100% - 7em - 8px);min-height:44px;padding:10px 12px;cursor:pointer;font-weight:500;border:1px solid var(--ese-border);font-size:inherit;overflow-wrap:anywhere}summary::-webkit-details-marker{display:none}summary::after{content:'';width:8px;height:8px;flex:none;margin:0 2px 4px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg)}details[open]>summary::after{transform:rotate(225deg);margin-bottom:0}
-      .detail-body{padding:12px;margin-top:8px;background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent))}.request-group+.request-group{margin-top:16px}.request-group h3{display:flex;justify-content:space-between;gap:12px;font-size:12px;font-weight:500;margin:0 0 4px;color:var(--ese-muted)}.requests{list-style:none;padding:0;margin:0}.requests li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px 0;overflow-wrap:anywhere}.requests li+li{border-top:1px solid var(--ese-border)}.request-title{font-size:13px;font-weight:600}.request-scene{font-size:12px;color:var(--ese-muted);margin-top:2px}.request-priority{font-size:14px;font-weight:500;font-variant-numeric:tabular-nums;text-align:end}.diagnostics{padding-top:12px;white-space:pre-line}.technical-requests{list-style:none;padding:0;margin:0}.technical-requests li{margin-top:12px}.technical-body{padding:0 0 8px;overflow-wrap:anywhere}
-      summary:focus-visible{outline:2px solid var(--ese-accent);outline-offset:3px}#reset{position:absolute;inset-inline-end:0;top:0;width:7em}.feedback{margin-top:8px;color:var(--ese-muted);font-size:12px;overflow-wrap:anywhere}.feedback:empty,[hidden]{display:none!important}.feedback.error{color:var(--error-color,#b3261e)}.unavailable{padding:12px 0;font-size:14px;overflow-wrap:anywhere}
+      /* Only adjacent-action layout is local; cassette anatomy/states are shared. */
+      .footer{position:relative;font-size:13px;min-height:44px}#details-slot>details{--ui-cassette-grip-width:calc(100% - 7em - 8px)}
+      .request-group+.request-group{margin-top:16px}.request-group h3{display:flex;justify-content:space-between;gap:12px;font-size:12px;font-weight:500;margin:0 0 4px;color:var(--ese-muted)}.requests{list-style:none;padding:0;margin:0}.requests li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px 0;overflow-wrap:anywhere}.requests li+li{border-top:1px solid var(--ese-border)}.request-title{font-size:13px;font-weight:600}.request-scene{font-size:12px;color:var(--ese-muted);margin-top:2px}.request-priority{font-size:14px;font-weight:500;font-variant-numeric:tabular-nums;text-align:end}.diagnostics{padding-top:12px;white-space:pre-line}.technical-requests{list-style:none;padding:0;margin:0}.technical-requests li{margin-top:12px}.technical-body{overflow-wrap:anywhere}
+      #reset{position:absolute;inset-inline-end:0;top:0;width:7em}.feedback{margin-top:8px;color:var(--ese-muted);font-size:12px;overflow-wrap:anywhere}.feedback:empty,[hidden]{display:none!important}.feedback.error{color:var(--error-color,#b3261e)}.unavailable{padding:12px 0;font-size:14px;overflow-wrap:anywhere}
       dialog{color:var(--primary-text-color,#202124);background:var(--card-background-color,#fff);border:1px solid var(--ese-border);border-radius:var(--ha-card-border-radius,12px);width:min(420px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:20px;overflow:auto;font:inherit}dialog::backdrop{background:rgb(0 0 0 / .45)}dialog p{margin:12px 0;overflow-wrap:anywhere}.dialog-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:20px}
-      ${cardThemeStyles({wells:'.winner,.detail-body',controls:'summary',surfaces:'dialog'})}
-      /* Open is disclosure, not a pressed/selected or partly squared face. */
-      summary:not(:disabled):active{box-shadow:var(--eleven-material-disclosure-pressed-shadow,none)}
-      .footer details.technical{margin-top:8px;border-top:1px solid var(--ese-border);border-radius:0;background:none;box-shadow:none}.footer .technical>summary{width:100%;min-height:44px;padding:8px 0;border:0;border-radius:0;background:none;box-shadow:none;color:var(--ese-muted);font-size:12px}.footer .technical>summary:hover,.footer .technical>summary:active{background:none;box-shadow:none}.technical>summary::after{width:6px;height:6px}
-      @media(forced-colors:active){.winner,.detail-body{background:Canvas;box-shadow:none;border:1px solid CanvasText}summary{background:ButtonFace;color:ButtonText}.winner ha-icon{color:CanvasText}button:focus-visible,summary:focus-visible{outline-color:Highlight}}
+      ${cardThemeStyles({wells:'.winner',surfaces:'dialog'})}
+      ${uiCassetteStyles()}
+      .footer details.technical{margin-top:8px;--ui-cassette-grip-width:100%}
+      @media(forced-colors:active){.winner{background:Canvas;box-shadow:none;border:1px solid CanvasText}.winner ha-icon{color:CanvasText}button:focus-visible{outline-color:Highlight}}
     </style><ha-card><header><h2 id="title"></h2></header><p class="status" id="state"></p><section id="content"></section><section class="footer"><div id="details-slot"></div>${uiButton({variant:'action',text:'Reset',attrs:{id:'reset'}})}</section><p id="feedback" class="feedback" role="status" aria-live="polite"></p></ha-card><dialog aria-labelledby="dialog-title" aria-describedby="dialog-description"><h3 id="dialog-title">Engine resetten?</h3><p id="dialog-description"></p><p class="raw" id="target"></p><div class="dialog-actions">${uiButton({variant:'action',text:'Annuleren',attrs:{id:'cancel',autofocus:true}})}${uiButton({variant:'action-danger',text:'Ja, resetten',className:'confirm',attrs:{id:'confirm'}})}</div></dialog>`;
     this.$('reset').addEventListener('click',()=>this._open());
     this.$('cancel').addEventListener('click',()=>this._close());
@@ -33850,8 +33992,8 @@ class ElevenSceneEngineCard extends HTMLElement {
         technicalBody.append(technicalList);
         technicalBody.append(node('p','Niet actief kan ook een ondersteunende aanvraag zonder scene zijn.','muted'));
         technicalBody.append(node('p',`Revisie ${text(a.revision)} · bron ${text(a.snapshot_source)}\nStandaard: ${text(a.default_scene)}`,'diagnostics muted'));
-        technical.append(technicalBody); body.append(technical);
-        details.append(body); slot.append(details);
+        technical.append(technicalBody);mountUICassette(technical);body.append(technical);
+        details.append(body);mountUICassette(details);slot.append(details);
         // Restore keyboard focus without scrolling the reader back to the grip.
         if (focusedSummary) (focusedSummary === 'technical' ? technical : details).querySelector('summary').focus({preventScroll:true});
       }
@@ -34243,6 +34385,55 @@ const headerAtmosphereStyles=`
 :host([data-motion-paused]) .header-pattern i{animation-play-state:paused!important}
 @media(prefers-reduced-motion:reduce){.header-pattern i{animation:none!important}}
 `;
+
+
+// Native disclosure anatomy. Labels/attributes are escaped; content is trusted,
+// caller-owned HTML, like uiButton. Native details owns keyboard/open state.
+function uiCassette({label='',content='',open=false,attrs={},summaryAttrs={},bodyAttrs={}}={}){
+ return `<details${uiAttributes({...attrs,'data-ui-cassette':'',open:open?'':null})}><summary${uiAttributes({...summaryAttrs,'data-ui-cassette-trigger':''})}>${uiEscape(label)}</summary><div${uiAttributes({...bodyAttrs,'data-ui-cassette-body':''})}>${content}</div></details>`;
+}
+
+// Adopt existing native markup without replacing its nodes or their listeners.
+// House's immutable source stays authoritative; Scene keeps its native content.
+function mountUICassette(details){
+ if(details?.tagName!=='DETAILS')throw new TypeError('Cassette requires a native details element');
+ const summary=Array.from(details.children).find(node=>node.tagName==='SUMMARY');
+ if(!summary)throw new TypeError('Cassette details requires a direct summary');
+ const children=Array.from(details.children).filter(node=>node!==summary);
+ let body=children.find(node=>node.hasAttribute('data-ui-cassette-body'));
+ if(!body){
+  if(children.length===1&&children[0].tagName==='DIV')body=children[0];
+  else{
+   body=details.ownerDocument.createElement('div');
+   const content=Array.from(details.childNodes).filter(node=>node!==summary);
+   details.insertBefore(body,content[0]??null);body.append(...content);
+  }
+ }
+ details.setAttribute('data-ui-cassette','');summary.setAttribute('data-ui-cassette-trigger','');body.setAttribute('data-ui-cassette-body','');
+ return details;
+}
+
+// Extracted House grip/chevron and attached tray. The wrapper deliberately has
+// no paint: a neighboring Scene Reset remains outside the inset content plane.
+// Theme roles own paint; scope only outranks immutable legacy House selectors.
+function uiCassetteStyles({scope=''}={}){
+ const cassette=`${scope?scope+' ':''}[data-ui-cassette]`;
+ return `
+${cassette}{box-sizing:border-box;min-width:0;padding:0;border:0;background:transparent;box-shadow:none;border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px))}
+${cassette}>[data-ui-cassette-trigger]{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;box-sizing:border-box;min-width:44px;min-height:44px;width:var(--ui-cassette-grip-width,100%);margin:0;padding:10px 12px;list-style:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;line-height:1.4;text-align:start;overflow-wrap:anywhere;color:var(--primary-text-color);border:1px solid var(--divider-color,transparent);border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-control-shadow,none);transform:none;transition:filter 120ms ease-out,box-shadow 120ms ease-out}
+${cassette}>[data-ui-cassette-trigger]::-webkit-details-marker{display:none}
+${cassette}>[data-ui-cassette-trigger]::after{content:'';box-sizing:border-box;flex:none;width:8px;height:8px;margin:0 3px 4px 12px;border:0;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform 120ms ease-out}
+${cassette}[open]>[data-ui-cassette-trigger]{border-radius:var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) 0 0}
+${cassette}[open]>[data-ui-cassette-trigger]::after{transform:rotate(225deg);margin-bottom:0}
+${cassette}>[data-ui-cassette-trigger]:active{transform:none;filter:none;background:var(--eleven-material-control-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none)}
+${cassette}>[data-ui-cassette-trigger]:focus-visible{outline:2px solid var(--ui-cassette-focus-color,var(--accent-color,var(--primary-color,Highlight)));outline-offset:3px}
+${cassette}>[data-ui-cassette-body]{box-sizing:border-box;min-width:0;margin:0;padding:12px 10px 10px;border:0;border-radius:0 0 var(--eleven-material-radius-button,var(--ha-card-border-radius,12px)) var(--eleven-material-radius-button,var(--ha-card-border-radius,12px));background:var(--eleven-material-plot-background,var(--secondary-background-color,transparent));box-shadow:var(--eleven-material-well,none);color:var(--primary-text-color)}
+${cassette}:not([open])>[data-ui-cassette-body]{display:none}
+@media(hover:hover){${cassette}>[data-ui-cassette-trigger]:hover{filter:brightness(1.025)}}
+@media(prefers-reduced-motion:reduce){${cassette}>[data-ui-cassette-trigger],${cassette}>[data-ui-cassette-trigger]::after{transition:none}}
+@media(forced-colors:active){${cassette}>[data-ui-cassette-trigger]{background:ButtonFace;color:ButtonText;border-color:ButtonText;box-shadow:none;forced-color-adjust:none}${cassette}>[data-ui-cassette-trigger]:active{background:ButtonFace;box-shadow:none}${cassette}>[data-ui-cassette-trigger]:focus-visible{outline-color:Highlight}${cassette}>[data-ui-cassette-body]{background:Canvas;color:CanvasText;border:1px solid CanvasText;box-shadow:none}}
+`;
+}
 
 /* Eleven house: prerecorded lighting only; no rendering API. */
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -34742,29 +34933,14 @@ class MaterialHouseCard extends HouseStylePreview {
 :host [data-eleven-material][data-house-material] .ui-metric-icon ha-icon{color:inherit;fill:currentColor;stroke:none;stroke-width:0}
 :host [data-eleven-material][data-house-material] .summary-tile:disabled{opacity:1;cursor:default}
 :host [data-eleven-material][data-house-material] .summary-tile:hover:not(:disabled){filter:brightness(1.025)}
-:host [data-eleven-material][data-house-material] .summary-tile:focus-visible,:host [data-eleven-material][data-house-material] summary:focus-visible{outline:2px solid var(--house-focus,var(--_em-accent));outline-offset:3px}
+:host [data-eleven-material][data-house-material] .summary-tile:focus-visible{outline:2px solid var(--house-focus,var(--_em-accent));outline-offset:3px}
 :host [data-eleven-material][data-house-material] [data-material=button]:focus-visible{outline-color:var(--house-focus,var(--_em-accent))}
-:host [data-eleven-material][data-house-material] .light-panel{margin:10px 18px 14px;border:0}
-:host [data-eleven-material][data-house-material] .light-heading{min-height:44px;padding:10px 12px;color:var(--_em-fg);font-size:13px;border-radius:var(--_em-radius-button);border:1px solid var(--_em-edge);background:var(--_house-recipe-button-background,var(--_em-face1));box-shadow:var(--_house-recipe-button-shadow,none);transition:filter var(--_em-duration-color),transform var(--_em-duration-press),box-shadow var(--_em-duration-press)}
-:host [data-eleven-material][data-house-material] .light-heading::after{content:'';box-sizing:border-box;flex:none;width:8px;height:8px;margin:0 3px 4px 12px;border:0;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform var(--_em-duration-color)}
-:host [data-eleven-material][data-house-material] details[open]>.light-heading::after{content:'';transform:rotate(225deg);margin-bottom:0}
-@media(hover:hover){:host [data-eleven-material][data-house-material] .light-heading:hover{filter:brightness(1.025)}}
-:host [data-eleven-material][data-house-material] .light-heading:active{transform:translateY(var(--_em-press-distance));box-shadow:var(--_em-well);background:var(--_em-inset)}
-/* A single housing: a raised grip above an inset tray, never two floating cards.
- * The grip stays in place when opened; only the interior is revealed. */
-:host [data-eleven-material][data-house-material] .light-panel{border-radius:var(--_em-radius-button);background:var(--_em-inset);box-shadow:var(--_em-well)}
-:host [data-eleven-material][data-house-material] .light-heading{position:relative;z-index:1}
-:host [data-eleven-material][data-house-material] .light-panel[open]>.light-heading{border-radius:var(--_em-radius-button) var(--_em-radius-button) 0 0;box-shadow:var(--_house-recipe-button-shadow,none)}
-:host [data-eleven-material][data-house-material] .light-heading:active{transform:none;background:var(--_house-recipe-button-background,var(--_em-face1));box-shadow:var(--_house-recipe-disclosure-pressed-shadow,none)}
-:host [data-eleven-material][data-house-material] .light-panel[open] .controls{box-sizing:border-box;margin:0;padding:12px 10px 10px}
-:host [data-eleven-material][data-house-material] .light-panel .lighting-notice:not(:empty){margin:0;padding:10px 10px 0;color:var(--_em-muted)}
-@media(forced-colors:active){:host [data-eleven-material][data-house-material] .light-panel{background:Canvas;border:1px solid ButtonText;box-shadow:none}:host [data-eleven-material][data-house-material] .light-panel[open]>.light-heading{box-shadow:none}:host [data-eleven-material][data-house-material] .light-heading:active{background:ButtonFace}}
+:host [data-eleven-material][data-house-material] .light-panel{margin:10px 18px 14px;border:0;--ui-cassette-focus-color:var(--house-focus,var(--accent-color,var(--primary-color)))}
+:host [data-eleven-material][data-house-material] .light-panel .lighting-notice:not(:empty){margin:0 0 8px;padding:0;color:var(--_em-muted)}
 :host [data-eleven-material][data-house-material] [data-summary=presence] .ui-metric-icon{width:30px;height:30px;align-self:center;justify-self:end;transform:none}
 :host [data-eleven-material][data-house-material] [data-summary=presence] .hero-avatar{box-sizing:border-box;display:flex;width:30px;height:30px;max-width:100%;border:0;line-height:1;transform:none}
 :host [data-eleven-material][data-house-material] .hero-avatar-photo{display:block;object-position:center}
-@media(prefers-reduced-motion:reduce){:host [data-eleven-material][data-house-material] .light-heading,:host [data-eleven-material][data-house-material] .light-heading::after{transition:none}}
-@media(forced-colors:active){:host [data-eleven-material][data-house-material] .light-heading{background:ButtonFace;color:ButtonText;border:1px solid ButtonText;box-shadow:none}:host [data-eleven-material][data-house-material] .light-heading:focus-visible{outline-color:Highlight}}
-:host [data-eleven-material][data-house-material] .controls{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:8px;margin:4px 0 0}
+:host [data-eleven-material][data-house-material] .controls{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:8px;margin:0;padding:0}
 :host [data-eleven-material][data-house-material] .controls button{box-sizing:border-box;display:grid;grid-template-columns:22px minmax(0,1fr);align-items:center;column-gap:10px;min-height:56px;justify-content:start;text-align:left;padding:9px 12px}
 :host [data-eleven-material][data-house-material] .controls button .label{font-size:13px;line-height:1.3;overflow-wrap:anywhere;word-break:normal}
 :host [data-eleven-material][data-house-material] .controls button small{font-size:12px;color:inherit;opacity:1}
@@ -34787,7 +34963,7 @@ class MaterialHouseCard extends HouseStylePreview {
 /* Pending remains keyboard-focusable, but is not visually actionable. */
 :host [data-eleven-material][data-house-material] .controls button[data-material=button][aria-disabled=true][aria-busy=true]{background:var(--_em-inset);color:var(--_em-muted);box-shadow:none;transform:none;cursor:wait}
 @media(forced-colors:active){:host [data-eleven-material][data-house-material] .controls button[data-material=button][aria-disabled=true][aria-busy=true]{background:ButtonFace;color:GrayText;border-color:GrayText}}
-`;
+`+uiCassetteStyles({scope:':host [data-eleven-material][data-house-material]'});
   this.shadowRoot.append(style);
   this.markMaterial();
  }
@@ -34887,6 +35063,7 @@ class MaterialHouseCard extends HouseStylePreview {
 
 
   const scope=this.shadowRoot;
+  const cassette=scope.querySelector('.light-panel');if(cassette)mountUICassette(cassette);
   scope.querySelector('ha-card').dataset.material='card';
   scope.querySelectorAll('.summary-tile').forEach(n=>n.dataset.material='well');
   scope.querySelectorAll('.view-toggle button,.controls button').forEach(n=>n.dataset.material='button');

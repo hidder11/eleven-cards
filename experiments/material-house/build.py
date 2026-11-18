@@ -15,12 +15,12 @@ shared='\n'.join(module(U/'web/vendor/car-pr5'/name) for name in ['ui-button.js'
 base=(U/'web/eleven-house-card.src.js').read_text(encoding='utf-8').replace("'eleven-house-card-editor'","'eleven-house-baseline-editor'").replace("'eleven-house-card'","'eleven-house-baseline'")
 style=(U/'web/house-car-style-preview.src.js').read_text(encoding='utf-8').replace("'eleven-house-style-preview-editor'","'eleven-house-styled-baseline-editor'").replace("'eleven-house-style-preview'","'eleven-house-styled-baseline'")
 style=style.replace('Vormgeving · Daniel (proef)','Vormgeving')
-material=module(ROOT/'src/house-theme.js');accent=module(REPO/'shared/material-accent.js')
+material=module(ROOT/'src/house-theme.js');accent=module(REPO/'shared/material-accent.js');cassette=module(REPO/'shared/ui-cassette.js')
 # House always supplies resolved solid HA colors. Do not ship the helper's
 # legacy material palette fallbacks inside this native-by-default pilot.
 accent=accent.replace("surface=dark?'#2c303d':'#edf0f6'",'surface')
 accent=accent.replace("const base=parseColor(surface)||parseColor(dark?'#2c303d':'#edf0f6');",'const base=parseColor(surface);if(!base)return null;')
 assert "#2c303d" not in accent and "#edf0f6" not in accent, 'Review shared accent fallback changes before rebuilding House'
-result='(()=>{\n'+pixels+'\n'+shared+'\n'+base+'\n'+style+'\n'+material+'\n'+accent+'\n'+(ROOT/'src/material-house.js').read_text(encoding='utf-8')+'\n})();\n'
+result='(()=>{\n'+pixels+'\n'+shared+'\n'+cassette+'\n'+base+'\n'+style+'\n'+material+'\n'+accent+'\n'+module(ROOT/'src/material-house.js')+'\n})();\n'
 (OUT/'material-house.js').write_text(result,encoding='utf-8',newline='\n')
 print(json.dumps({'bytes':len(result.encode()),'sha256':hashlib.sha256(result.encode()).hexdigest(),'production_files_changed':False}))

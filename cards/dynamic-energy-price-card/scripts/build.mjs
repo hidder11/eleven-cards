@@ -21,7 +21,7 @@ if (!importPattern.test(cardSource)) {
   throw new Error('Expected price-utils import was not found in the card source.');
 }
 
-const backgroundSource=(await Promise.all(['ui-button.js','ui-card-background.js','card-background.js'].map(file=>readFile(resolve(root,'../../shared/'+file),'utf8')))).map(source=>source.replace(/^import .*;\s*$/gm,'').replace(/^export /gm,'')).join('\n');
+const backgroundSource=(await Promise.all(['ui-button.js','ui-cassette.js','ui-card-background.js','card-background.js'].map(file=>readFile(resolve(root,'../../shared/'+file),'utf8')))).map(source=>source.replace(/^import .*;\s*$/gm,'').replace(/^export /gm,'')).join('\n');
 const themeSource=(await readFile(resolve(root,'../../shared/card-theme.js'),'utf8')).replace(/^export /gm,'');
 const bundledUtils = utilsSource.replace(/^export\s+/gm, '');
 const bundledLocalization = localizationSource.replace(/^export\s+/gm, '');
