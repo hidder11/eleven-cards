@@ -30,6 +30,7 @@ import {
   zonneplanPriceData,
 } from './price-utils.js';
 import {cardThemeStyles} from '../../../shared/card-theme.js';
+import {uiCassette,uiCassetteStyles} from '../../../shared/ui-cassette.js';
 import { formatDuration, frontendHass, resolveLanguage, translate } from './localization.js';
 import {timeframeSyncConfig,connectTimeframeSync,disconnectTimeframeSync} from '../../../shared/periods.js';
 import {graphPeriodRange,resetGraphPeriod} from '../../../shared/periods.js';
@@ -1338,7 +1339,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
     const periodTable = importPeriods.length || exportPeriods.length
       ? this._periodTable(importPeriods, exportPeriods, timeZone, todayKey, tomorrowKey) : '';
     const favorableTable = periodTable
-      ? `<details class="price-periods"${periodDetailsOpen?' open':''}><summary>${this._t("Gunstige momenten")}${this._config.show_period_average?'<span class="table-unit">ct/kWh</span>':''}</summary>${periodTable}</details>`
+      ? uiCassette({label:this._t("Gunstige momenten"),content:periodTable,open:periodDetailsOpen,attrs:{class:'price-periods'}})
+        .replace('</summary>',`${this._config.show_period_average?'<span class="table-unit">ct/kWh</span>':''}</summary>`)
       : '';
 
     this._chart = {
@@ -1405,7 +1407,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
           <div class="sr-only" aria-live="polite"></div>
         </div>
       </ha-card>
-      <style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart,.price-periods .price-table-wrap',controls:'.price-periods>summary',surfaces:'.tooltip'})}</style>`;
+      <style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
     this._layoutChartLabels();
     this._labelResize?.disconnect();
     const labelChart=this.shadowRoot.querySelector('.chart');
@@ -1525,7 +1527,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
   }
 
   _stateCard(title, message) {
-    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart,.price-periods .price-table-wrap',controls:'.price-periods>summary',surfaces:'.tooltip'})}</style>`;
+    return `<ha-card lang="${this._language}"><div class="state"><strong>${title}</strong><span>${message}</span></div></ha-card><style>${this._styles()}${this._config?.embedded===true?'':cardThemeStyles({plots:'.chart',surfaces:'.tooltip'})}</style>`;
   }
 
   _bindInteractions() {
@@ -1704,6 +1706,7 @@ class DynamicEnergyPriceCard extends HTMLElement {
       return color ? `${token}: ${color};` : '';
     }).join('\n');
     return `
+      ${uiCassetteStyles()}
       :host {
         min-height:var(--energy-required-height,0px);
         --cheap: var(--success-color, #19a974);
@@ -1829,14 +1832,8 @@ class DynamicEnergyPriceCard extends HTMLElement {
       .tooltip[data-horizontal="positioned"] { transform: none; }
 
       .price-periods{flex:none;margin-top:8px}
-      .price-periods>summary{min-height:44px;min-width:44px;padding:10px 12px;box-sizing:border-box;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:var(--font-size-label);font-weight:500;color:var(--secondary-text-color);list-style:none}
-      .price-periods>summary::-webkit-details-marker{display:none}
-      .price-periods>summary::after{content:'⌄';margin-inline-start:auto}
-      .price-periods[open]>summary::after{content:'⌃'}
-      .price-periods>summary:focus-visible{outline:2px solid var(--accent-color,var(--primary-color));outline-offset:2px}
-      .price-periods .price-table-wrap{margin-top:8px;padding:8px;box-sizing:border-box;border-top:0}
       .price-periods .price-table-wrap h3{display:none}
-      .price-table-wrap { flex: 0 1 auto; min-height: 0; max-height: 190px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider-color); overflow: auto; }
+      .price-table-wrap { flex: 0 1 auto; min-height: 0; max-height: 190px; overflow: auto; }
       .price-table-wrap h3 { margin: 0 0 4px; font-size: var(--font-size-label); font-weight: var(--font-weight-strong); line-height: var(--line-height-tight); }
       .table-unit { float: right; color: var(--secondary-text-color); font-size: var(--font-size-meta); font-weight: var(--font-weight-medium); }
       .cheapest-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-label); line-height: var(--line-height-normal); font-variant-numeric: tabular-nums; }

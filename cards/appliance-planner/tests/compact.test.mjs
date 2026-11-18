@@ -8,7 +8,7 @@ test('daily planner uses labeled compact selectors, not expanding button grids',
  assert.doesNotMatch(src,/class="choices"/);
 });
 test('one persistent Details disclosure owns supplemental metrics and graph',()=>{
- assert.match(src,/<details id="advice-details"/);
+ assert.match(src,/uiCassette\(\{label:'Details',[\s\S]*attrs:\{id:'advice-details'\}/);
  assert.match(src,/this\.detailsOpen/);
  assert.doesNotMatch(src,/<details id="tariff-graph"/);
  assert.match(src,/class="price-level \$\{level\}"/);

@@ -6,6 +6,18 @@ Include each available style function once in the shadow root. `cardHeaderStyles
 
 The Calendar card reuses `periodControls()` and `bindPeriodControls()` in its list and column views. Month view uses a non-interactive month label and previous month / Now / next month buttons. An optional host-owned `_periodAdapter` supplies `standard`, `rolling`, `calendar`, `rollingLabel`, `range()`, `name()`, `choose()`, `custom()` and `move()`, so date-based future navigation can reuse the popup, keyboard behavior and custom-range validation without adopting graph history semantics. Without this adapter, graph behavior is unchanged. Shared segmented navigation uses the approved compact style: 36px minimum buttons, 2px vertical and 6px horizontal padding, 12px labels and 14px icons. Period-popup options retain their existing dimensions. Energy places its navigation beside the primary reading when both fit and wraps the complete group below it when space is limited.
 
+## Shared native cassette
+
+`ui-cassette.js` provides one native `<details>` recipe for Dynamic Energy Price, Appliance Planner, Scene Engine and the Material House pilot (not the immutable House baseline).
+
+- `uiCassette({label,content,open,attrs,summaryAttrs,bodyAttrs})` renders a marked summary and attached body. Labels and attributes are escaped; `content` must be trusted caller-owned HTML.
+- `mountUICassette(details)` adopts existing native DOM idempotently, retaining nodes, listeners and open state.
+- `uiCassetteStyles({scope})` owns grip/body geometry, chevron, theme-based paint and open, hover, press, focus, reduced-motion and forced-colors states. Include it once per shadow root; `scope` only supplies legacy-selector specificity.
+
+Consumers own outer placement, translated content, actions, constrained scrolling and open/focus restoration (`preventScroll`). Use `--ui-cassette-grip-width` for an adjacent action and `--ui-cassette-focus-color` for an existing accessible focus role; keep ordinary buttons outside the inset body. Do not duplicate the shared visual recipe. Every consuming standalone builder must include the component once, after `ui-button.js` and before consumers; the collection uses those standalone artifacts.
+
+Run `node --test tests/ui-cassette.test.mjs tests/shared-cassette-consumers.test.mjs` and `python tests/browser-shared-cassettes.py`. Browser QA requires Python Playwright, PyYAML and Chromium (`CARD_QA_CHROMIUM` or `BROWSER_EXECUTABLE` may select an executable). It tests synthetic offline data in standalone/collection modes and writes ignored `qa-evidence/shared-cassettes` evidence (`SHARED_CASSETTES_OUT` overrides it); it is not a full Home Assistant or Safari integration test.
+
 ## Shared ordinary actions
 
 `uiActionButtonStyles()` from `ui-action-button.js` is an explicit opt-in for ordinary command buttons. It includes the legacy button stylesheet, then defines only `action*` variants. Existing `uiButton()` rendering and `uiButtonStyles()` output stay byte-identical, including approved compact chart controls and indirect House consumers. Do not change legacy defaults to migrate a card.
