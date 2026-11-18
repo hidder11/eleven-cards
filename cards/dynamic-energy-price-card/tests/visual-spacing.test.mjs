@@ -6,9 +6,10 @@ test('legend separates graph while remaining grouped with header',()=>{
  assert.match(source,/\.legend\s*\{[^}]*margin:\s*0 0 10px/);
  assert.doesNotMatch(source,/\.legend\s*\{[^}]*margin-top:\s*9px/);
 });
-test('native periods disclosure reuses theme control and inset plot roles',()=>{
- assert.match(source,/cardThemeStyles\(\{plots:'\.chart,\.price-periods \.price-table-wrap',controls:'\.price-periods>summary'/);
- assert.match(source,/\.price-periods>summary\{[^}]*padding:10px 12px/);
- assert.match(source,/\.price-periods \.price-table-wrap\{[^}]*margin-top:8px[^}]*padding:8px/);
- assert.doesNotMatch(source,/\.price-periods\[open\]>summary\{[^}]*box-shadow/);
+test('native periods disclosure delegates grip and attached tray geometry to the shared stylesheet',()=>{
+ assert.match(source,/uiCassetteStyles\(\)/);
+ assert.doesNotMatch(source,/\.price-periods(?:\[open\])?>summary[\w:\-()]*\s*\{/);
+ assert.doesNotMatch(source,/cardThemeStyles\([^\n]*price-periods/);
+ assert.match(source,/\.price-table-wrap\s*\{[^}]*max-height:\s*190px[^}]*overflow:\s*auto/);
+ assert.doesNotMatch(source,/\.price-table-wrap\s*\{[^}]*(?:margin-top|padding|border-top)/);
 });

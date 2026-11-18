@@ -2,6 +2,7 @@ import * as periods from '../../../shared/periods.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import * as cassette from '../../../shared/ui-cassette.js';
 import { readFileSync } from 'node:fs';
 import * as utils from '../src/price-utils.js';
 import * as graphModule from '../../../shared/graph.js';
@@ -12,6 +13,7 @@ import * as localization from '../src/localization.js';
 let Card;
 const source = readFileSync(new URL('../src/dynamic-energy-price-card.js', import.meta.url), 'utf8');
 vm.runInNewContext(source.replace(/^import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];\s*/gm, ''), {
+  ...cassette,
   ...periods,...graph, ...utils, ...localization,
   HTMLElement: class { attachShadow() { this.shadowRoot = { querySelector: () => null, querySelectorAll: () => [] }; } },
   customElements: { get: () => undefined, define: (_, constructor) => { Card = constructor; } },

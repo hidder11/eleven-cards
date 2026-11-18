@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Four real shared cassettes — offline comparison</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:12px;font:14px/1.4 system-ui,sans-serif;color:var(--primary-text-color);background:var(--primary-background-color)}h1{font-size:18px;margin:0 0 8px}p.note{font-size:12px;margin:0 0 20px}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:20px;align-items:start}article{min-width:0}h2{font-size:14px;margin:0 0 8px}article>*[data-card]{display:block;min-width:0;width:100%}#after{height:1000px}
+</style></head><body>
+<h1>House · Scene Engine · Energy · Appliance Planner</h1>
+<p class="note">Local synthetic HA states and generic float32 house silhouette. Actual built cards, not a cassette mockup. No HA connection or service execution.</p>
+<main></main><div id="after" aria-hidden="true"></div>
+<script src="../../review/ha-stub.js"></script>
+<script type="module">
+const mode=new URLSearchParams(location.search).get('mode')||'collection';
+if(!['collection','standalone'].includes(mode))throw Error('Unknown bundle mode');
+const paths=mode==='collection'?['../../dist/eleven-cards.js']:[
+ '../../cards/dynamic-energy-price-card/dist/eleven-dynamic-energy-price-card.js',
+ '../../cards/appliance-planner/dist/eleven-appliance-planner.js',
+ '../../cards/scene-engine-card/dist/eleven-scene-engine-card.js',
+ '../../experiments/material-house/dist/material-house.js'];
+// Extra standalones are needed only if an older collection omits those types.
+for(const path of paths)await import(path);
+for(const [tag,path]of [
+ ['eleven-appliance-planner','../../cards/appliance-planner/dist/eleven-appliance-planner.js'],
+ ['eleven-scene-engine-card','../../cards/scene-engine-card/dist/eleven-scene-engine-card.js'],
+ ['eleven-material-house','../../experiments/material-house/dist/material-house.js']
+])if(!customElements.get(tag))await import(path);
+const H=3600000,now=Date.now(),start=new Date().setHours(0,0,0,0),iso=t=>new Date(t).toISOString();
+const sensor=(state,extra={})=>({state:String(state),attributes:{...extra},last_changed:iso(now)});
+const prices=Array.from({length:192},(_,i)=>({start_time:iso(start+i*H/4),price_per_kwh:.18+Math.sin(i/8)*.09}));
+const requests=Array.from({length:24},(_,i)=>({scene:i%2?'scene.relax':'scene.evening',identifier:i?'Aanvraag '+i:'Tijdschema',priority:80-i,requires:i%3?null:'Mediaspeler'}));
+const states={
+ 'scene_engine.living':sensor('scene.evening',{engine:'Woonkamer',effective_request:requests[0],requests,active_request_count:16,non_active_request_count:8,active_requests:requests.filter((_,i)=>i%3),non_active_requests:requests.filter((_,i)=>!(i%3)),default_scene:'scene.relax',revision:12,snapshot_source:'synthetic-browser'}),
+ 'button.engine_reset':sensor('unknown'),
+ 'scene.evening':sensor('scening',{friendly_name:'Avond'}),'scene.relax':sensor('scening',{friendly_name:'Ontspannen'}),
+ 'light.living':sensor('on',{friendly_name:'Woonkamer',brightness:160,supported_color_modes:['brightness']}),
+ 'climate.living':sensor('heat',{friendly_name:'Thermostaat',temperature:20,current_temperature:20.8,min_temp:10,max_temp:30,target_temp_step:.5,supported_features:1,hvac_modes:['off','heat']}),
+ 'sensor.price':sensor(.24,{friendly_name:'Stroomprijs',unit_of_measurement:'EUR/kWh',data:prices}),
+ 'weather.home':sensor('partlycloudy',{friendly_name:'Weer',temperature:16,temperature_unit:'°C',humidity:68,wind_speed:14,wind_speed_unit:'km/h',supported_features:0})};
+window.demoServices=[];window.fixtureCalls=[];window.records=[];
+const base={language:'nl',locale:{language:'nl'},themes:{darkMode:false},connected:true,services:{button:{press:{}},light:{turn_on:{},turn_off:{}}},config:{time_zone:'Europe/Amsterdam',currency:'EUR'},states,
+ localize:()=>'',formatEntityState:s=>String(s.state),formatEntityAttributeValue:(s,k)=>String(s.attributes[k]),
+ connection:{subscribeMessage:async(cb,request)=>{fixtureCalls.push({method:'subscribeMessage',request});return()=>{}}},
+ callWS:async request=>{fixtureCalls.push({method:'callWS',request});if(request.type==='config/entity_registry/list')return [];throw Error('Unexpected fixture WS '+request.type)},
+ callApi:async(...args)=>{fixtureCalls.push({method:'callApi',args});throw Error('Unexpected fixture API')},
+ callService:async(...args)=>{demoServices.push(args);throw Error('Services forbidden in cassette QA')}};
+const configs=[
+ ['material-house','House',{manifest:'/fixture/manifest.json',view:'front',mode:'afternoon',title:'Synthetic home',show_view_toggle:true,show_presence:false,show_thermostat:true,thermostat_entity:'climate.living',weather_entity:'weather.home',animate_weather:false,animate_background:false}],
+ ['scene-engine-card','Scene Engine',{entity:'scene_engine.living',reset_entity:'button.engine_reset',title:'Woonkamer'}],
+ ['dynamic-energy-price-card','Dynamic Energy Price',{entity:'sensor.price',title:'Energieprijzen',show_cheapest_table:true,cheapest_hours:4}],
+ ['appliance-planner','Appliance Planner',{title:'Apparatenplanner',tariff:{source:'sensor',entity:'sensor.price'},appliances:[{id:'washer',name:'Wasmachine',kind:'washer',programs:[{id:'eco',name:'Eco 40–60',minutes:150,kwh:1}]}]}]
+];
+for(const [name,title,config]of configs){
+ const article=document.createElement('article'),heading=document.createElement('h2'),card=document.createElement('eleven-'+name);
+ article.dataset.name=name;heading.textContent=title;card.dataset.card=name;
+ const hass={...base,states:structuredClone(states),themes:{darkMode:false}};
+ card.setConfig({type:'custom:eleven-'+name,card_background:false,...config});card.hass=hass;
+ article.append(heading,card);document.querySelector('main').append(article);records.push({name,card,hass});
+}
+window.applyTheme=({tokens,dark})=>{
+ for(const key of [...document.body.style])if(key.startsWith('--'))document.body.style.removeProperty(key);
+ for(const [key,value]of Object.entries(tokens))document.body.style.setProperty(key,value);
+ document.body.style.colorScheme=dark?'dark':'light';
+ for(const record of records){record.hass={...record.hass,themes:{darkMode:dark}};record.card.hass=record.hass;}
+};
+window.telemetry=()=>{
+ for(const r of records){
+  const current=r.hass.states['scene_engine.living'];
+  r.hass={...r.hass,states:{...r.hass.states,'scene_engine.living':{...current,attributes:{...current.attributes,revision:current.attributes.revision+1}},'light.living':{...r.hass.states['light.living'],last_changed:iso(Date.now())}}};
+  r.card.hass=r.hass;
+ }
+};
+// Snapshot ALL computed sizes before any write: no recursive em enlargement.
+window.enlargeText=()=>{
+ const snapshots=records.flatMap(r=>[...r.card.shadowRoot.querySelectorAll('*')].filter(n=>!['STYLE','SCRIPT'].includes(n.tagName)).map(node=>({node,size:parseFloat(getComputedStyle(node).fontSize)})));
+ for(const {node,size}of snapshots)node.style.fontSize=(size*2)+'px';
+ return snapshots.filter(({node})=>node.matches('[data-ui-cassette-trigger]')).map(({node,size})=>({before:size,after:parseFloat(getComputedStyle(node).fontSize)}));
+};
+window.longLabels=()=>{
+ for(const r of records)for(const summary of r.card.shadowRoot.querySelectorAll('[data-ui-cassette-trigger]')){
+  const walker=document.createTreeWalker(summary,NodeFilter.SHOW_TEXT);let node;
+  while((node=walker.nextNode()))if(node.textContent.trim()){node.textContent='Uitgebreide instellingen en diagnostische informatie voor deze ruimte en aangesloten apparaten';break;}
+ }
+};
+window.sharedCassetteFixtureReady=true;
+</script></body></html>

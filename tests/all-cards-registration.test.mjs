@@ -87,7 +87,7 @@ test('pilot source registration is idempotent and exposes exactly its public pic
   const {registry, window, context} = runtime();
   context.HouseStylePreview = class {};
   context.HouseStylePreviewEditor = class {};
-  const source = `(()=>{${read('experiments/material-house/src/material-house.js')}\n})();`;
+  const source = `(()=>{${read('experiments/material-house/src/material-house.js').replace(/^import .*;\s*$/gm,'')}\n})();`;
   vm.runInContext(source, context);
   const constructors = new Map(registry);
   vm.runInContext(source, context);

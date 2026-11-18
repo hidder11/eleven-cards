@@ -4,6 +4,7 @@ import * as insights from '../../../shared/chart-insights.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import * as cassette from '../../../shared/ui-cassette.js';
 import {readFileSync} from 'node:fs';
 import * as utils from '../src/price-utils.js';
 import * as graphModule from '../../../shared/graph.js';
@@ -13,6 +14,7 @@ import * as localization from '../src/localization.js';
 let Card;
 const source=readFileSync(new URL('../src/dynamic-energy-price-card.js',import.meta.url),'utf8');
 vm.runInNewContext(source.replace(/^import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];\s*/gm,''),{
+  ...cassette,
  ...periods,...header,...insights,...graph,...utils,...localization,URLSearchParams,setTimeout,clearTimeout,console,
  Date:class extends Date {constructor(...args){super(...(args.length?args:['2026-10-11T12:00:00+02:00']));}},Intl,
  HTMLElement:class {attachShadow(){this.shadowRoot={querySelector:()=>null,querySelectorAll:()=>[]};}},
