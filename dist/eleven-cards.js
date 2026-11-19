@@ -30476,7 +30476,12 @@ function wasteRows(entries,states={},calendars={},options={}){
   const a=s.attributes||{},source=e.source||'auto';let value=e.attribute?a[e.attribute]:s.state,date=null;
   const usesDays=source==='days'||(source==='auto'&&!e.attribute&&finite(a.daysTo));
   if(usesDays){if(source==='auto')value=a.daysTo;const n=Number(value);if(finite(value)&&String(value).trim()!==''&&Number.isInteger(n)&&Math.abs(n)<36600){let origin=today;if(s.last_updated&&Number.isFinite(Date.parse(s.last_updated)))origin=dayKey(s.last_updated,timeZone);date=addDays(origin,n);}}
-  else date=isoDay(value,timeZone);
+  else {
+   // Afvalbeheer stores an absolute local collection date alongside its display text.
+   const compact=source==='auto'&&!e.attribute?String(a.Sort_date??''):'';
+   const match=/^(\d{4})(\d{2})(\d{2})$/.exec(compact);
+   date=(match?isoDay(`${match[1]}-${match[2]}-${match[3]}`,timeZone):null)||isoDay(value,timeZone);
+  }
   if(date&&date<today){row(e,s,null,'past');continue;}row(e,s,date,date?null:'invalid');
  }
  return rows.sort((a,b)=>a.days-b.days||a.name.localeCompare(b.name,locale));
