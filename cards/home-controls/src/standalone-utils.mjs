@@ -43,7 +43,7 @@ export function wasteRows(entries,states={},calendars={},options={}){
  const row=(entry,state,date,status,name)=>{
   const days=date?Math.round(ordinal(date)-ordinal(today)):Infinity;
   const label=!date?({unavailable:nl?'Niet beschikbaar':'Unavailable',invalid:nl?'Geen geldige ophaaldatum':'No valid collection date',past:nl?'Ophaaldatum verstreken':'Collection date passed',empty:nl?'Geen inzameling in 60 dagen':'No collection within 60 days',error:nl?'Kalender kon niet laden':'Calendar could not load',loading:nl?'Kalender laden…':'Loading calendar…'}[status]):days===0?(nl?'Vandaag':'Today'):days===1?(nl?'Morgen':'Tomorrow'):new Intl.DateTimeFormat(locale,{weekday:'long',day:'numeric',month:'long',timeZone:'UTC',...(date.slice(0,4)!==today.slice(0,4)?{year:'numeric'}:{})}).format(new Date(date+'T12:00:00Z'));
-  rows.push({...entry,name:entry.name||name||state?.attributes?.friendly_name||entry.entity,date,days,label,status:status||'ready',color:safeColor(entry.color),icon:entry.icon||state?.attributes?.icon||'mdi:trash-can-outline'});
+  rows.push({...entry,name:entry.name||name||state?.attributes?.friendly_name||entry.entity,date,days,label,status:status||'ready',color:safeColor(entry.color),picture:!entry.icon&&typeof state?.attributes?.entity_picture==='string'?state.attributes.entity_picture:null,icon:entry.icon||state?.attributes?.icon||'mdi:trash-can-outline'});
  };
  for(const raw of entries){
   const e=normalizeItem(raw),s=states[e.entity];
