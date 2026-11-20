@@ -33,7 +33,7 @@ const WASTE_STYLES=`
 .pickup .month{font-size:12px;line-height:1.4;color:var(--secondary-text-color)}
 .pickup .name{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:400;line-height:1.4;margin-top:6px;min-width:0;max-width:100%}
 .pickup.first .name{font-weight:650}.pickup.first .count{font-weight:600;color:var(--primary-text-color)}
-.pickup .name ha-icon{align-self:center;--mdc-icon-size:20px;width:20px;height:20px;color:var(--waste-color,var(--secondary-text-color))}
+.pickup .name ha-icon,.pickup .name img{align-self:center;--mdc-icon-size:20px;width:20px;height:20px;object-fit:contain;color:var(--waste-color,var(--secondary-text-color))}
 .pickup .name-text{min-width:0;max-width:100%;hyphens:auto;overflow-wrap:break-word}.pickup .count{font-size:11px;line-height:1.4;color:var(--secondary-text-color)}
 .pickup{position:relative}
 .waste-word{position:absolute;inset:0 auto auto 0;display:block;width:max-content;max-width:none;white-space:pre;font:inherit;letter-spacing:inherit;visibility:hidden;pointer-events:none}.waste-word::before{content:attr(data-word)}
@@ -101,7 +101,10 @@ class StandaloneCard extends HTMLElement{
    this._fitActions();this._actionsResize.observe(this);
    this.shadowRoot.querySelectorAll('.split-label,.split-label small').forEach(e=>this._actionsResize.observe(e));
   }
-  if(this.kind==='waste')this._observeWaste();
+  if(this.kind==='waste'){
+   this.shadowRoot.querySelectorAll('.pickup img').forEach(image=>{image.onerror=()=>{const fallback=document.createElement('ha-icon');fallback.setAttribute('icon',image.dataset.fallback);fallback.setAttribute('aria-hidden','true');image.replaceWith(fallback);this._observeWaste();};});
+   this._observeWaste();
+  }
  }
  _observeWaste(){
   this._wasteResize?.disconnect();
@@ -140,7 +143,7 @@ class StandaloneCard extends HTMLElement{
      width=Math.max(width,word.getBoundingClientRect().width);
     });
     if(label.classList?.contains('name-text')){
-     const name=button.querySelector('.name'),glyph=name?.querySelector('ha-icon');
+     const name=button.querySelector('.name'),glyph=name?.querySelector('ha-icon,img');
      // The icon may wrap above the full name on narrow three-column strips.
      width=Math.max(width,glyph?.getBoundingClientRect().width||0);
     }
@@ -204,7 +207,7 @@ class StandaloneCard extends HTMLElement{
    const absolute=format(g.date,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
    const count=g.days<=1?g.label:this.t(`Over ${g.days} dagen`,`In ${g.days} days`);
    const todayYear=g.date.slice(0,4)!==dayKey(Date.now(),this._wasteTimeZone()).slice(0,4);
-   return `<button type="button" class="pickup${i===0?' first':''}" data-info="${esc(e.entity)}" data-key="${esc(key)}" aria-label="${esc(e.name+': '+absolute+', '+count)}" style="${e.color?'--waste-color:'+esc(e.color):''}"><span class="weekday">${esc(format(g.date,{weekday:'long'}))}</span><span class="day">${esc(format(g.date,{day:'2-digit'}))}</span><span class="month">${esc(format(g.date,{month:'long',...(todayYear?{year:'numeric'}:{})}))}</span><span class="name">${icon(e.icon)}<span class="name-text">${esc(e.name)}</span></span><span class="count">${esc(count)}</span></button>`;
+   return `<button type="button" class="pickup${i===0?' first':''}" data-info="${esc(e.entity)}" data-key="${esc(key)}" aria-label="${esc(e.name+': '+absolute+', '+count)}" style="${e.color?'--waste-color:'+esc(e.color):''}"><span class="weekday">${esc(format(g.date,{weekday:'long'}))}</span><span class="day">${esc(format(g.date,{day:'2-digit'}))}</span><span class="month">${esc(format(g.date,{month:'long',...(todayYear?{year:'numeric'}:{})}))}</span><span class="name">${e.picture?`<img src="${esc(e.picture)}" alt="" data-fallback="${esc(e.icon)}">`:icon(e.icon)}<span class="name-text">${esc(e.name)}</span></span><span class="count">${esc(count)}</span></button>`;
   };
   return `${pickups.length?`<section class="waste-strip" aria-label="${this.t('Volgende inzameling','Next collection')}" data-columns="${Math.min(3,pickups.length)}" style="--waste-columns:${Math.min(3,pickups.length)}">${pickups.map(pickup).join('')}</section>`:`<div class="empty">${this.t('Geen komende inzameling bekend.','No upcoming collection available.')}</div>`}${unresolved.length?`<div class="unresolved">${unresolved.map(e=>`<button type="button" data-info="${esc(e.entity)}" data-key="${esc('unresolved-'+encodeURIComponent(JSON.stringify([e.entity,e.name])))}"><span>${esc(e.name)}</span><span class="${e.status==='error'?'collection-error':''}">${esc(e.label)}</span></button>`).join('')}${unresolved.some(e=>e.status==='error')?uiButton({variant:'action',className:'retry',text:this.t('Opnieuw proberen','Retry'),attrs:{'data-retry':'','data-key':'waste-retry','aria-busy':!!this._fetching,'aria-disabled':!!this._fetching}}):''}</div>`:''}`;
  }
@@ -227,10 +230,23 @@ class WasteCard extends StandaloneCard{static kind='waste';}
 
 class ControlsEditor extends HTMLElement{
  constructor(){super();this.attachShadow({mode:'open'});this.kind='controls';}
- setConfig(config){this._config=structuredClone(config);this.kind=Object.keys(TYPES).find(k=>'custom:'+TYPES[k]===config.type)||this.kind;this.render();}
+ setConfig(config){
+  const kind=Object.keys(TYPES).find(k=>'custom:'+TYPES[k]===config.type)||this.kind;
+  // HA echoes each config-changed as a fresh object. Keep the editing form mounted.
+  if(kind==='waste'&&this.kind===kind&&JSON.stringify(config)===JSON.stringify(this._config)){this.render();return;}
+  this._config=structuredClone(config);this.kind=kind;this.render();
+ }
  set hass(h){this._hass=h;this.render();}get hass(){return this._hass;}
  get nl(){return isNL(this._hass?.locale?.language);}t(n,en){return this.nl?n:en;}
- emit(c){this._config=c;this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:structuredClone(c)},bubbles:true,composed:true}));}
+ emit(c,preserveForms=false){
+  this._config=c;
+  if(this.kind==='waste'&&preserveForms){
+   // Field changes own their live form data; only structural/external changes rebuild.
+   this._builtConfig=c;
+   this.shadowRoot.querySelectorAll('.item .bar strong').forEach((heading,i)=>{const e=normalizeItem((c.entities||[])[i]);heading.textContent=e.name||e.entity||this.t('Nieuw onderdeel','New item');});
+  }
+  this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:structuredClone(c)},bubbles:true,composed:true}));
+ }
  form(host,schema,data,onChange){const form=document.createElement('ha-form');form.hass=this._hass;form.schema=schema;form.data=data;form.computeLabel=s=>({title:this.t('Titel','Title'),confirmation:this.t('Bevestigen vóór bedienen','Confirm before commands'),columns:this.t('Maximum aantal kolommen','Maximum columns'),entity:this.t('Entiteit','Entity'),name:this.t('Naam (optioneel)','Name (optional)'),icon:this.t('Icoon (optioneel)','Icon (optional)'),description:this.t('Onderschrift','Description'),source:this.t('Datumbron','Date source'),attribute:this.t('Attribuut (optioneel)','Attribute (optional)'),color:this.t('Kleur (optioneel)','Color (optional)'),filter:this.t('Kalender bevat (optioneel)','Calendar summary contains (optional)')}[s.name]||s.name);form.addEventListener('value-changed',ev=>{ev.stopPropagation();onChange(ev.detail.value);});host.append(form);}
  render(){
   if(!this._config)return;const focus=this.shadowRoot.activeElement; // Do not rebuild native HA selectors on ordinary hass updates.
@@ -238,14 +254,14 @@ class ControlsEditor extends HTMLElement{
   this._expanded??=[];this.shadowRoot.querySelectorAll('details.item').forEach((box,i)=>{this._expanded[i]=box.open;});
   this._builtConfig=this._config;const key=this.kind==='actions'?'actions':'entities',items=(this._config[key]||[]).map(normalizeItem);
   this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.item{padding:16px 0;border-top:1px solid var(--divider-color)}.bar{display:flex;align-items:center;gap:4px}.bar strong{flex:1;font-size:14px;overflow-wrap:anywhere}details.item{padding:0}details.item>summary{cursor:pointer;min-height:44px;padding:12px 0;list-style:none}details.item>summary::-webkit-details-marker{display:none}details.item>summary::before{content:"";width:7px;height:7px;flex:none;margin:0 8px 0 4px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg)}details.item[open]>summary::before{transform:rotate(45deg)}details.item>summary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}details.item>.fields{padding-bottom:16px}${uiActionButtonStyles()}.add{padding:0 16px;margin-top:12px}p{font-size:12px;color:var(--secondary-text-color);line-height:1.5}ha-form{display:block}</style><div class="main"></div><p>${this.kind==='waste'?this.t('Gebruik een datumsensor, een aftelsensor of een kalender. Automatisch herkent ISO-datums en daysTo. Kalenderafspraken worden 60 dagen vooruit geladen.','Use a date sensor, day-count sensor or calendar. Auto recognizes ISO dates and daysTo. Calendar events are loaded 60 days ahead.'):this.kind==='controls'?this.t('Voeg alleen de apparaten toe die je hier wilt bedienen. De knoppen passen zich aan de mogelijkheden aan.','Add the devices you want to control. Controls follow each entity’s capabilities.'):this.t('Voeg scènes of scripts toe. Elke actie heeft een eigen naam en icoon.','Add scenes or scripts. Each action has its own name and icon.')}</p><div class="items"></div>${uiButton({variant:'action',className:'add',text:this.t('Onderdeel toevoegen','Add item')})}`;
-  this.form(this.shadowRoot.querySelector('.main'),[{name:'title',selector:{text:{}}},...(this.kind==='waste'?[]:[{name:'confirmation',selector:{boolean:{}}}]),...(this.kind==='actions'?[{name:'columns',selector:{number:{min:1,max:6,step:1,mode:'box'}}}]:[])],this.kind==='actions'?{...this._config,columns:this._config.columns??3}:this._config,v=>{this.emit({...this._config,...v});});
+  this.form(this.shadowRoot.querySelector('.main'),[{name:'title',selector:{text:{}}},...(this.kind==='waste'?[]:[{name:'confirmation',selector:{boolean:{}}}]),...(this.kind==='actions'?[{name:'columns',selector:{number:{min:1,max:6,step:1,mode:'box'}}}]:[])],this.kind==='actions'?{...this._config,columns:this._config.columns??3}:this.kind==='waste'?{title:this._config.title}:this._config,v=>{this.emit({...this._config,...v},true);});
   items.forEach((e,i)=>{
    const collapsible=this.kind==='waste',bar=collapsible?'summary':'div';
    const box=document.createElement(collapsible?'details':'section');box.className='item';if(collapsible)box.open=this._expanded[i]??items.length===1;box.innerHTML=`<${bar} class="bar"><strong>${esc(e.name||e.entity||this.t('Nieuw onderdeel','New item'))}</strong>${uiButton({variant:'action-icon',label:this.t('Omhoog','Move up'),text:'↑',disabled:i===0,attrs:{'data-move':-1}})}${uiButton({variant:'action-icon',label:this.t('Omlaag','Move down'),text:'↓',disabled:i===items.length-1,attrs:{'data-move':1}})}${uiButton({variant:'action-danger',label:this.t('Verwijderen','Remove'),text:'×',attrs:{'data-remove':''}})}</${bar}><div class="fields"></div>`;
    const schema=[{name:'entity',required:true,selector:{entity:{domain:DOMAINS[this.kind]}}},{name:'name',selector:{text:{}}},{name:'icon',selector:{icon:{}}}];
    if(this.kind==='actions')schema.push({name:'description',selector:{text:{}}});
    if(this.kind==='waste')schema.push({name:'source',selector:{select:{options:[{value:'auto',label:this.t('Automatisch','Auto')},{value:'date',label:this.t('Datum','Date')},{value:'days',label:this.t('Aantal dagen','Day count')}]}}},{name:'attribute',selector:{text:{}}},{name:'color',selector:{color_rgb:{}}},{name:'filter',selector:{text:{}}});
-   this.form(box.querySelector('.fields'),schema,{...e,...(this.kind==='waste'?{source:e.source||'auto',color:Array.isArray(e.color)?e.color:/^#[\da-f]{6}$/i.test(e.color||'')?[1,3,5].map(n=>parseInt(e.color.slice(n,n+2),16)):undefined}:{})},v=>{const next=(this._config[key]||[]).map(normalizeItem);next[i]={...next[i],...v};this.emit({...this._config,[key]:next});});
+   this.form(box.querySelector('.fields'),schema,{...e,...(this.kind==='waste'?{source:e.source||'auto',color:Array.isArray(e.color)?e.color:/^#[\da-f]{6}$/i.test(e.color||'')?[1,3,5].map(n=>parseInt(e.color.slice(n,n+2),16)):undefined}:{})},v=>{const next=(this._config[key]||[]).map(normalizeItem);next[i]={...next[i],...v};this.emit({...this._config,[key]:next},true);});
    box.querySelector('[data-remove]').onclick=event=>{event.preventDefault();const next=(this._config[key]||[]).filter((_,n)=>n!==i);box.remove();this._expanded.splice(i,1);this.emit({...this._config,[key]:next});this.render();};
    box.querySelectorAll('[data-move]').forEach(b=>b.onclick=event=>{event.preventDefault();const next=[...this._config[key]],j=i+Number(b.dataset.move);[next[i],next[j]]=[next[j],next[i]];if(collapsible){const entries=[...this.shadowRoot.querySelectorAll('details.item')];[entries[i].open,entries[j].open]=[entries[j].open,entries[i].open];}this.emit({...this._config,[key]:next});this.render();});
    this.shadowRoot.querySelector('.items').append(box);
